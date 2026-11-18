@@ -521,6 +521,53 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 @media (max-width:380px){.top .ibtn{width:40px;height:40px;border-radius:13px}.top{gap:6px}.top .who b{font-size:22px}}
 .cd-inc{background:transparent;box-shadow:inset 0 0 0 2px var(--ok)} .tp-tile.cd-inc{background:var(--ok-bg);color:var(--ok);box-shadow:none}
 
+/* ===== v2.2 contrast pass: three clear layers — color field, deep glass for lists, bright glass for the hero ===== */
+:root,:root[data-theme="dark"]{
+  --tp-card:color-mix(in srgb,var(--g1) 74%,transparent);
+  --tp-card2:rgba(255,255,255,.14);
+  --tp-line:rgba(255,255,255,.22); --tp-line2:rgba(255,255,255,.10);
+  --tp-input:rgba(0,0,0,.30); --well:rgba(255,255,255,.07);
+  --edge:rgba(255,255,255,.22);
+}
+:root[data-theme="light"]{
+  --tp-card:rgba(255,255,255,.94); --tp-card2:#FFFFFF;
+  --tp-line:rgba(19,32,26,.14); --tp-line2:rgba(19,32,26,.08);
+  --well:rgba(19,32,26,.05);
+}
+.glass,.tp-card,.ccard,.tp-stat{background:var(--tp-card)}
+/* hero: bright glass with an accent rim so the main number owns the screen */
+.hero{background:linear-gradient(150deg,rgba(255,255,255,.26),rgba(255,255,255,.10))!important;border:1.5px solid color-mix(in srgb,var(--hi) 70%,transparent)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 18px 44px rgba(0,0,0,.28)!important}
+:root[data-theme="light"] .hero{background:linear-gradient(150deg,color-mix(in srgb,var(--hi) 14%,#FFFFFF),#FFFFFF)!important;box-shadow:0 14px 34px color-mix(in srgb,var(--hi) 22%,transparent)!important}
+.hero .label{color:var(--tp-ink);opacity:.85}
+/* section headers: readable, not whispered */
+.tp-sect{font-size:13px;color:var(--tp-ink);letter-spacing:.9px;margin-top:26px}
+.tp-sect>span:first-child::before{width:20px;height:4px}
+.tp-sect .sp + span,.tp-sect>span:last-child:not(:first-child){color:var(--tp-ink2)}
+/* icon tiles: filled accent */
+.tp-tile{background:var(--hi);color:var(--tp-btn-ink);border:0}
+:root[data-theme="light"] .tp-tile{color:#FFFFFF}
+.tp-tile.cdt,.tipcard .tp-tile{color:inherit}
+/* rows: a touch more air and a clearer divider */
+.tp-row + .tp-row{border-top-color:var(--tp-line)}
+.tp-row .tp-t b{font-weight:650}
+.tp-row .amt{font-size:15.5px}
+.amt.up,.kv b.up{color:var(--ok)}
+/* stat tiles and chips sit on the deep layer too */
+.tp-stat b{font-size:22px}
+.chip{background:var(--tp-card)}
+/* nav: deep glass so it separates from content */
+.nav{background:color-mix(in srgb,var(--g1) 82%,transparent)!important}
+:root[data-theme="light"] .nav{background:rgba(255,255,255,.96)!important}
+.nav button.on{background:var(--hi);color:var(--tp-btn-ink)}
+:root[data-theme="light"] .nav button.on{color:#FFFFFF}
+.nav button.on::after{display:none}
+/* card faces keep their own colors; body on the deep layer */
+.ccard .body{background:transparent}
+.ccstmt{background:rgba(255,255,255,.06)}
+:root[data-theme="light"] .ccstmt{background:var(--well)}
+:root[data-theme="light"] .glass,:root[data-theme="light"] .tp-card,:root[data-theme="light"] .ccard,:root[data-theme="light"] .tp-stat{border-color:rgba(19,32,26,.12);box-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 2px 6px rgba(20,30,25,.06),0 14px 30px rgba(20,30,25,.10)}
+:root[data-theme="light"] .tp-page{background:linear-gradient(160deg,color-mix(in srgb,var(--g1) 85%,var(--hi)) 0%,var(--g2) 50%,var(--g3) 100%) fixed}
+
 </style>
 </head>
 <body class="tp-page">
@@ -530,7 +577,7 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.17.20';
+var APP_VERSION = '2026.11.18.1';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
