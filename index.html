@@ -529,7 +529,7 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.17.16';
+var APP_VERSION = '2026.11.17.17';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1091,18 +1091,34 @@ function cardDueAfter(c, close) { if (!c.dueDay || !close) return null; var d = 
 function cardCycleFor(c, date) { var close = cardCloseOnOrAfter(c, date); return { close: close, due: cardDueAfter(c, close) }; }
 function chargesSince(c, date) { return (S.txns || []).filter(function (x) { return x.src === 'c:' + c.id && x.date > date; }); }
 function cardsOwed() { var t = 0; S.cards.forEach(function (c) { if (!c.off) t += cardBal(c); }); return r2(t); }
-function cardDueAmt(e) {
-  if (e.amt != null) return e.st === 'paid' ? 0 : +e.amt || 0;
-  var c = S.cards.filter(function (x) { return x.id === e.card; })[0]; if (!c) return 0;
-  /* no statement entered: if that statement already closed, charges logged after it belong to the next one */
-  var close = cardLastClose(c, addDays(e.date, -1)), td = today();
-  return close && close < td ? r2(Math.max(0, cardBal(c) - sumAmt(chargesSince(c, close)))) : cardBal(c);
+/* a bill marked "paid from" a card is already inside that card's statement, so it never leaves checking on its own */
+function billOnCard(e) { return e.type === 'bill' && !!e.sub && S.cards.some(function (c) { return c.name === e.sub; }); }
+/* statements already billed but not paid, due from today up to (not including) `before` */
+function pendingStmts(c, before) {
+  var t = 0, td = today();
+  Object.keys(S.statements).forEach(function (ym) { var st = S.statements[ym][c.id]; if (!st || st.st === 'paid' || !c.dueDay) return; var d = ymd(clampDay(+ym.slice(0, 4), +ym.slice(5) - 1, +c.dueDay)); if (d >= td && d < before) t += +st.amt || 0; });
+  return r2(t);
 }
+/* What a card payment will be.
+   1. Statement entered: your plan-to-pay amount, or the statement.
+   2. Statement closed but not entered: today's balance minus charges logged since it closed and minus earlier unpaid statements.
+   3. Cycle still open: what's already on the card beyond earlier statements, or your usual statement if that's higher (you'll keep using it).
+   4. Later cycles: your usual statement for that card. */
+function cardDueInfo(e) {
+  if (e.amt != null) return { amt: e.st === 'paid' ? 0 : +e.amt || 0, est: false };
+  var c = S.cards.filter(function (x) { return x.id === e.card; })[0]; if (!c) return { amt: 0, est: true };
+  var td = today(), close = cardLastClose(c, addDays(e.date, -1)), before = pendingStmts(c, e.date), typ = cardTypicalStmt(c);
+  if (close && close < td) return { amt: r2(Math.max(0, cardBal(c) - sumAmt(chargesSince(c, close)) - before)), est: true, why: 'closed' };
+  var carried = r2(Math.max(0, cardBal(c) - before));
+  if (cardCloseOnOrAfter(c, td) === close) return { amt: r2(Math.max(carried, typ)), est: true, why: typ > carried ? 'usual' : 'balance' };
+  return { amt: typ, est: true, why: 'usual' };
+}
+function cardDueAmt(e) { return cardDueInfo(e).amt; }
 function dueBetween(from, to) {
   var t = 0, list = [];
   eventsBetween(from, to).forEach(function (e) {
     if (e.type === 'due') { var a = cardDueAmt(e); if (a > 0) { t += a; list.push({ e: e, amt: a }); } }
-    else if (e.type === 'bill' && e.amt) { t += e.amt; list.push({ e: e, amt: e.amt }); }
+    else if (e.type === 'bill' && e.amt && !billOnCard(e)) { t += e.amt; list.push({ e: e, amt: e.amt }); }
   });
   return { total: r2(t), list: list };
 }
@@ -1152,11 +1168,9 @@ function forecast(days) {
     if (weekly && parseD(d).getDay() === ws) { dc -= weekly; dsv += weekly; }
     evs.forEach(function (e) {
       if (e.date !== d) return;
-      if (e.type === 'bill' && e.amt) { dc -= e.amt; steps.push({ d: d, label: e.title, amt: -e.amt }); ev.push(e); }
+      if (e.type === 'bill' && e.amt) { if (!billOnCard(e)) { dc -= e.amt; steps.push({ d: d, label: e.title, amt: -e.amt }); } ev.push(e); }
       else if (e.type === 'due') {
-        var c = S.cards.filter(function (x) { return x.id === e.card; })[0], est = false;
-        var a = e.amt != null ? (e.st === 'paid' ? 0 : +e.amt) : (!firstDue[e.card] ? cardDueAmt(e) : (est = true, c ? cardTypicalStmt(c) : 0));
-        firstDue[e.card] = 1;
+        var inf = cardDueInfo(e), a = inf.amt, est = inf.est;
         if (a) { dc -= a; steps.push({ d: d, label: e.title.replace(' payment due', ' payment'), amt: -a }); }
         ev.push({ type: 'due', title: e.title, amt: a, est: est || e.amt == null, card: e.card, ym: e.ym, st: e.st });
       } else ev.push(e);
@@ -1404,7 +1418,7 @@ PAGES.home = function () {
   h += '<div class="tp-sect"><span>Next 2 weeks</span><span class="sp"></span><button data-act="go" data-a="calendar">Calendar</button></div>';
   h += evs.length ? '<div class="glass">' + evs.map(function (e) {
     var amt = e.type === 'due' ? cardDueAmt(e) : e.amt;
-    var sub = e.type === 'stmt' ? 'Statement closes. This balance gets reported.' : (e.type === 'due' && e.amt == null ? (amt ? money(amt, 1) + ' full balance · tap to add the statement amount' : 'Tap to add the statement amount') : (amt ? money(amt, 1) : 'Amount not set') + (e.type === 'due' ? ' · statement' : e.sub ? ' · ' + e.sub : ''));
+    var sub = e.type === 'stmt' ? 'Statement closes. This balance gets reported.' : (e.type === 'due' && e.amt == null ? (amt ? money(amt, 1) + ' estimated · tap to add the statement' : 'Tap to add the statement amount') : (amt ? money(amt, 1) : 'Amount not set') + (e.type === 'due' ? ' · statement' : e.sub ? ' · ' + e.sub : ''));
     var inner = dateBox(e.date) + '<span class="tp-t"><b>' + esc(e.title) + '</b><span>' + esc(sub) + '</span></span>' + (e.type === 'due' ? pillDays(daysBetween(td, e.date), e.st === 'paid') : '');
     return e.type === 'due' ? '<button class="tp-row" data-act="stmt" data-card="' + e.card + '" data-ym="' + e.ym + '">' + inner + '</button>' : '<div class="tp-row static">' + inner + '</div>';
   }).join('') + '</div>' : '<div class="glass"><div class="empty">Add cards and bills and their dates show up here.</div></div>';
@@ -1643,7 +1657,7 @@ function ckInit() {
   if (!CK.inc.length) CK.inc.push({ label: 'Paycheck', amt: 0, kind: 'pay' });
   CK.known = [];
   eventsBetween(from, td).forEach(function (e) {
-    if (e.type === 'bill' && e.amt) CK.known.push({ k: 'b' + e.title + e.date, label: e.title, date: e.date, amt: e.amt, card: '' });
+    if (e.type === 'bill' && e.amt && !billOnCard(e)) CK.known.push({ k: 'b' + e.title + e.date, label: e.title, date: e.date, amt: e.amt, card: '' });
     if (e.type === 'due') { var a = cardDueAmt(e); if (a) CK.known.push({ k: 'c' + e.card + e.date, label: e.title.replace(/ payment due| due/i, '') + ' payment', date: e.date, amt: a, card: e.card }); }
   });
   CK.known.forEach(function (x) { CK.paid[x.k] = true; });
@@ -2415,7 +2429,7 @@ function calendarPage() {
   var sd = CAL.sel && CAL.sel >= gStart && CAL.sel <= gEnd ? CAL.sel : (td >= gStart && td <= gEnd ? td : ymd(first)), sl = byDay[sd] || [], frow = fc.days.filter(function (x) { return x.d === sd; })[0];
   h += '<div class="tp-sect"><span>' + esc(dowDate(sd)) + '</span></div><div class="glass">';
   h += sl.length ? sl.map(function (e) {
-    var amt = e.type === 'due' ? cardDueAmt(e) : e.amt, label = { pay: 'Paycheck to spending', stmt: 'Statement closes; this balance is reported', due: 'Card payment' + (e.amt == null ? ', estimated' : ''), bill: 'Bill' + (e.sub ? ' from ' + e.sub : ''), txn: 'Logged purchase' }[e.type] || '';
+    var amt = e.type === 'due' ? cardDueAmt(e) : e.amt, label = { pay: 'Paycheck to spending', stmt: 'Statement closes; this balance is reported', due: e.amt == null ? ({ closed: 'Estimated: balance on the closed statement', usual: 'Estimated: your usual statement', balance: 'Estimated: what\u2019s on the card now' }[cardDueInfo(e).why] || 'Estimated') + ' \u00b7 tap to enter it' : 'Card payment', bill: 'Bill' + (e.sub ? ' from ' + e.sub : ''), txn: 'Logged purchase' }[e.type] || '';
     var inner = '<span class="tp-tile cdt cd-' + e.type + '">' + TP.svg({ pay: 'piggy', stmt: 'doc', due: 'card', bill: 'receipt', txn: 'chart' }[e.type] || 'calendar') + '</span><span class="tp-t"><b>' + esc(e.title) + '</b><span>' + label + '</span></span>' + (amt ? '<span class="amt' + (e.type === 'pay' ? ' up' : '') + '">' + (e.type === 'pay' ? '+' : '') + money(amt, 1) + '</span>' : '');
     return e.type === 'due' ? '<button class="tp-row" data-act="stmt" data-card="' + e.card + '" data-ym="' + e.ym + '">' + inner + '</button>' : '<div class="tp-row static">' + inner + '</div>';
   }).join('') : '<div class="empty">Nothing scheduled.</div>';
