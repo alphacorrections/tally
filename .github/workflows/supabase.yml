@@ -32,6 +32,6 @@ jobs:
       - name: Link project
         run: supabase link --project-ref "$PROJECT_ID"
       - name: Database changes
-        run: supabase db push --remote
+        run: supabase db push --remote --yes
       - name: Server functions
-        run: supabase functions deploy --use-api
+        run: supabase functions deploy --use-api --yes
