@@ -28,6 +28,7 @@
  * To check the reminder email right away, run testReminder.
  */
 var STATE_TAB = '_tally';
+var SHARED_TAB = '_shared';   /* the Together space: its own key, never sees your personal data */
 var QUOTE_TAB = '_quotes';
 var CHUNK = 45000;
 
@@ -38,8 +39,15 @@ function setup() {
   ensureTrigger_();
   try { GmailApp.search('newer_than:1d', 0, 1); } catch (e) { Logger.log('Gmail check: ' + e.message); }
   Logger.log('Reminder emails go to: ' + Session.getEffectiveUser().getEmail());
+  if (!props.getProperty('SHARED_KEY')) props.setProperty('SHARED_KEY', Utilities.getUuid().replace(/-/g, ''));
+  tab_(SHARED_TAB, true);
   Logger.log('Your Tally key: ' + props.getProperty('TALLY_KEY'));
+  Logger.log('Together key (only opens the shared space; Tally puts it in the invite link for you): ' + props.getProperty('SHARED_KEY'));
   return props.getProperty('TALLY_KEY');
+}
+function newSharedKey() {
+  PropertiesService.getScriptProperties().setProperty('SHARED_KEY', Utilities.getUuid().replace(/-/g, ''));
+  Logger.log('New Together key. Make a new invite link in Tally > Together > Invite: ' + PropertiesService.getScriptProperties().getProperty('SHARED_KEY'));
 }
 function newKey() {
   PropertiesService.getScriptProperties().setProperty('TALLY_KEY', Utilities.getUuid().replace(/-/g, ''));
@@ -49,7 +57,11 @@ function newKey() {
 function doGet(e) {
   try {
     var p = (e && e.parameter) || {};
-    if (!authed_(p.key)) return out_({ ok: false, error: 'Wrong key' });
+    var role = role_(p.key);
+    if (!role) return out_({ ok: false, error: 'Wrong key' });
+    if (p.action === 'sload') return out_({ ok: true, state: loadState_(SHARED_TAB) });
+    if (role !== 'owner') return out_({ ok: false, error: 'This key only opens the shared space' });
+    if (p.action === 'sharedKey') return out_({ ok: true, key: sharedKey_() });
     if (p.action === 'load') return out_({ ok: true, state: loadState_() });
     if (p.action === 'market') return out_(market_(p));
     if (p.action === 'inbox') return out_({ ok: true, items: inbox_(10) });
@@ -59,7 +71,14 @@ function doGet(e) {
 function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
-    if (!authed_(body.key)) return out_({ ok: false, error: 'Wrong key' });
+    var role = role_(body.key);
+    if (!role) return out_({ ok: false, error: 'Wrong key' });
+    if (body.action === 'ssave' && body.state) {
+      var sl = LockService.getScriptLock(); sl.waitLock(20000);
+      try { saveState_(body.state, SHARED_TAB); } finally { sl.releaseLock(); }
+      return out_({ ok: true, updatedAt: body.state.updatedAt });
+    }
+    if (role !== 'owner') return out_({ ok: false, error: 'This key only opens the shared space' });
     if (body.action === 'save' && body.state) {
       var lock = LockService.getScriptLock(); lock.waitLock(20000);
       try { saveState_(body.state); } finally { lock.releaseLock(); }
@@ -72,7 +91,15 @@ function doPost(e) {
 }
 
 /* ---------- helpers ---------- */
-function authed_(k) { var real = PropertiesService.getScriptProperties().getProperty('TALLY_KEY'); return !!(real && k && String(k) === real); }
+function authed_(k) { return role_(k) === 'owner'; }
+function role_(k) {
+  var pr = PropertiesService.getScriptProperties(), own = pr.getProperty('TALLY_KEY'), sh = pr.getProperty('SHARED_KEY');
+  if (!k) return null; k = String(k);
+  if (own && k === own) return 'owner';
+  if (sh && k === sh) return 'shared';
+  return null;
+}
+function sharedKey_() { var pr = PropertiesService.getScriptProperties(); if (!pr.getProperty('SHARED_KEY')) pr.setProperty('SHARED_KEY', Utilities.getUuid().replace(/-/g, '')); tab_(SHARED_TAB, true); return pr.getProperty('SHARED_KEY'); }
 function out_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 function tab_(name, hidden) {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(name);
@@ -81,14 +108,14 @@ function tab_(name, hidden) {
 }
 
 /* ---------- state: one JSON document, split across cells in column A ---------- */
-function saveState_(state) {
-  var sh = tab_(STATE_TAB, true), json = JSON.stringify(state), rows = [[state.updatedAt || new Date().toISOString()]];
+function saveState_(state, tab) {
+  var sh = tab_(tab || STATE_TAB, true), json = JSON.stringify(state), rows = [[state.updatedAt || new Date().toISOString()]];
   for (var i = 0; i < json.length; i += CHUNK) rows.push([json.substr(i, CHUNK)]);
   sh.clearContents();
   sh.getRange(1, 1, rows.length, 1).setNumberFormat('@').setValues(rows);
 }
-function loadState_() {
-  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(STATE_TAB);
+function loadState_(tab) {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(tab || STATE_TAB);
   if (!sh || sh.getLastRow() < 2) return null;
   var vals = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues(), json = '';
   for (var i = 0; i < vals.length; i++) json += vals[i][0];

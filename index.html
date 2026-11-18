@@ -494,7 +494,7 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.17.13';
+var APP_VERSION = '2026.11.17.14';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1511,7 +1511,7 @@ PAGES.explore = function () {
   h += '<div id="mkt">' + (Sync.on() ? TP.loading('Getting quotes and headlines…') : marketOffline()) + '</div>';
   h += '<p class="small muted">For following along, not advice to buy or sell.</p>';
   h += '<div class="tp-sect"><span>Tools</span></div><div class="glass">' +
-    [['credit', 'trend', 'Credit score', 'Your scores and card use vs. limits'], ['spending', 'chart', 'Spending', 'Everything you logged, by category and card'], ['checkin', 'pencil', 'Weekly check-in', 'Balances, last week, next week'], ['play', 'sliders', 'What if', 'Timelines, borrow vs. savings, card interest'], ['goals', 'target', 'All goals', 'Savings, payoffs, trips'], ['history', 'calendar', 'Past check-ins', 'Every week you logged'], ['settings', 'gear', 'Settings', 'Payday, reminders, sync, look, backup']].map(function (x) { return '<button class="tp-row" data-act="go" data-a="' + x[0] + '"><span class="tp-tile">' + TP.svg(x[1]) + '</span><span class="tp-t"><b>' + x[2] + '</b><span>' + x[3] + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }).join('') + '</div>';
+    [['together', 'people', 'Together', 'Shared bills, paybacks, and goals with your partner'], ['credit', 'trend', 'Credit score', 'Your scores and card use vs. limits'], ['spending', 'chart', 'Spending', 'Everything you logged, by category and card'], ['checkin', 'pencil', 'Weekly check-in', 'Balances, last week, next week'], ['play', 'sliders', 'What if', 'Timelines, borrow vs. savings, card interest'], ['goals', 'target', 'All goals', 'Savings, payoffs, trips'], ['history', 'calendar', 'Past check-ins', 'Every week you logged'], ['settings', 'gear', 'Settings', 'Payday, reminders, sync, look, backup']].map(function (x) { return '<button class="tp-row" data-act="go" data-a="' + x[0] + '"><span class="tp-tile">' + TP.svg(x[1]) + '</span><span class="tp-t"><b>' + x[2] + '</b><span>' + x[3] + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }).join('') + '</div>';
   h += '<div class="tp-sect"><span>Ideas to try</span><span class="sp"></span><button data-act="ideaAdd">+ Add</button></div><div class="glass">' +
     (S.ideas.length ? S.ideas.map(function (i) { return '<div class="tp-row static"><input type="checkbox" id="idea_' + i.id + '" data-act="ideaToggle" data-id="' + i.id + '" ' + (i.done ? 'checked' : '') + ' class="tick"><label class="tp-t" for="idea_' + i.id + '"><b style="' + (i.done ? 'text-decoration:line-through;opacity:.6' : '') + '">' + esc(i.text) + '</b>' + (i.diff ? '<span>Worth about ' + esc(i.diff) + '</span>' : '') + '</label><button class="chip" data-act="ideaDel" data-id="' + i.id + '" aria-label="Remove idea">×</button></div>'; }).join('') : '<div class="empty">Small moves you want to test.</div>') + '</div>';
   return h;
@@ -2099,6 +2099,233 @@ document.addEventListener('input', function (e) {
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
 window.addEventListener('focus', function () { if (Sync.on() && Sync.status !== 'busy' && VIEW !== 'checkin' && Date.now() - (window._lastPull || 0) > 60000) { window._lastPull = Date.now(); Sync.start(); } });
 
+
+/* Tally — Together: a shared space for two people (shared bills, who paid, paybacks, shared goals).
+   Lives in its own hidden tab of the owner's Sheet, opened with a key that can't reach personal data. */
+var LS_SHARED = 'tally.shared', LS_SHDOC = 'tally.shared.doc';
+TP.icons.people = '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2c3 .2 5.5 2.6 5.5 5.8"/>';
+var SH = {
+  cfg: lsGet(LS_SHARED) || null, doc: lsGet(LS_SHDOC) || null, status: 'off', msg: '', timer: null,
+  on: function () { return !!(this.cfg && this.cfg.url && this.cfg.key && this.cfg.me); },
+  get: function (params) { var c = this.cfg, q = Object.keys(params).map(function (k) { return k + '=' + encodeURIComponent(params[k]); }).join('&'); return fetch(c.url + (c.url.indexOf('?') >= 0 ? '&' : '?') + q, { redirect: 'follow' }).then(function (r) { return r.json(); }); },
+  post: function (body) { return fetch(this.cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }); },
+  keep: function () { lsSet(LS_SHDOC, this.doc); },
+  pull: function () {
+    var self = this; if (!self.on()) return Promise.resolve();
+    self.status = 'busy';
+    return self.get({ action: 'sload', key: self.cfg.key }).then(function (j) {
+      if (!j.ok) throw new Error(j.error || 'Shared space didn’t answer');
+      var before = JSON.stringify(self.doc || {});
+      self.doc = shMerge(self.doc, j.state); self.keep(); self.status = 'ok';
+      if (JSON.stringify(self.doc) !== before && (VIEW === 'together' || VIEW === 'home')) rerender();
+      if (j.state && JSON.stringify(shStrip(self.doc)) !== JSON.stringify(shStrip(j.state))) return self.push();
+    }).catch(function (e) { self.status = 'bad'; self.msg = e.message || 'Offline'; });
+  },
+  push: function () {
+    var self = this; if (!self.on() || !self.doc) return Promise.resolve();
+    self.doc.updatedAt = new Date().toISOString(); self.keep();
+    return self.post({ action: 'ssave', key: self.cfg.key, state: self.doc }).then(function (j) { if (!j.ok) throw new Error(j.error || 'Save failed'); self.status = 'ok'; })
+      .catch(function (e) { self.status = 'bad'; self.msg = e.message || 'Offline'; });
+  },
+  /* pull first, merge, then push, so two phones editing at once both keep their changes */
+  sync: function () { var self = this; clearTimeout(self.timer); self.timer = setTimeout(function () { self.pull().then(function () { return self.push(); }); }, 900); }
+};
+function shStrip(d) { if (!d) return null; var c = JSON.parse(JSON.stringify(d)); delete c.updatedAt; return c; }
+function shBlank() { return { v: 1, updatedAt: '', people: [], exp: [], bills: [], goals: [], contrib: [], settle: [] }; }
+function shMerge(a, b) {
+  if (!a) return b ? JSON.parse(JSON.stringify(b)) : null; if (!b) return a;
+  var out = shBlank();
+  ['people', 'exp', 'bills', 'goals', 'contrib', 'settle'].forEach(function (k) {
+    var m = {}; (a[k] || []).concat(b[k] || []).forEach(function (x) { var o = m[x.id]; if (!o || (x.upd || '') > (o.upd || '')) m[x.id] = x; });
+    out[k] = Object.keys(m).map(function (id) { return m[id]; });
+  });
+  out.exp.sort(function (x, y) { return x.date < y.date ? -1 : 1; });
+  return out;
+}
+function shLive(k) { return SH.doc ? (SH.doc[k] || []).filter(function (x) { return !x.del; }) : []; }
+function shPerson(id) { return shLive('people').filter(function (p) { return p.id === id; })[0] || { id: id, name: '?' }; }
+function shMe() { return shPerson(SH.cfg.me); }
+function shThem() { return shLive('people').filter(function (p) { return p.id !== SH.cfg.me; })[0] || { id: '', name: 'Partner' }; }
+function shTouch(list, item) { item.upd = new Date().toISOString(); var arr = SH.doc[list]; var i = arr.map(function (x) { return x.id; }).indexOf(item.id); if (i >= 0) arr[i] = item; else arr.push(item); SH.keep(); SH.sync(); }
+function payerShare(x) { return x.split === 'pct' ? Math.max(0, Math.min(100, +x.pct || 0)) / 100 : x.split === 'other' ? 0 : x.split === 'solo' ? 1 : 0.5; }
+/* positive: they owe me. negative: I owe them */
+function shNet() {
+  var me = SH.cfg.me, n = 0;
+  shLive('exp').forEach(function (x) { var owed = (+x.amt || 0) * (1 - payerShare(x)); n += x.payer === me ? owed : -owed; });
+  shLive('settle').forEach(function (x) { n += x.from === me ? +x.amt || 0 : -(+x.amt || 0); });
+  return r2(n);
+}
+function shBillDue(b, from) { if (!b.day) return null; var f = parseD(from), d = ymd(clampDay(f.getFullYear(), f.getMonth(), +b.day)); return d < from ? ymd(clampDay(f.getFullYear(), f.getMonth() + 1, +b.day)) : d; }
+function shBillLogged(b, ym) { return shLive('exp').some(function (x) { return x.bill === b.id && x.date.slice(0, 7) === ym; }); }
+function splitLabel(x) { var p = shPerson(x.payer).name; return x.split === 'other' ? 'All ' + (x.payer === SH.cfg.me ? shThem().name + '’s' : 'yours') : x.split === 'solo' ? 'Not split' : x.split === 'pct' ? p + ' ' + (+x.pct) + '% / ' + (100 - +x.pct) + '%' : '50/50'; }
+
+/* ---------- page ---------- */
+function togetherPage() {
+  var h = topBar('Together', SH.on() && SH.doc ? shLive('people').map(function (p) { return p.name; }).join(' & ') : 'A shared space for two', 'home');
+  if (!SH.on() || !SH.doc || !shLive('people').length) return h + togetherSetup();
+  var me = shMe(), them = shThem(), net = shNet(), td = today();
+  h += '<div class="glass hero tp-rise"><span class="label">' + (Math.abs(net) < 0.5 ? 'All square' : net > 0 ? esc(them.name) + ' owes you' : 'You owe ' + esc(them.name)) + '</span><div class="big" data-count="' + Math.abs(net) + '">' + money(Math.abs(net)) + '</div>' +
+    '<div class="flex mt"><button class="tp-btn tp-sm" data-act="shExp">+ Shared expense</button>' + (Math.abs(net) >= 0.5 ? '<button class="tp-btn tp-ghost tp-sm" data-act="shSettle">Record a payback</button>' : '') + '</div>' +
+    (SH.status === 'bad' ? '<div class="tp-err">Couldn’t sync: ' + esc(SH.msg) + '. Changes are saved here and will send later.</div>' : '') + '</div>';
+  /* this month */
+  var ym = td.slice(0, 7), mx = shLive('exp').filter(function (x) { return x.date.slice(0, 7) === ym && x.split !== 'solo'; }), tot = sumAmt(mx);
+  if (mx.length) { var paid = {}; mx.forEach(function (x) { paid[x.payer] = (paid[x.payer] || 0) + (+x.amt || 0); });
+    h += '<div class="glass pad"><div class="flex" style="justify-content:space-between"><b>' + MONTHS[parseD(td).getMonth()] + ' shared spending</b><b class="disp">' + money(tot) + '</b></div><div class="split" style="margin-top:10px">' + [me, them].filter(function (p) { return paid[p.id]; }).map(function (p, i) { return '<i style="flex:' + paid[p.id] + ';background:' + (i ? 'var(--c2)' : 'var(--c1)') + '"></i>'; }).join('') + '</div><div class="legend4">' + [me, them].map(function (p, i) { return '<span><i style="background:' + (i ? 'var(--c2)' : 'var(--c1)') + '"></i>' + esc(p.name) + ' paid<b>' + money(paid[p.id] || 0) + '</b></span>'; }).join('') + '</div></div>'; }
+  /* bills */
+  var bills = shLive('bills').slice().sort(function (a, b) { return (shBillDue(a, td) || '9') < (shBillDue(b, td) || '9') ? -1 : 1; });
+  h += '<div class="tp-sect"><span>Shared bills</span><span class="sp"></span><button data-act="shBill">+ Add</button></div><div class="glass">' + (bills.length ? bills.map(function (b) {
+    var due = shBillDue(b, td), cur = shBillLogged(b, ym), prevDue = ymd(clampDay(parseD(td).getFullYear(), parseD(td).getMonth(), +b.day)), lateUnlogged = prevDue <= td && !cur;
+    return '<div class="tp-row static">' + dateBox(lateUnlogged ? prevDue : due) + '<span class="tp-t"><b>' + esc(b.name) + '</b><span>' + money(+b.amt) + ' · ' + esc(shPerson(b.payer).name) + ' usually pays · ' + splitLabel(b) + '</span></span>' + (cur ? '<span class="tp-pill tp-ok">Logged</span>' : '<button class="chip" data-act="shBillLog" data-id="' + b.id + '">Log it</button>') + '<button class="ibtn sm" data-act="shBill" data-id="' + b.id + '" aria-label="Edit ' + esc(b.name) + '">' + TP.svg('pencil') + '</button></div>';
+  }).join('') : '<div class="empty">Rent, utilities, streaming, groceries you split. Add each once; log it when it’s paid.</div>') + '</div>';
+  /* goals */
+  var gs = shLive('goals');
+  h += '<div class="tp-sect"><span>Shared goals</span><span class="sp"></span><button data-act="shGoal">+ Add</button></div>';
+  h += gs.length ? gs.map(function (g) {
+    var cs = shLive('contrib').filter(function (c) { return c.goal === g.id; }), by = {}; cs.forEach(function (c) { by[c.who] = (by[c.who] || 0) + (+c.amt || 0); }); var have = sumAmt(cs), pct = g.target ? Math.min(100, have / g.target * 100) : 0;
+    return '<div class="glass pad"><div class="flex" style="flex-wrap:nowrap"><span class="grow"><b style="font-size:16px">' + esc(g.name) + '</b><span class="bigsum" style="display:block">' + money(have) + ' <span class="small muted">of ' + money(+g.target || 0) + '</span></span></span>' + ring(pct) + '</div>' +
+      '<div class="split" style="margin:8px 0 4px">' + [me, them].filter(function (p) { return by[p.id]; }).map(function (p, i) { return '<i style="flex:' + by[p.id] + ';background:' + (p.id === me.id ? 'var(--c1)' : 'var(--c2)') + '"></i>'; }).join('') + (g.target > have ? '<i style="flex:' + (g.target - have) + ';background:var(--tp-line2)"></i>' : '') + '</div>' +
+      '<div class="legend4">' + [me, them].map(function (p) { return '<span><i style="background:' + (p.id === me.id ? 'var(--c1)' : 'var(--c2)') + '"></i>' + esc(p.name) + '<b>' + money(by[p.id] || 0) + '</b></span>'; }).join('') + '</div>' +
+      (g.due && have < g.target ? '<p class="small muted mb0">' + money((g.target - have) / Math.max(1, monthsUntil(g.due))) + ' a month between you makes ' + MON[parseD(g.due).getMonth()] + ' ' + parseD(g.due).getFullYear() + ' (' + money((g.target - have) / Math.max(1, monthsUntil(g.due)) / 2) + ' each).</p>' : '') +
+      '<div class="flex mt"><button class="tp-btn tp-sm" data-act="shContrib" data-id="' + g.id + '">Add money</button><button class="tp-btn tp-ghost tp-sm" data-act="shGoal" data-id="' + g.id + '">Edit</button></div></div>';
+  }).join('') : '<div class="glass"><div class="empty">A trip, furniture, a move. Each of you adds money and you both see the progress.</div></div>';
+  /* history */
+  var hist = shLive('exp').map(function (x) { return { t: 'e', x: x, d: x.date }; }).concat(shLive('settle').map(function (x) { return { t: 's', x: x, d: x.date }; }), shLive('contrib').map(function (x) { return { t: 'c', x: x, d: x.date }; })).sort(function (a, b) { return a.d < b.d ? 1 : -1; }).slice(0, 40);
+  h += '<div class="tp-sect"><span>Recent</span></div><div class="glass">' + (hist.length ? hist.map(function (r) {
+    var x = r.x;
+    if (r.t === 's') return '<button class="tp-row" data-act="shSettle" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(shPerson(x.from).name) + ' paid back ' + esc(shPerson(x.to).name) + '</b><span>' + esc(x.note || 'Payback') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>';
+    if (r.t === 'c') { var g = shLive('goals').filter(function (gg) { return gg.id === x.goal; })[0]; return '<button class="tp-row" data-act="shContrib" data-cid="' + x.id + '" data-id="' + x.goal + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(shPerson(x.who).name) + ' added to ' + esc(g ? g.name : 'a goal') + '</b><span>Shared goal</span></span><span class="amt up">+' + money(+x.amt, 1) + '</span></button>'; }
+    var other = r2((+x.amt || 0) * (1 - payerShare(x)));
+    return '<button class="tp-row" data-act="shExp" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Shared expense') + '</b><span>' + esc(shPerson(x.payer).name) + ' paid · ' + splitLabel(x) + (other ? ' · ' + (x.payer === SH.cfg.me ? shThem().name + ' owes ' : 'you owe ') + money(other, 1) : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>';
+  }).join('') : '<div class="empty">Shared expenses and paybacks show up here for both of you.</div>') + '</div>';
+  /* invite / settings */
+  h += '<div class="tp-sect"><span>Space settings</span></div><div class="glass pad"><div class="flex">' + (SH.cfg.owner ? '<button class="tp-btn tp-sm" data-act="shInvite">Copy invite link for ' + esc(them.name) + '</button>' : '') + '<button class="tp-btn tp-ghost tp-sm" data-act="shNames">Names</button><button class="tp-btn tp-ghost tp-sm" data-act="shLeave">Disconnect this device</button></div><p class="small muted mb0">Only what you add here is shared. Your own accounts, cards, and spending stay private.</p></div>';
+  return h;
+}
+function togetherSetup() {
+  var h = '<div class="glass hero tp-rise"><span class="label">Together</span><div class="disp" style="font-size:24px;font-weight:700;line-height:1.25;margin:6px 0 8px">One place for what you two share.</div><div class="heroSub">Shared bills, who paid, paybacks, and shared goals. Neither of you sees the other’s accounts.</div></div>';
+  if (!Sync.on()) return h + '<div class="glass pad"><b>Two ways in</b><ul class="small" style="margin:8px 0 0;padding-left:18px"><li>Got an invite link? Open it on this phone and it connects you.</li><li>Starting it yourself? Turn on sync with your Google Sheet first (Settings), then come back.</li></ul></div>';
+  return h + '<div class="glass pad"><b>Start a shared space</b><p class="small muted">It lives in a separate, hidden tab of your Sheet with its own key. The invite link only opens that tab.</p>' + textField('sh_me', 'Your name', S.profile.name || '', '') + textField('sh_them', 'Their name', '', 'e.g. Fernanda') + '<div id="sh_err"></div><button class="tp-btn tp-block mt" data-act="shStart">Start it</button><p class="small muted mb0">Needs the latest Sheet script (it adds the shared tab and key).</p></div>';
+}
+PAGES.together = togetherPage;
+
+/* ---------- forms ---------- */
+var SHX = null;
+function shSplitFields(x) {
+  return '<label class="tp-label">Split</label>' + seg('sx_split', [['half', '50/50'], ['pct', 'Custom'], ['other', 'All theirs'], ['solo', 'Don’t split']], x.split || 'half') +
+    '<div id="sx_pctbox"' + (x.split === 'pct' ? '' : ' hidden') + '>' + textField('sx_pct', 'Payer’s share, %', x.pct || 60, '60', 'number') + '</div><p class="small muted" id="sx_hint"></p>';
+}
+function shExpSheet() {
+  var x = SHX, me = shMe(), them = shThem(), srcs = srcList();
+  sheet(sxHead(x.id ? 'Edit shared expense' : 'Shared expense') + '<div class="money qamt"><input class="tp-input" id="sx_amt" inputmode="decimal" placeholder="0.00" value="' + esc(x.amt || '') + '" aria-label="Amount"></div>' +
+    textField('sx_note', 'What for', x.note || '', 'e.g. Groceries, Dinner out') +
+    '<label class="tp-label">Who paid</label>' + seg('sx_payer', [[me.id, me.name], [them.id, them.name]], x.payer || me.id) + shSplitFields(x) +
+    '<label class="tp-label">Category</label><div class="chips">' + CATS.map(function (c) { return '<button class="chip' + (x.cat === c ? ' on' : '') + '" data-act="sxCat" data-a="' + esc(c) + '">' + c + '</button>'; }).join('') + '</div>' +
+    textField('sx_date', 'Date', x.date || today(), '', 'date') +
+    (!x.id && srcs.length ? '<div id="sx_mine"' + ((x.payer || me.id) === me.id ? '' : ' hidden') + '><label class="tp-opt mt"><input type="checkbox" id="sx_log" checked><span><b>Also add it to my spending</b><span>Takes the full amount off the card or account you used.</span></span></label><div class="chips qsrc">' + srcs.map(function (o) { return '<button class="chip' + (x.src === o.id ? ' on' : '') + '" data-act="sxSrc" data-a="' + o.id + '"><i style="background:' + o.dot + '"></i>' + esc(o.name) + '</button>'; }).join('') + '</div></div>' : '') +
+    '<div id="sx_err"></div><div class="acts">' + (x.id ? '<button class="tp-btn tp-danger" data-act="shDel" data-list="exp" data-id="' + x.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="shExpSave">Save</button></div>');
+  shHint();
+}
+function shKeepForm() { if (!SHX) return; ['amt', 'note', 'date', 'pct'].forEach(function (k) { var e = document.getElementById('sx_' + k); if (e) SHX[k] = e.value; }); var p = document.getElementById('sx_payer'), s = document.getElementById('sx_split'); if (p) SHX.payer = p.value; if (s) SHX.split = s.value; }
+function shHint() {
+  var el = document.getElementById('sx_hint'); if (!el) return;
+  var a = num(val('sx_amt')), payer = val('sx_payer'), x = { split: val('sx_split'), pct: val('sx_pct') }, owed = r2(a * (1 - payerShare(x))), other = payer === SH.cfg.me ? shThem() : shMe();
+  el.textContent = a ? (owed ? other.name + ' owes ' + shPerson(payer).name + ' ' + money(owed, 1) + '.' : 'Nobody owes anything on this one.') : '';
+  var pb = document.getElementById('sx_pctbox'); if (pb) pb.hidden = x.split !== 'pct';
+  var mine = document.getElementById('sx_mine'); if (mine) mine.hidden = payer !== SH.cfg.me;
+}
+ACT.shStart = function () {
+  var a = val('sh_me').trim(), b = val('sh_them').trim(); if (!a || !b) { document.getElementById('sh_err').innerHTML = '<div class="tp-err">Type both names.</div>'; return; }
+  TP.busy(true, 'Setting up', 'Making the shared tab in your Sheet.');
+  Sync.get({ action: 'sharedKey', key: Sync.cfg.key }).then(function (j) {
+    if (!j.ok) throw new Error(j.error === 'Unknown action' || !j.key ? 'Update the Sheet script first (it adds the shared tab).' : j.error);
+    SH.cfg = { url: Sync.cfg.url, key: j.key, me: 'p1', owner: true }; lsSet(LS_SHARED, SH.cfg);
+    return SH.get({ action: 'sload', key: j.key });
+  }).then(function (j) {
+    if (j.state && (j.state.people || []).length) { SH.doc = j.state; }
+    else { SH.doc = shBlank(); var t = new Date().toISOString(); SH.doc.people = [{ id: 'p1', name: a, upd: t }, { id: 'p2', name: b, upd: t }]; }
+    SH.keep(); return SH.push();
+  }).then(function () { TP.busy(false); rerender(); toast('Shared space ready. Copy the invite link at the bottom.'); })
+    .catch(function (e) { TP.busy(false); SH.cfg = null; lsDel(LS_SHARED); document.getElementById('sh_err').innerHTML = '<div class="tp-err">' + esc(e.message || 'Couldn’t reach your Sheet') + '</div>'; });
+};
+function shInviteLink() { var t = shThem(); return location.href.split('#')[0].split('?')[0] + '#join=' + btoa(JSON.stringify({ u: SH.cfg.url, k: SH.cfg.key, p: t.id })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+ACT.shInvite = function () { var l = shInviteLink(), done = function () { toast('Invite link copied. Send it to ' + shThem().name + ' privately. It only opens the shared space.'); }; if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(l).then(done, function () { prompt('Copy this link', l); }); else prompt('Copy this link', l); };
+ACT.shLeave = function (d, el) { el.setAttribute('data-label', 'Disconnect this device'); armDelete(el, function () { SH.cfg = null; SH.doc = null; lsDel(LS_SHARED); lsDel(LS_SHDOC); rerender(); }); };
+ACT.shNames = function () { var me = shMe(), th = shThem(); sheet(sxHead('Names') + textField('sn_a', 'You', me.name) + textField('sn_b', 'Them', th.name) + '<div class="acts"><button class="tp-btn" data-act="shNamesSave">Save</button></div>'); };
+ACT.shNamesSave = function () { var me = shMe(), th = shThem(); me.name = val('sn_a').trim() || me.name; th.name = val('sn_b').trim() || th.name; shTouch('people', me); shTouch('people', th); closeSheet(); rerender(); };
+ACT.shExp = function (d) { var x = d.id ? shLive('exp').filter(function (e) { return e.id === d.id; })[0] : null; SHX = x ? JSON.parse(JSON.stringify(x)) : { payer: SH.cfg.me, split: 'half', date: today(), cat: '', src: ((S.profile.last || {}).src) || ((srcList()[0] || {}).id) }; shExpSheet(); };
+ACT.sxCat = function (d) { shKeepForm(); SHX.cat = d.a; shExpSheet(); };
+ACT.sxSrc = function (d) { shKeepForm(); SHX.src = d.a; shExpSheet(); };
+ACT.shExpSave = function () {
+  shKeepForm(); var a = r2(num(SHX.amt)); if (!(a > 0)) { document.getElementById('sx_err').innerHTML = '<div class="tp-err">Type the amount.</div>'; return; }
+  var x = { id: SHX.id || 'e' + uid(), amt: a, note: (SHX.note || '').trim(), payer: SHX.payer, split: SHX.split || 'half', pct: SHX.split === 'pct' ? Math.max(0, Math.min(100, num(SHX.pct))) : '', cat: SHX.cat || 'Other', date: SHX.date || today(), bill: SHX.bill || '', by: SH.cfg.me };
+  var alsoMine = !SHX.id && x.payer === SH.cfg.me && checked('sx_log') && SHX.src;
+  shTouch('exp', x);
+  if (alsoMine) { S.txns = S.txns || []; S.txns.push({ id: 't' + uid(), at: x.date === today() ? new Date().toISOString() : x.date + 'T12:00:00', date: x.date, amt: a, src: SHX.src, cat: x.cat, note: (x.note || 'Shared') + ' (shared)', shared: x.id }); save(true); }
+  SHX = null; closeSheet(); rerender(); toast('Saved to Together' + (alsoMine ? ' and your spending' : '') + '.');
+};
+ACT.shDel = function (d, el) { armDelete(el, function () { var it = (SH.doc[d.list] || []).filter(function (x) { return x.id === d.id; })[0]; if (it) { it.del = true; shTouch(d.list, it); } closeSheet(); rerender(); }); };
+ACT.shSettle = function (d) {
+  var x = d.id ? shLive('settle').filter(function (s) { return s.id === d.id; })[0] : null, net = shNet(), me = shMe(), th = shThem();
+  var from = x ? x.from : (net > 0 ? th.id : me.id);
+  sheet(sxHead(x ? 'Edit payback' : 'Record a payback') + '<label class="tp-label">Who paid</label>' + seg('st_from', [[th.id, th.name + ' paid me'], [me.id, 'I paid ' + th.name]], from) +
+    moneyField('st_amt2', 'Amount', x ? x.amt : Math.abs(net)) + textField('st_note', 'Note', x ? x.note : '', 'e.g. Venmo') + textField('st_date', 'Date', x ? x.date : today(), '', 'date') +
+    '<div class="acts">' + (x ? '<button class="tp-btn tp-danger" data-act="shDel" data-list="settle" data-id="' + x.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="shSettleSave"' + (x ? ' data-id="' + x.id + '"' : '') + '>Save</button></div>');
+};
+ACT.shSettleSave = function (d) { var a = r2(num(val('st_amt2'))); if (!(a > 0)) return; var from = val('st_from'), to = from === SH.cfg.me ? shThem().id : SH.cfg.me; shTouch('settle', { id: d.id || 's' + uid(), from: from, to: to, amt: a, note: val('st_note').trim(), date: val('st_date') || today() }); closeSheet(); rerender(); };
+ACT.shBill = function (d) {
+  var b = d.id ? shLive('bills').filter(function (x) { return x.id === d.id; })[0] : { payer: SH.cfg.me, split: 'half' }, me = shMe(), th = shThem(); SHX = JSON.parse(JSON.stringify(b));
+  sheet(sxHead(d.id ? 'Edit shared bill' : 'Shared bill') + '<div class="fgrid">' + textField('sb_name', 'Name', b.name || '', 'e.g. Rent') + moneyField('sb_amt', 'Amount', b.amt) + '</div><label class="tp-label">Usually paid by</label>' + seg('sx_payer', [[me.id, me.name], [th.id, th.name]], b.payer) + shSplitFields(b) +
+    '<label class="tp-label">Due on day</label>' + dayGrid('sb_day', b.day) + '<div class="acts">' + (d.id ? '<button class="tp-btn tp-danger" data-act="shDel" data-list="bills" data-id="' + d.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="shBillSave"' + (d.id ? ' data-id="' + d.id + '"' : '') + '>Save</button></div>');
+};
+ACT.shBillSave = function (d) { var n = val('sb_name').trim(); if (!n) return; shTouch('bills', { id: d.id || 'b' + uid(), name: n, amt: r2(num(val('sb_amt'))), payer: val('sx_payer'), split: val('sx_split') || 'half', pct: val('sx_split') === 'pct' ? num(val('sx_pct')) : '', day: +val('sb_day') || '' }); closeSheet(); rerender(); };
+ACT.shBillLog = function (d) { var b = shLive('bills').filter(function (x) { return x.id === d.id; })[0]; if (!b) return; var td = today(), due = ymd(clampDay(parseD(td).getFullYear(), parseD(td).getMonth(), +b.day || parseD(td).getDate())); SHX = { amt: b.amt, note: b.name, payer: b.payer, split: b.split, pct: b.pct, cat: 'Other', date: due <= td ? due : td, bill: b.id, src: ((S.profile.last || {}).src) || ((srcList()[0] || {}).id) }; shExpSheet(); };
+ACT.shGoal = function (d) { var g = d.id ? shLive('goals').filter(function (x) { return x.id === d.id; })[0] : {}; sheet(sxHead(d.id ? 'Edit shared goal' : 'Shared goal') + textField('sg_name', 'Name', g.name || '', 'e.g. Trip to Lisbon') + '<div class="fgrid">' + moneyField('sg_t', 'Target', g.target) + textField('sg_due', 'By', g.due || '', '', 'date') + '</div><div class="acts">' + (d.id ? '<button class="tp-btn tp-danger" data-act="shDel" data-list="goals" data-id="' + d.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="shGoalSave"' + (d.id ? ' data-id="' + d.id + '"' : '') + '>Save</button></div>'); };
+ACT.shGoalSave = function (d) { var n = val('sg_name').trim(); if (!n) return; shTouch('goals', { id: d.id || 'g' + uid(), name: n, target: r2(num(val('sg_t'))), due: val('sg_due') }); closeSheet(); rerender(); };
+ACT.shContrib = function (d) { var c = d.cid ? shLive('contrib').filter(function (x) { return x.id === d.cid; })[0] : null, me = shMe(), th = shThem(); sheet(sxHead(c ? 'Edit contribution' : 'Add money') + '<label class="tp-label">Who</label>' + seg('sc_who', [[me.id, me.name], [th.id, th.name]], c ? c.who : me.id) + moneyField('sc_amt', 'Amount', c ? c.amt : '') + textField('sc_date', 'Date', c ? c.date : today(), '', 'date') + '<div class="acts">' + (c ? '<button class="tp-btn tp-danger" data-act="shDel" data-list="contrib" data-id="' + c.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="shContribSave" data-goal="' + d.id + '"' + (c ? ' data-id="' + c.id + '"' : '') + '>Save</button></div>'); };
+ACT.shContribSave = function (d) { var a = r2(num(val('sc_amt'))); if (!(a > 0)) return; shTouch('contrib', { id: d.id || 'c' + uid(), goal: d.goal, who: val('sc_who'), amt: a, date: val('sc_date') || today() }); closeSheet(); rerender(); };
+document.addEventListener('input', function (e) { if (/^sx_/.test(e.target.id || '')) shHint(); });
+document.addEventListener('click', function (e) { var b = e.target.closest ? e.target.closest('[data-act=seg]') : null; if (b && /^sx_/.test(b.getAttribute('data-id') || '')) setTimeout(shHint, 0); });
+
+/* ---------- joining from an invite link ---------- */
+(function () {
+  var m = /#join=([A-Za-z0-9_\-]+)/.exec(location.hash || ''); if (!m) return;
+  try { var o = JSON.parse(atob(m[1].replace(/-/g, '+').replace(/_/g, '/'))); if (/^https:\/\/script\.google\.com\//.test(o.u) && o.k && o.p) { SH.cfg = { url: o.u, key: o.k, me: o.p, owner: false }; lsSet(LS_SHARED, SH.cfg); SH.joined = true; } } catch (e) {}
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; }
+})();
+function shBoot() {
+  if (!SH.on()) return;
+  SH.pull().then(function () {
+    if (SH.joined) {
+      SH.joined = false;
+      if (!S.profile.name && SH.doc) { S.profile.name = shMe().name; S.accounts = S.accounts.length ? S.accounts : [{ id: 'checking', name: 'Checking', kind: 'spend' }, { id: 'savings', name: 'Savings', kind: 'save' }]; save(true); }
+      VIEW = 'together'; render(); toast('You’re in. This is your shared space with ' + shThem().name + '.');
+    }
+  });
+}
+
+/* ---------- hooks into the rest of the app ---------- */
+/* Home tile */
+var _home = PAGES.home;
+PAGES.home = function () {
+  var h = _home();
+  if (SH.on() && SH.doc && shLive('people').length) {
+    var net = shNet(), th = shThem(), tile = '<button class="glass tp-row cta" data-act="go" data-a="together"><span class="tp-tile">' + TP.svg('people') + '</span><span class="tp-t"><b>' + (Math.abs(net) < 0.5 ? 'Together · all square with ' + esc(th.name) : net > 0 ? esc(th.name) + ' owes you ' + money(net) : 'You owe ' + esc(th.name) + ' ' + money(-net)) + '</b><span>Shared bills, paybacks, goals</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+    var at = h.indexOf('<div class="tp-sect"><span>Goals</span>'); h = at >= 0 ? h.slice(0, at) + tile + h.slice(at) : h + tile;
+  }
+  return h;
+};
+/* paybacks show up in the weekly check-in */
+var _ckInit = ckInit;
+ckInit = function () {
+  _ckInit();
+  if (!SH.on() || !SH.doc) return;
+  shLive('settle').filter(function (x) { return x.date >= CK.from && x.date <= CK.to; }).forEach(function (x) {
+    if (x.to === SH.cfg.me) CK.inc.push({ label: 'Paid back by ' + shPerson(x.from).name, amt: +x.amt, kind: 'other' });
+    else if (x.from === SH.cfg.me) { var k = 'shs' + x.id; CK.known.push({ k: k, label: 'Paid back ' + shPerson(x.to).name, date: x.date, amt: +x.amt, card: '' }); CK.paid[k] = true; }
+  });
+};
+window.addEventListener('focus', function () { if (SH.on() && (VIEW === 'together' || VIEW === 'home')) SH.pull(); });
+
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
 function verCmp(a, b) { var x = String(a).split('.'), y = String(b).split('.'); for (var i = 0; i < Math.max(x.length, y.length); i++) { var d = (+x[i] || 0) - (+y[i] || 0); if (d) return d; } return 0; }
@@ -2127,6 +2354,7 @@ applyLook();
 render();
 window._lastPull = Date.now();
 Sync.start();
+shBoot();
 
 </script>
 </body>
