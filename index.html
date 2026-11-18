@@ -519,6 +519,7 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 
 .top{gap:8px}
 @media (max-width:380px){.top .ibtn{width:40px;height:40px;border-radius:13px}.top{gap:6px}.top .who b{font-size:22px}}
+.cd-inc{background:transparent;box-shadow:inset 0 0 0 2px var(--ok)} .tp-tile.cd-inc{background:var(--ok-bg);color:var(--ok);box-shadow:none}
 
 </style>
 </head>
@@ -529,7 +530,7 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.17.19';
+var APP_VERSION = '2026.11.17.20';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -643,7 +644,7 @@ if (window.matchMedia) { try { matchMedia('(prefers-color-scheme: dark)').addEve
 
 /* ---------- state ---------- */
 function blankState() {
-  return { v: 2, updatedAt: '', profile: { name: '', weekStart: 1, pay: { amt: '', every: 7, next: '' }, remind: { on: true, day: 0, hour: 9 }, funPct: 10 }, accounts: [], cards: [], bills: [], weeks: [], statements: {}, snaps: [], txns: [], goals: [], watch: [], topics: [], ideas: [], affirm: [], affirmOn: true };
+  return { v: 2, updatedAt: '', profile: { name: '', weekStart: 1, pay: { amt: '', every: 7, next: '' }, remind: { on: true, day: 0, hour: 9 }, funPct: 10 }, accounts: [], cards: [], bills: [], weeks: [], statements: {}, snaps: [], txns: [], incomes: [], goals: [], watch: [], topics: [], ideas: [], affirm: [], affirmOn: true };
 }
 function normalize(s) {
   var b = blankState(); s = s || {};
@@ -749,6 +750,12 @@ function eventsBetween(from, to) {
     });
   }
   S.bills.forEach(function (bl) { if (bl.off || bl.freq !== 'c') return; customDates(bl, from, to).forEach(function (d) { out.push({ date: d, type: 'bill', title: bl.name, amt: +bl.amount || 0, sub: bl.account }); }); });
+  /* other recurring income: same schedule options as bills */
+  (S.incomes || []).forEach(function (x) {
+    if (x.off) return; var mk = function (d) { return { date: d, type: 'inc', title: x.name, amt: +x.amount || 0, to: x.to || '', inc: x.id }; };
+    if (x.freq === 'c') customDates(x, from, to).forEach(function (d) { out.push(mk(d)); });
+    else if (x.day) { var a2 = parseD(from), b2 = parseD(to); for (var yy = a2.getFullYear(), mm = a2.getMonth(); new Date(yy, mm, 1) <= b2; mm++) { if (mm > 11) { mm = 0; yy++; } if (x.freq !== 'y' || +x.month === mm + 1) out.push(mk(ymd(clampDay(yy, mm, +x.day)))); } }
+  });
   return out.filter(function (e) { return e.date >= from && e.date <= to; }).sort(function (p, q) { return p.date < q.date ? -1 : p.date > q.date ? 1 : 0; });
 }
 
@@ -1092,6 +1099,9 @@ function cardCycleFor(c, date) { var close = cardCloseOnOrAfter(c, date); return
 function chargesSince(c, date) { return (S.txns || []).filter(function (x) { return x.src === 'c:' + c.id && x.date > date; }); }
 function cardsOwed() { var t = 0; S.cards.forEach(function (c) { if (!c.off) t += cardBal(c); }); return r2(t); }
 /* a bill marked "paid from" a card is already inside that card's statement, so it never leaves checking on its own */
+function incToSpend(e) { var a = S.accounts.filter(function (x) { return x.id === e.to; })[0]; return !a || a.kind === 'spend'; }
+function incomeBetween(from, to) { var t = 0, list = []; eventsBetween(from, to).forEach(function (e) { if (e.type === 'inc' && e.amt) { list.push(e); if (incToSpend(e)) t += e.amt; } }); return { total: r2(t), list: list }; }
+function incMonthly(x) { return billMonthly({ amount: x.amount, freq: x.freq, n: x.n, unit: x.unit }); }
 function billOnCard(e) { return e.type === 'bill' && !!e.sub && S.cards.some(function (c) { return c.name === e.sub; }); }
 /* statements already billed but not paid, due from today up to (not including) `before` */
 function pendingStmts(c, before) {
@@ -1152,7 +1162,7 @@ function safeToSpend() {
   var td = today(), np = nextPayday(td), end, pays = 0, cash = spendCash();
   if (np) { var p = np, g = 0; while (daysBetween(td, p) < 7 && g++ < 10) { var n2 = nextPayday(addDays(p, 1)); if (!n2 || n2 === p) break; p = n2; } end = addDays(p, -1); pays = r2(paydaysBetween(td, end).length * netPay((S.profile.pay || {}).amt)); }
   else end = addDays(td, 13);
-  var due = dueBetween(td, end);
+  var due = dueBetween(td, end), other = incomeBetween(td, end).total; pays = r2(pays + other);
   var room = r2(cash + pays - due.total - floorOf('spend'));
   var plan = currentPlan();
   var val = plan ? Math.min(+plan.spend || 0, room) : room;
@@ -1179,6 +1189,7 @@ function forecast(days) {
     if (weekly && parseD(d).getDay() === ws) { dc -= weekly; dsv += weekly; }
     evs.forEach(function (e) {
       if (e.date !== d) return;
+      if (e.type === 'inc' && e.amt) { if (incToSpend(e)) dc += e.amt; else dsv += e.amt; steps.push({ d: d, label: e.title, amt: e.amt }); ev.push(e); return; }
       if (e.type === 'bill' && e.amt) { if (!billOnCard(e)) { dc -= e.amt; steps.push({ d: d, label: e.title, amt: -e.amt }); } ev.push(e); }
       else if (e.type === 'due') {
         var inf = cardDueInfo(e), a = inf.amt, est = inf.est;
@@ -1342,6 +1353,12 @@ function creditPage() {
   h += '<p class="small muted">Credit Karma doesn’t let other apps read your score, so you type it in. Once a month at check-in is plenty.</p>';
   return h;
 }
+function schedFields(b) {
+  return '<label class="tp-label">How often</label>' + seg('bl_freq', [['m', 'Monthly'], ['c', 'Custom'], ['y', 'Yearly']], b.freq || 'm') +
+    '<div id="bl_fixed"' + (b.freq === 'c' ? ' hidden' : '') + '><label class="tp-label">On day</label>' + dayGrid('bl_day', b.day) + '<div id="bl_yr"' + (b.freq === 'y' ? '' : ' hidden') + '><label class="tp-label" for="bl_month">Month</label><select class="tp-input" id="bl_month"><option value="">\u2014</option>' + MONTHS.map(function (m, i) { return '<option value="' + (i + 1) + '"' + (+b.month === i + 1 ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div></div>' +
+    '<div id="bl_custom"' + (b.freq === 'c' ? '' : ' hidden') + '><div class="fgrid"><div><label class="tp-label" for="bl_n">Every</label><select class="tp-input" id="bl_n">' + [1, 2, 3, 4, 5, 6, 8, 10, 12].map(function (x) { return '<option value="' + x + '"' + (+(b.n || 2) === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></div><div><label class="tp-label">&nbsp;</label>' + seg('bl_unit', [['w', 'Weeks'], ['m', 'Months']], b.unit || 'w') + '</div></div>' + textField('bl_next', 'Next date', b.next || '', '', 'date') + '</div>';
+}
+function readSched(o) { o.freq = val('bl_freq') || 'm'; if (o.freq === 'c') { o.n = +val('bl_n') || 1; o.unit = val('bl_unit') || 'w'; o.next = val('bl_next'); o.day = ''; o.month = ''; } else { o.day = +val('bl_day') || ''; o.month = o.freq === 'y' ? +val('bl_month') || '' : ''; delete o.n; delete o.unit; delete o.next; } return o; }
 function payLabel(p) { return { 7: 'every week', 14: 'every 2 weeks', 15: 'twice a month', 30: 'every month' }[+p.every] || ''; }
 
 /* ---------- shell ---------- */
@@ -1429,7 +1446,7 @@ PAGES.home = function () {
   h += '<div class="tp-sect"><span>Next 2 weeks</span><span class="sp"></span><button data-act="go" data-a="calendar">Calendar</button></div>';
   h += evs.length ? '<div class="glass">' + evs.map(function (e) {
     var amt = e.type === 'due' ? cardDueAmt(e) : e.amt;
-    var sub = e.type === 'stmt' ? 'Statement closes. This balance gets reported.' : (e.type === 'due' && e.amt == null ? (amt ? money(amt, 1) + ' estimated · tap to add the statement' : 'Tap to add the statement amount') : (amt ? money(amt, 1) : 'Amount not set') + (e.type === 'due' ? ' · statement' : e.sub ? ' · ' + e.sub : ''));
+    var sub = e.type === 'stmt' ? 'Statement closes. This balance gets reported.' : (e.type === 'due' && e.amt == null ? (amt ? money(amt, 1) + ' estimated · tap to add the statement' : 'Tap to add the statement amount') : (e.type === 'inc' ? '+' + money(amt, 1) + ' coming in' : (amt ? money(amt, 1) : 'Amount not set') + (e.type === 'due' ? ' · statement' : e.sub ? ' · ' + e.sub : '')));
     var inner = dateBox(e.date) + '<span class="tp-t"><b>' + esc(e.title) + '</b><span>' + esc(sub) + '</span></span>' + (e.type === 'due' ? pillDays(daysBetween(td, e.date), e.st === 'paid') : '');
     return e.type === 'due' ? '<button class="tp-row" data-act="stmt" data-card="' + e.card + '" data-ym="' + e.ym + '">' + inner + '</button>' : '<div class="tp-row static">' + inner + '</div>';
   }).join('') + '</div>' : '<div class="glass"><div class="empty">Add cards and bills and their dates show up here.</div></div>';
@@ -1665,6 +1682,7 @@ function ckInit() {
   var from = prev ? addDays(prev.date, 1) : addDays(td, -6), p = S.profile.pay || {};
   CK.from = from; CK.to = td;
   paydaysBetween(from, td).forEach(function (d) { CK.inc.push({ label: 'Paycheck · ' + shortDate(d), amt: +p.amt || 0, kind: 'pay' }); });
+  eventsBetween(from, td).forEach(function (e) { if (e.type === 'inc') CK.inc.push({ label: e.title + ' · ' + shortDate(e.date), amt: e.amt, kind: 'other' }); });
   if (!CK.inc.length) CK.inc.push({ label: 'Paycheck', amt: 0, kind: 'pay' });
   CK.known = [];
   eventsBetween(from, td).forEach(function (e) {
@@ -1740,6 +1758,7 @@ function ckCalc() {
 function ckNextWindow() { var td = today(), np = nextPayday(addDays(td, 1)), end = addDays(td, 7); if (np && np > end && daysBetween(td, np) <= 16) end = np; return { from: addDays(td, 1), to: end }; }
 function ckPlanDefaults() {
   var w = ckNextWindow(), p = S.profile.pay || {}, pays = r2(paydaysBetween(w.from, w.to).length * netPay(p.amt)), autoAmt = r2(paydaysBetween(w.from, w.to).length * autoSaveOf(p.amt));
+  pays = r2(pays + incomeBetween(w.from, w.to).total);
   var due = dueBetween(w.from, w.to), bills = 0, cards = 0; due.list.forEach(function (x) { if (x.e.type === 'due') cards += x.amt; else bills += x.amt; });
   if (CK.spend == null) { var avg = avgWeeklySpend(), m = ckMath(), base = avg != null ? avg : (m.gap != null ? m.total : 300); CK.spend = Math.max(0, Math.round((base || 300) / 10) * 10); }
   if (CK.save == null) CK.save = Math.max(0, Math.round((pays - bills - cards - CK.spend) / 10) * 10);
@@ -1776,7 +1795,7 @@ PAGES.checkin = function () {
   } else if (st === 2) {
     var d = ckPlanDefaults(), w = d.w, pa = +(S.profile.pay || {}).amt || 0;
     h += '<div class="tp-rise"><div class="eyebrow muted">Plan ahead · ' + shortDate(w.from) + ' to ' + shortDate(w.to) + '</div><h2 class="flowh">Here’s what’s coming</h2><p class="muted flowp">Paydays, card payments, and bills you set up.</p></div><div class="glass">';
-    var as = autoSave(), rows = paydaysBetween(w.from, w.to).map(function (pd) { return { d: pd, l: as ? 'Paycheck, after ' + as.pct + '% to ' + as.name : 'Paycheck', a: netPay(pa) }; }).concat(d.due.list.map(function (x) { return { d: x.e.date, l: x.e.title, a: -x.amt }; })).sort(function (a, b) { return a.d < b.d ? -1 : 1; });
+    var as = autoSave(), rows = paydaysBetween(w.from, w.to).map(function (pd) { return { d: pd, l: as ? 'Paycheck, after ' + as.pct + '% to ' + as.name : 'Paycheck', a: netPay(pa) }; }).concat(incomeBetween(w.from, w.to).list.map(function (e) { return { d: e.date, l: e.title, a: e.amt }; })).concat(d.due.list.map(function (x) { return { d: x.e.date, l: x.e.title, a: -x.amt }; })).sort(function (a, b) { return a.d < b.d ? -1 : 1; });
     h += rows.length ? rows.map(function (r) { return '<div class="tp-row static">' + dateBox(r.d) + '<span class="tp-t"><b>' + esc(r.l) + '</b></span><span class="amt ' + (r.a > 0 ? 'up' : '') + '">' + signed(r.a) + '</span></div>'; }).join('') : '<div class="empty">Nothing scheduled. Add cards, bills, and your payday for a real plan.</div>';
     var avg = avgWeeklySpend();
     h += '</div><div class="tp-sect"><span>Your plan for the week</span></div><div class="glass pad">' +
@@ -1854,7 +1873,10 @@ function updatePlay() {
 PAGES.settings = function () {
   var p = S.profile.pay || {}, rm = S.profile.remind || {}, h = topBar('Settings', 'Tally ' + APP_VERSION, 'home');
   h += '<div class="tp-sect"><span>Look</span></div><div class="glass pad">' + lookHTML() + '</div>';
-  h += '<div class="tp-sect"><span>Payday</span></div><div class="glass"><button class="tp-row" data-act="payEdit"><span class="tp-tile">' + TP.svg('calendar') + '</span><span class="tp-t"><b>' + (p.amt ? money(+p.amt) + ' ' + payLabel(p) : 'Not set') + '</b><span>' + (nextPayday() ? 'Next: ' + dowDate(nextPayday()) : 'Tap to set amount, how often, and the next date') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button></div>';
+  var incs = S.incomes || [];
+  h += '<div class="tp-sect"><span>Income</span><span class="sp"></span><button data-act="incEdit">+ Other income</button></div><div class="glass"><button class="tp-row" data-act="payEdit"><span class="tp-tile">' + TP.svg('calendar') + '</span><span class="tp-t"><b>' + (p.amt ? money(+p.amt) + ' ' + payLabel(p) : 'Not set') + '</b><span>' + (nextPayday() ? 'Next: ' + dowDate(nextPayday()) : 'Tap to set amount, how often, and the next date') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>' +
+    incs.map(function (x) { var nx = eventsBetween(today(), addDays(today(), 400)).filter(function (e) { return e.inc === x.id; })[0], acct = byId(S.accounts, x.to); return '<button class="tp-row" data-act="incEdit" data-id="' + x.id + '"><span class="tp-tile">' + TP.svg('piggy') + '</span><span class="tp-t"><b style="' + (x.off ? 'opacity:.6' : '') + '">' + esc(x.name) + ' \u00b7 ' + money(+x.amount || 0) + '</b><span>' + esc(billEveryLabel(x) + (nx ? ' \u00b7 next ' + shortDate(nx.date) : '') + (acct ? ' \u00b7 into ' + acct.name : '') + (x.off ? ' \u00b7 paused' : '')) + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }).join('') + '</div>' +
+    (incs.length ? '' : '<p class="small muted" style="margin:6px 2px 0">Side work, rent from a roommate, reimbursements, anything that comes in on a schedule.</p>');
   h += '<div class="tp-sect"><span>Weekly reminder email</span></div><div class="glass pad"><label class="tp-opt" style="margin-bottom:6px"><input type="checkbox" id="r_on" ' + (rm.on !== false ? 'checked' : '') + '><span><b>Email me a check-in reminder</b><span>Includes the next 7 days of card and bill due dates. Your Sheet script sends it to your own Google account.</span></span></label>' +
     '<label class="tp-label">Day</label>' + seg('r_day', [[0, 'Sun'], [1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat']], rm.day == null ? 0 : rm.day) +
     '<div class="fgrid"><div><label class="tp-label" for="r_hour">Around</label><select class="tp-input" id="r_hour">' + [6, 7, 8, 9, 10, 12, 15, 17, 18, 19, 20].map(function (x) { return '<option value="' + x + '"' + (+(rm.hour == null ? 9 : rm.hour) === x ? ' selected' : '') + '>' + (x % 12 || 12) + ':00 ' + (x < 12 ? 'AM' : 'PM') + '</option>'; }).join('') + '</select></div></div>' +
@@ -2042,6 +2064,21 @@ var ACT = {
     else { b.day = +val('bl_day') || ''; b.month = b.freq === 'y' ? +val('bl_month') || '' : ''; delete b.n; delete b.unit; delete b.next; } b.account = val('bl_acct'); b.off = checked('bl_off');
     closeSheet(); render._keep = true; save();
   },
+  incEdit: function (d) {
+    var x = d.id ? byId(S.incomes || [], d.id) : { id: '', name: '', amount: '', freq: 'm', to: (S.accounts.filter(function (a) { return a.kind === 'spend' && !a.closed; })[0] || {}).id };
+    sheet(sxHead(x.id ? 'Edit income' : 'Other income') + '<p class="muted small">Money that comes in on a schedule besides your paycheck. Tally adds it to your projections, safe to spend, and the check-in.</p><input type="hidden" id="in_id" value="' + esc(x.id) + '"><div class="fgrid">' + textField('in_name', 'Name', x.name, 'e.g. Side work') + moneyField('in_amt', 'Usual amount', x.amount) + '</div>' + schedFields(x) +
+      '<div><label class="tp-label" for="in_to">Goes into</label><select class="tp-input" id="in_to">' + S.accounts.filter(function (a) { return !a.closed && (a.kind === 'spend' || a.kind === 'save'); }).map(function (a) { return '<option value="' + a.id + '"' + (x.to === a.id ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('') + '</select></div>' +
+      '<label class="tp-opt mt"><input type="checkbox" id="in_off" ' + (x.off ? 'checked' : '') + '><span><b>Paused</b><span>Keeps it listed but out of projections.</span></span></label><div id="in_err"></div>' +
+      '<div class="acts">' + (x.id ? '<button class="tp-btn tp-danger" data-act="incDel" data-id="' + x.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="incSave">Save</button></div>');
+  },
+  incSave: function () {
+    var n = val('in_name').trim(), err = function (m) { document.getElementById('in_err').innerHTML = '<div class="tp-err">' + m + '</div>'; };
+    if (!n) return err('Give it a name.'); if (val('bl_freq') === 'c' && !val('bl_next')) return err('Pick the next date.'); if (val('bl_freq') !== 'c' && !val('bl_day')) return err('Pick the day it comes in.');
+    S.incomes = S.incomes || []; var x = byId(S.incomes, val('in_id')); if (!x) { x = { id: 'i' + uid() }; S.incomes.push(x); }
+    x.name = n; x.amount = r2(num(val('in_amt'))); x.to = val('in_to'); x.off = checked('in_off'); readSched(x);
+    closeSheet(); render._keep = true; save(); toast('Saved. It\u2019s in your projections now.');
+  },
+  incDel: function (d, el) { armDelete(el, function () { S.incomes = (S.incomes || []).filter(function (x) { return x.id !== d.id; }); closeSheet(); render._keep = true; save(); }); },
   billDel: function (d, el) { armDelete(el, function () { S.bills = S.bills.filter(function (b) { return b.id !== d.id; }); closeSheet(); save(); }); },
   /* accounts */
   acctEdit: function (d) {
@@ -2430,19 +2467,19 @@ function calendarPage() {
     for (var i = 0; i < 7; i++) {
       var d = addDays(wk, i), list = byDay[d] || [], cls = 'calday' + (d.slice(0, 7) !== ym ? ' out' : '') + (d === td ? ' today' : '') + (d === CAL.sel ? ' sel' : '') + (d < td ? ' past' : '');
       var dots = {}; list.forEach(function (e) { dots[e.type] = 1; });
-      h += '<button class="' + cls + '" data-act="calSel" data-a="' + d + '" aria-label="' + esc(longDate(d) + (list.length ? ', ' + list.length + ' item' + (list.length > 1 ? 's' : '') : '')) + '"><b>' + parseD(d).getDate() + '</b><span class="cdots">' + ['pay', 'stmt', 'due', 'bill', 'txn'].filter(function (t) { return dots[t]; }).map(function (t) { return '<i class="cd-' + t + '"></i>'; }).join('') + '</span></button>';
+      h += '<button class="' + cls + '" data-act="calSel" data-a="' + d + '" aria-label="' + esc(longDate(d) + (list.length ? ', ' + list.length + ' item' + (list.length > 1 ? 's' : '') : '')) + '"><b>' + parseD(d).getDate() + '</b><span class="cdots">' + ['pay', 'inc', 'stmt', 'due', 'bill', 'txn'].filter(function (t) { return dots[t]; }).map(function (t) { return '<i class="cd-' + t + '"></i>'; }).join('') + '</span></button>';
     }
     var wb = calWeekBal(wk, we, fc);
     h += '</div>' + (wb ? '<div class="calbal ' + (wb.kind === 'actual' ? 'act' : 'exp') + '"><span>' + (wb.kind === 'actual' ? 'Actual ' + shortDate(wb.d) : wb.kind === 'now' ? 'Expected by ' + shortDate(we) : 'Expected ' + shortDate(we)) + '</span><b>Checking ' + money(wb.chk) + '</b><b>Savings ' + money(wb.sav) + '</b></div>' : '');
   }
-  h += '<div class="callegend"><span><i class="cd-pay"></i>Payday</span><span><i class="cd-stmt"></i>Statement closes</span><span><i class="cd-due"></i>Card due</span><span><i class="cd-bill"></i>Bill</span><span><i class="cd-txn"></i>Logged purchase</span></div>';
+  h += '<div class="callegend"><span><i class="cd-pay"></i>Payday</span><span><i class="cd-inc"></i>Other income</span><span><i class="cd-stmt"></i>Statement closes</span><span><i class="cd-due"></i>Card due</span><span><i class="cd-bill"></i>Bill</span><span><i class="cd-txn"></i>Logged purchase</span></div>';
   h += '<div class="callegend"><span class="act">Actual: from a check-in</span><span class="exp">Expected: paydays, bills, card payments' + (fc.weekly ? ', ' + money(fc.weekly) + '/wk to savings' : '') + (fc.daily ? ', ~' + money(fc.daily * 7) + '/wk spending' : '') + '</span></div></div>';
   /* selected day */
   var sd = CAL.sel && CAL.sel >= gStart && CAL.sel <= gEnd ? CAL.sel : (td >= gStart && td <= gEnd ? td : ymd(first)), sl = byDay[sd] || [], frow = fc.days.filter(function (x) { return x.d === sd; })[0];
   h += '<div class="tp-sect"><span>' + esc(dowDate(sd)) + '</span></div><div class="glass">';
   h += sl.length ? sl.map(function (e) {
-    var amt = e.type === 'due' ? cardDueAmt(e) : e.amt, label = { pay: 'Paycheck to spending', stmt: 'Statement closes; this balance is reported', due: e.amt == null ? ({ closed: 'Estimated: balance on the closed statement', balance: 'Estimated: what\u2019s left on the card after earlier payments', none: 'Nothing charged for this one yet' }[cardDueInfo(e).why] || 'Estimated') + ' \u00b7 tap to enter it' : 'Card payment', bill: 'Bill' + (e.sub ? ' from ' + e.sub : ''), txn: 'Logged purchase' }[e.type] || '';
-    var inner = '<span class="tp-tile cdt cd-' + e.type + '">' + TP.svg({ pay: 'piggy', stmt: 'doc', due: 'card', bill: 'receipt', txn: 'chart' }[e.type] || 'calendar') + '</span><span class="tp-t"><b>' + esc(e.title) + '</b><span>' + label + '</span></span>' + (amt ? '<span class="amt' + (e.type === 'pay' ? ' up' : '') + '">' + (e.type === 'pay' ? '+' : '') + money(amt, 1) + '</span>' : '');
+    var amt = e.type === 'due' ? cardDueAmt(e) : e.amt, label = { inc: 'Income' + (byId(S.accounts, e.to) ? ' into ' + byId(S.accounts, e.to).name : ''), pay: 'Paycheck to spending', stmt: 'Statement closes; this balance is reported', due: e.amt == null ? ({ closed: 'Estimated: balance on the closed statement', balance: 'Estimated: what\u2019s left on the card after earlier payments', none: 'Nothing charged for this one yet' }[cardDueInfo(e).why] || 'Estimated') + ' \u00b7 tap to enter it' : 'Card payment', bill: 'Bill' + (e.sub ? ' from ' + e.sub : ''), txn: 'Logged purchase' }[e.type] || '';
+    var inner = '<span class="tp-tile cdt cd-' + e.type + '">' + TP.svg({ inc: 'piggy', pay: 'piggy', stmt: 'doc', due: 'card', bill: 'receipt', txn: 'chart' }[e.type] || 'calendar') + '</span><span class="tp-t"><b>' + esc(e.title) + '</b><span>' + label + '</span></span>' + (amt ? '<span class="amt' + (e.type === 'pay' || e.type === 'inc' ? ' up' : '') + '">' + (e.type === 'pay' || e.type === 'inc' ? '+' : '') + money(amt, 1) + '</span>' : '');
     return e.type === 'due' ? '<button class="tp-row" data-act="stmt" data-card="' + e.card + '" data-ym="' + e.ym + '">' + inner + '</button>' : '<div class="tp-row static">' + inner + '</div>';
   }).join('') : '<div class="empty">Nothing scheduled.</div>';
   if (frow && sd >= td) h += '<div class="tp-row static calfoot"><span class="tp-t"><b>Expected end of day</b><span>Checking ' + money(frow.chk) + ' · Savings ' + money(frow.sav) + '</span></span></div>';
