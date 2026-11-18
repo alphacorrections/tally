@@ -114,7 +114,7 @@ function mirror_(s) {
   write_('Cards', ['Card', 'Statement day', 'Due day', 'Earns', 'Use for', 'In use'],
     cards.map(function (c) { return [c.name, c.stmtDay || '', c.dueDay || '', c.perk || '', c.use || '', c.off ? 'no' : 'yes']; }));
   write_('Bills', ['Bill', 'Amount', 'How often', 'Due day', 'Month', 'Paid from', 'Paused'],
-    (s.bills || []).map(function (b) { return [b.name, +b.amount || 0, b.freq === 'y' ? 'yearly' : 'monthly', b.day || '', b.month || '', b.account || '', b.off ? 'yes' : '']; }));
+    (s.bills || []).map(function (b) { return [b.name, +b.amount || 0, b.freq === 'y' ? 'yearly' : b.freq === 'c' ? 'every ' + (b.n || 1) + (b.unit === 'w' ? ' weeks' : ' months') : 'monthly', b.day || '', b.month || '', b.account || '', b.off ? 'yes' : '']; }));
   write_('Goals', ['Goal', 'Type', 'Target', 'Tracked from', 'Typed amount', 'Target date', 'Note'],
     (s.goals || []).map(function (g) { return [g.name, g.kind, +g.target || 0, g.acct || '', +g.manual || 0, g.due || '', g.note || '']; }));
 }
@@ -241,11 +241,19 @@ function upcoming_(s, days) {
       if (c.dueDay) { var dd = clamp_(y, mo, +c.dueDay), ym = Utilities.formatDate(dd, tz, 'yyyy-MM'), st = ((s.statements || {})[ym] || {})[c.id]; if (!(st && st.st === 'paid')) out.push({ d: dd, t: c.name + ' payment due', a: st ? +st.amt : null }); }
     });
     (s.bills || []).forEach(function (b) {
-      if (b.off || !b.day) return;
+      if (b.off || !b.day || b.freq === 'c') return;
       if (b.freq === 'y') { if (b.month && +b.month - 1 === mo) out.push({ d: clamp_(y, mo, +b.day), t: b.name + ' (yearly)', a: +b.amount || null }); }
       else out.push({ d: clamp_(y, mo, +b.day), t: b.name, a: +b.amount || null });
     });
   }
+  (s.bills || []).forEach(function (b) {
+    if (b.off || b.freq !== 'c' || !b.next) return;
+    var p = b.next.split('-'), a = new Date(+p[0], +p[1] - 1, +p[2]), n = Math.max(1, +b.n || 1);
+    for (var i = -60; i < 200; i++) {
+      var d = b.unit === 'w' ? new Date(a.getFullYear(), a.getMonth(), a.getDate() + 7 * n * i) : clamp_(a.getFullYear(), a.getMonth() + n * i, a.getDate());
+      if (d >= end) break; if (d >= start) out.push({ d: d, t: b.name, a: +b.amount || null });
+    }
+  });
   return out.filter(function (e) { return e.d >= start && e.d < end; }).sort(function (a, b) { return a.d - b.d; });
 }
 function sendReminder_(s) {
