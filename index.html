@@ -603,6 +603,68 @@ details.oldsheet>summary::-webkit-details-marker{display:none}
 details.oldsheet>summary::after{content:'›';display:inline-block;margin-left:6px;transition:transform .2s}
 details.oldsheet[open]>summary::after{transform:rotate(90deg)}
 
+/* v2.4 Home: left to spend meter and the worked-out numbers */
+.pmeter{margin-top:14px}
+.pmeter .bar{height:8px;background:color-mix(in srgb,var(--tp-ink) 16%,transparent)}
+.pmeter .bar i{background:var(--hi)}
+.pmeter .pm{display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:13px;color:var(--tp-ink2)}
+.pmeter .pm b{color:var(--tp-ink);font-family:var(--tp-display);font-variant-numeric:tabular-nums}
+details.hwhy{margin-top:12px;border-top:1px solid var(--tp-line2);padding-top:10px}
+details.hwhy>summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--tp-ink2);list-style:none;display:inline-flex;align-items:center;gap:6px;min-height:32px}
+details.hwhy>summary::-webkit-details-marker{display:none}
+details.hwhy>summary::after{content:'›';transition:transform .2s}
+details.hwhy[open]>summary::after{transform:rotate(90deg)}
+.hrows>div{display:flex;justify-content:space-between;gap:12px;font-size:14px;padding:5px 0}
+.hrows b{font-family:var(--tp-display);font-variant-numeric:tabular-nums;white-space:nowrap}
+.hrows .tot{border-top:1px solid var(--tp-line2);margin-top:4px;padding-top:8px;font-weight:700}
+.hrows p{font-size:12.5px;color:var(--tp-ink2);margin:8px 0 0;line-height:1.45}
+/* spending dashboard */
+.spchips{margin-bottom:10px}
+.scrollx{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-left:-2px;margin-right:-2px;padding:0 2px 2px}
+.scrollx::-webkit-scrollbar{display:none}
+.scrollx .chip{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px}
+.bkdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--hi);margin-right:3px;vertical-align:1px}
+.sbars svg{width:100%;height:auto;display:block;overflow:visible}
+.sbars .base{stroke:var(--tp-line);stroke-width:1}
+.sbars .sb path{fill:color-mix(in srgb,var(--c1) 38%,transparent);transition:fill .2s}
+.sbars .sb.on path{fill:var(--c1)}
+.sbars .sb:hover path{fill:color-mix(in srgb,var(--c1) 70%,transparent)}
+.sbars .hit{fill:transparent}
+.sbars text{font:600 10.5px var(--tp-font);fill:var(--tp-ink2)}
+.sbars .sb.on .xl,.sbars .vl{fill:var(--tp-ink)}
+.sbars .vl{font-family:var(--tp-display);font-size:11px}
+.catrow .tp-t b em{font-style:normal;font-weight:500;color:var(--tp-ink2);font-size:12.5px;margin-left:4px}
+.catrow .bar.thin{margin:6px 0 4px;max-width:100%}
+.catrow .catr{display:flex;flex-direction:column;align-items:flex-end;gap:6px;margin-left:auto}
+.catrow .catr b{font-family:var(--tp-display);font-variant-numeric:tabular-nums}
+.spk{width:47px;height:18px}
+.spk rect{fill:color-mix(in srgb,var(--tp-ink) 30%,transparent)}
+.spk rect.last{fill:var(--c1)}
+.dlt{font-size:12px;color:var(--tp-ink2)}
+.dlt.more{color:var(--warn)}
+.dlt.less{color:var(--ok)}
+
+/* six nav items: share the width evenly */
+.nav button:not(.plus){flex:1 1 0;min-width:0;padding:0 2px;white-space:nowrap}
+@media(max-width:400px){ .nav button:not(.plus){font-size:10px;letter-spacing:-.1px} .nav .plus{width:48px;min-width:48px;height:48px} }
+
+/* Together lists */
+.shtabs{margin-bottom:14px}
+.addline{display:flex;gap:8px}
+.addline .tp-input{flex:1;min-width:0}
+.chkrow{gap:12px}
+.chkrow .chk{flex:0 0 auto;width:28px;height:28px;border-radius:50%;border:2px solid var(--tp-ink2);background:transparent;display:grid;place-items:center;cursor:pointer;padding:0;color:var(--tp-btn-ink)}
+.chkrow .chk svg{width:16px;height:16px}
+.chkrow .chk.on{background:var(--hi);border-color:var(--hi)}
+.chkrow .chkt{background:none;border:0;padding:0;text-align:left;color:inherit;cursor:pointer;font:inherit;min-width:0}
+.chkrow.done .chkt b,.chkrow.done .tp-t b{text-decoration:line-through;opacity:.6}
+.chkrow b em{font-style:normal;font-weight:500;color:var(--tp-ink2)}
+.chkrow .late{color:var(--warn)}
+.usual{margin-bottom:6px}
+details.donebox>summary{cursor:pointer;font-weight:600;font-size:14px;list-style:none;min-height:30px;display:flex;align-items:center}
+details.donebox>summary::-webkit-details-marker{display:none}
+details.donebox .chkrow{padding-left:0;padding-right:0}
+
 </style>
 </head>
 <body class="tp-page">
@@ -612,7 +674,7 @@ details.oldsheet[open]>summary::after{transform:rotate(90deg)}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.10';
+var APP_VERSION = '2026.11.18.11';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1308,10 +1370,12 @@ function safeToSpend() {
   else end = addDays(td, 13);
   var due = dueBetween(td, end), other = incomeBetween(td, end).total; pays = r2(pays + other);
   var room = r2(cash + pays - due.total - floorOf('spend'));
-  var plan = currentPlan();
-  var val = plan ? Math.min(+plan.spend || 0, room) : room;
-  return { value: r2(Math.max(val, Math.min(room, 0))), room: room, cash: cash, pays: pays, due: due, payday: np, end: end, plan: plan, days: Math.max(1, daysBetween(td, end) + 1) };
+  var plan = currentPlan(), w = plan ? thisWeek() : null, spent = plan ? planSpent(w) : 0, planLeft = plan ? r2(Math.max(0, (+plan.spend || 0) - spent)) : null;
+  var val = plan ? Math.min(planLeft, room) : room;
+  return { value: r2(Math.max(val, Math.min(room, 0))), room: room, cash: cash, pays: pays, due: due, payday: np, end: end, plan: plan, spent: spent, planLeft: planLeft, days: Math.max(1, daysBetween(td, end) + 1) };
 }
+/* what you've spent since the check-in that set this week's plan: bank purchases and ones you logged, on cards or accounts */
+function planSpent(w) { if (!w) return 0; var t0 = w.at || (ckDay(w) + 'T23:59:59'), td = today(); return sumAmt((S.txns || []).filter(function (x) { return (x.at || x.date + 'T12:00:00') > t0 && x.date <= td; })); }
 function floorOf(kind) { var t = 0; S.accounts.forEach(function (a) { if (!a.closed && a.kind === kind && a.floor) t += +a.floor || 0; }); return t; }
 /* average of a card's recent statements, used for due dates far enough ahead that no statement exists yet */
 function cardTypicalStmt(c) {
@@ -1357,7 +1421,7 @@ var ACC_VIEW = 'net', ACC_VIEWS = { net: { tab: 'Net worth', label: 'Net worth' 
 var VIEW = 'home', NW_RANGE = 'year', CARD_YEAR = null, SAY_OFF = 0, TIP_OFF = 0, WIZ = { step: 1, name: '', how: 'fresh', ws: 1 };
 var CK = null, CW = null, INBOX = null, INBOX_ERR = '';
 var PLAY = { save: 500, side: 0, cut: 0, apy: 3.75, goal: '', b_amt: 1000, b_fee: 100, b_apr: 4.99, b_mo: 6, b_apy: 3.75, c_amt: 3000, c_apr: 28.49, c_pay: 300 };
-var NAV = [{ id: 'home', name: 'Home', icon: 'home' }, { id: 'accounts', name: 'Accounts', icon: 'bank' }, { id: 'checkin', plus: 1 }, { id: 'cards', name: 'Cards', icon: 'card' }, { id: 'bills', name: 'Bills', icon: 'receipt' }];
+var NAV = [{ id: 'home', name: 'Home', icon: 'home' }, { id: 'spending', name: 'Spending', icon: 'chart' }, { id: 'accounts', name: 'Accounts', icon: 'bank' }, { id: 'checkin', plus: 1 }, { id: 'cards', name: 'Cards', icon: 'card' }, { id: 'bills', name: 'Bills', icon: 'receipt' }];
 TP.icons.bank = '<path d="M3 9l9-5 9 5M5 9v9M10 9v9M14 9v9M19 9v9M3 20h18"/>';
 TP.icons.compass = '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>';
 TP.icons.close = '<path d="M6 6l12 12M18 6L6 18"/>';
@@ -1484,20 +1548,151 @@ function qaWhere() {
   else { var a = byId(S.accounts, k); el.textContent = a ? 'Comes out of ' + a.name + ' (' + money(acctBal(a.id)) + ' now).' : ''; }
 }
 function spendIn(from, to) { return (S.txns || []).filter(function (x) { return x.date >= from && x.date <= to; }); }
-var SP_RANGE = 'month';
+/* ---------- spending dashboard: everything from your banks and what you logged ---------- */
+var SPV = { range: 'month', src: 'all', cat: '', more: 0 };
+function monthStart(d) { return d.slice(0, 8) + '01'; }
+function monthEnd(d) { var x = parseD(d); return ymd(new Date(x.getFullYear(), x.getMonth() + 1, 0)); }
+function addMonths(d, n) { var x = parseD(d); return ymd(new Date(x.getFullYear(), x.getMonth() + n, 1)); }
+/* the range on screen and the stretch it's compared with */
+function spRanges(td) {
+  var ms = monthStart(td), day = parseD(td).getDate();
+  var lastS = addMonths(td, -1), lastE = monthEnd(lastS);
+  var prevSameDay = ymd(new Date(parseD(lastS).getFullYear(), parseD(lastS).getMonth(), Math.min(day, parseD(lastE).getDate())));
+  var span = function (n) { return [monthStart(addMonths(td, -(n - 1))), td, monthStart(addMonths(td, -(2 * n - 1))), addDays(monthStart(addMonths(td, -(n - 1))), -1)]; };
+  return {
+    month: { from: ms, to: td, pf: lastS, pt: prevSameDay, name: MONTHS[parseD(td).getMonth()], vs: 'same point last month', months: 6 },
+    last: { from: lastS, to: lastE, pf: addMonths(td, -2), pt: addDays(lastS, -1), name: MONTHS[parseD(lastS).getMonth()], vs: MONTHS[parseD(addMonths(td, -2)).getMonth()], months: 6 },
+    m3: (function () { var s = span(3); return { from: s[0], to: s[1], pf: s[2], pt: s[3], name: 'Last 3 months', vs: 'the 3 before', months: 6 }; })(),
+    m6: (function () { var s = span(6); return { from: s[0], to: s[1], pf: s[2], pt: s[3], name: 'Last 6 months', vs: 'the 6 before', months: 6 }; })(),
+    y: (function () { var s = span(12); return { from: s[0], to: s[1], pf: s[2], pt: s[3], name: 'Last 12 months', vs: 'the year before', months: 12 }; })()
+  };
+}
+function spFilter(list) { return list.filter(function (x) { return (SPV.src === 'all' || x.src === SPV.src) && (!SPV.cat || (x.cat || 'Other') === SPV.cat); }); }
+function spMerchant(x) { return String(x.note || x.cat || 'Purchase').replace(/\s*\(shared\)$/, '').trim(); }
+function byKey(list, fn) { var o = {}; list.forEach(function (x) { var k = fn(x); o[k] = r2((o[k] || 0) + (+x.amt || 0)); }); return o; }
+function monthsBack(td, n) { var out = []; for (var i = n - 1; i >= 0; i--) out.push(addMonths(td, -i)); return out; }
+/* one series of monthly bars: thin, rounded tops, the value of the picked month labeled */
+function spBars(months, sums, on) {
+  var W = 340, H = 132, T = 22, B = 22, n = months.length, gap = 6, bw = (W - gap * (n - 1)) / n, mx = Math.max.apply(null, months.map(function (m) { return sums[m] || 0; }).concat([1]));
+  var g = '';
+  months.forEach(function (m, i) {
+    var v = sums[m] || 0, h = Math.max(v > 0 ? 3 : 0, (v / mx) * (H - T - B)), x = i * (bw + gap), y = H - B - h, sel = m === on, d = parseD(m);
+    g += '<g class="sb' + (sel ? ' on' : '') + '"><title>' + MONTHS[d.getMonth()] + ' ' + d.getFullYear() + ': ' + money(v) + '</title>' +
+      '<rect class="hit" x="' + x.toFixed(1) + '" y="0" width="' + bw.toFixed(1) + '" height="' + H + '"/>' +
+      (h ? '<path d="M' + x.toFixed(1) + ' ' + (H - B) + 'V' + (y + 4).toFixed(1) + 'q0 -4 4 -4h' + (bw - 8).toFixed(1) + 'q4 0 4 4V' + (H - B) + 'z"/>' : '') +
+      '<text class="xl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + MON[d.getMonth()] + '</text>' +
+      (sel || n <= 6 ? '<text class="vl" x="' + (x + bw / 2).toFixed(1) + '" y="' + (y - 6).toFixed(1) + '" text-anchor="middle">' + moneyK(v) + '</text>' : '') + '</g>';
+  });
+  return '<div class="sbars"><svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Spending by month">' + '<line class="base" x1="0" x2="' + W + '" y1="' + (H - B) + '" y2="' + (H - B) + '"/>' + g + '</svg></div>';
+}
+function spark(vals) {
+  var mx = Math.max.apply(null, vals.concat([1])), w = 5, gap = 2;
+  return '<svg class="spk" viewBox="0 0 ' + (vals.length * (w + gap) - gap) + ' 18" aria-hidden="true">' + vals.map(function (v, i) { var h = v > 0 ? Math.max(2, v / mx * 18) : 1; return '<rect x="' + i * (w + gap) + '" y="' + (18 - h).toFixed(1) + '" width="' + w + '" height="' + h.toFixed(1) + '" rx="1.5"' + (i === vals.length - 1 ? ' class="last"' : '') + '/>'; }).join('') + '</svg>';
+}
+function deltaTxt(cur, prev) {
+  if (!prev && !cur) return '';
+  if (!prev) return '<span class="dlt">new</span>';
+  var d = cur - prev, pc = Math.round(d / prev * 100);
+  if (Math.abs(d) < 1) return '<span class="dlt">same</span>';
+  return '<span class="dlt ' + (d > 0 ? 'more' : 'less') + '">' + (d > 0 ? '▲ ' : '▼ ') + money(Math.abs(d)) + (Math.abs(pc) < 1000 ? ' (' + Math.abs(pc) + '%)' : '') + '</span>';
+}
+/* tips worked out from the purchases on screen */
+function spendTips(R, cur, prev, all) {
+  var out = [], td = today(), tot = sumAmt(cur);
+  if (!cur.length) return out;
+  /* pace this month */
+  if (SPV.range === 'month' && !SPV.cat) {
+    var dm = parseD(td).getDate(), dim = parseD(monthEnd(td)).getDate(), lastTot = sumAmt(spFilter(spendIn(addMonths(td, -1), monthEnd(addMonths(td, -1)))));
+    if (dm >= 5 && lastTot > 0) { var pace = tot / dm * dim; out.push({ i: 'trend', t: 'On pace for about ' + money(pace) + ' this month', s: (pace > lastTot * 1.08 ? money(pace - lastTot) + ' more than ' : pace < lastTot * 0.92 ? money(lastTot - pace) + ' less than ' : 'About the same as ') + MONTHS[parseD(addMonths(td, -1)).getMonth()] + ' (' + money(lastTot) + ').' }); }
+  }
+  /* biggest jump by category */
+  var cc = byKey(cur, function (x) { return x.cat || 'Other'; }), pc = byKey(prev, function (x) { return x.cat || 'Other'; }), jump = null;
+  Object.keys(cc).forEach(function (k) { var d = cc[k] - (pc[k] || 0); if (pc[k] && d >= Math.max(40, pc[k] * 0.25) && (!jump || d > jump.d)) jump = { k: k, d: d }; });
+  if (jump) out.push({ i: 'bell', t: jump.k + ' is up ' + money(jump.d), s: money(cc[jump.k]) + ' vs ' + money(pc[jump.k]) + ' (' + R.vs + ').', cat: jump.k });
+  /* rewards left on the table: the best card for each category vs the one used */
+  var cards = S.cards.filter(function (c) { return !c.off; });
+  if (cards.length) {
+    var miss = {};
+    cur.forEach(function (x) {
+      var cat = x.cat || 'Other'; if (RWD_CATS.indexOf(cat) < 0) return;
+      var best = null; cards.forEach(function (c) { var r = rateFor(c, cat); if (r > 0 && (!best || r > best.r)) best = { c: c, r: r }; });
+      if (!best) return;
+      var used = x.src.indexOf('c:') === 0 ? byId(S.cards, x.src.slice(2)) : null, ur = used ? rateFor(used, cat) : 0;
+      if (best.r - ur < 1 || (used && used.id === best.c.id)) return;
+      var key = cat + '|' + best.c.id; miss[key] = miss[key] || { cat: cat, card: best.c, amt: 0, extra: 0 };
+      miss[key].amt += +x.amt || 0; miss[key].extra += (+x.amt || 0) * (best.r - ur) / 100;
+    });
+    var mb = Object.keys(miss).map(function (k) { return miss[k]; }).sort(function (a, b) { return b.extra - a.extra; })[0];
+    if (mb && mb.extra >= 3) out.push({ i: 'card', t: 'Use ' + mb.card.name + ' for ' + mb.cat.toLowerCase(), s: money(mb.amt) + ' of ' + mb.cat.toLowerCase() + ' went on other cards or debit. ' + mb.card.name + ' would have earned about ' + money(mb.extra, 1) + ' more' + ((mb.card.runit || '%') === 'x' ? ' (points at about 1¢ each)' : '') + '.' });
+  }
+  /* charges that repeat monthly but aren't in Bills */
+  var since = monthStart(addMonths(td, -3)), byM = {};
+  all.filter(function (x) { return x.date >= since; }).forEach(function (x) { var m = spMerchant(x).toLowerCase(); if (m.length < 3) return; (byM[m] = byM[m] || []).push(x); });
+  var billNames = S.bills.map(function (b) { return String(b.name || '').toLowerCase(); });
+  var subs = Object.keys(byM).map(function (m) {
+    var xs = byM[m], months = {}; xs.forEach(function (x) { months[x.date.slice(0, 7)] = +x.amt; });
+    var ks = Object.keys(months), vals = ks.map(function (k) { return months[k]; }), avg = vals.reduce(function (a, b) { return a + b; }, 0) / (vals.length || 1);
+    var steady = vals.every(function (v) { return Math.abs(v - avg) <= Math.max(2, avg * 0.1); });
+    var inBills = billNames.some(function (b) { return b && (m.indexOf(b) >= 0 || b.indexOf(m) >= 0); });
+    return ks.length >= 3 && xs.length <= ks.length + 1 && steady && !inBills ? { m: spMerchant(xs[0]), avg: avg } : null;
+  }).filter(Boolean).sort(function (a, b) { return b.avg - a.avg; });
+  if (subs.length) out.push({ i: 'receipt', t: subs.length === 1 ? subs[0].m + ' looks like a subscription' : subs.length + ' charges look like subscriptions', s: subs.slice(0, 3).map(function (x) { return x.m + ' ~' + money(x.avg, 1) + '/mo'; }).join(' · ') + '. Not in your Bills, so projections miss them.', act: 'billEdit' });
+  /* small stuff adds up */
+  var small = cur.filter(function (x) { return +x.amt < 10; });
+  if (small.length >= 8 && sumAmt(small) >= 60) out.push({ i: 'spark', t: small.length + ' purchases under $10 added up to ' + money(sumAmt(small)), s: 'Coffee, snacks, app charges. Easy to miss one at a time.' });
+  /* eating out share */
+  var eo = cc['Eating out'] || 0;
+  if (!SPV.cat && tot > 0 && eo / tot > 0.25 && eo > 150) out.push({ i: 'bulb', t: 'Eating out is ' + Math.round(eo / tot * 100) + '% of your spending', s: 'Trimming it by a quarter frees about ' + money(eo / 4) + ' ' + (SPV.range === 'month' || SPV.range === 'last' ? 'a month' : 'over this stretch') + '.', cat: 'Eating out' });
+  return out.slice(0, 5);
+}
 function spendingPage() {
-  var td = today(), d = parseD(td), h = topBar('Spending', 'What you logged, by category and source', 'home');
-  var ranges = { week: [weekStartOf(td), td, 'This week'], month: [td.slice(0, 8) + '01', td, MONTHS[d.getMonth()]], last: [ymd(new Date(d.getFullYear(), d.getMonth() - 1, 1)), ymd(new Date(d.getFullYear(), d.getMonth(), 0)), MONTHS[(d.getMonth() + 11) % 12]], d90: [addDays(td, -89), td, 'Last 90 days'] };
-  var r = ranges[SP_RANGE], list = spendIn(r[0], r[1]).slice().sort(function (a, b) { return (b.at || b.date) < (a.at || a.date) ? -1 : 1; }), tot = sumAmt(list);
-  h += '<div class="chips" style="margin-bottom:12px">' + [['week', 'This week'], ['month', 'This month'], ['last', 'Last month'], ['d90', '90 days']].map(function (x) { return '<button class="chip' + (SP_RANGE === x[0] ? ' on' : '') + '" data-act="spRange" data-a="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>';
-  h += '<div class="glass hero tp-rise"><span class="label">' + esc(r[2]) + ' · logged</span><div class="big" style="font-size:52px" data-count="' + tot + '">' + money(tot) + '</div><div class="heroSub">' + list.length + ' purchase' + (list.length === 1 ? '' : 's') + (list.length ? ' · about ' + money(tot / Math.max(1, daysBetween(r[0], r[1] < td ? r[1] : td) + 1) * 7) + ' a week' : '') + '</div></div>';
-  if (!list.length) return h + '<div class="glass"><div class="empty">Tap <b>+</b> at the bottom any time you buy something. Over a few weeks this shows where your money really goes.</div></div>';
-  var bars = function (groups) { var keys = Object.keys(groups).sort(function (a, b) { return groups[b] - groups[a]; }), mx = groups[keys[0]] || 1; return '<div class="glass pad">' + keys.map(function (k) { return '<div class="hbar"><div class="hl"><span>' + esc(k) + '</span><b>' + money(groups[k]) + '<em>' + Math.round(groups[k] / tot * 100) + '%</em></b></div><span class="bar"><i style="width:' + (groups[k] / mx * 100).toFixed(1) + '%"></i></span></div>'; }).join('') + '</div>'; };
-  var byCat = {}, bySrc = {}; list.forEach(function (x) { byCat[x.cat || 'Other'] = (byCat[x.cat || 'Other'] || 0) + (+x.amt || 0); var n = srcName(x.src); bySrc[n] = (bySrc[n] || 0) + (+x.amt || 0); });
-  h += '<div class="tp-sect"><span>By category</span></div>' + bars(byCat) + '<div class="tp-sect"><span>By card or account</span></div>' + bars(bySrc);
-  h += '<div class="tp-sect"><span>Purchases</span></div><div class="glass">' + list.slice(0, 60).map(function (x) { return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc((x.note ? x.cat + ' · ' : '') + srcName(x.src)) + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>'; }).join('') + '</div>';
+  var td = today(), R = spRanges(td)[SPV.range] || spRanges(td).month, h = topBar('Spending', 'From your banks and what you logged', 'home');
+  var all = S.txns || [], cur = spFilter(spendIn(R.from, R.to)).sort(function (a, b) { return (b.at || b.date) < (a.at || a.date) ? -1 : 1; }), prev = spFilter(spendIn(R.pf, R.pt)), tot = sumAmt(cur), ptot = sumAmt(prev);
+  /* controls */
+  h += '<div class="chips spchips">' + [['month', 'This month'], ['last', 'Last month'], ['m3', '3 months'], ['m6', '6 months'], ['y', 'Year']].map(function (x) { return '<button class="chip' + (SPV.range === x[0] ? ' on' : '') + '" data-act="spSet" data-k="range" data-a="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>';
+  var yr = spendIn(monthStart(addMonths(td, -11)), td), srcs = byKey(yr, function (x) { return x.src; }), sids = Object.keys(srcs).sort(function (a, b) { return srcs[b] - srcs[a]; });
+  var bankSrc = {}; yr.forEach(function (x) { if (x.ext || x.bank) bankSrc[x.src] = 1; });
+  if (sids.length > 1) h += '<div class="chips spchips scrollx">' + [['all', 'All accounts']].concat(sids.map(function (s) { return [s, srcName(s)]; })).map(function (x) { return '<button class="chip' + (SPV.src === x[0] ? ' on' : '') + '" data-act="spSet" data-k="src" data-a="' + esc(x[0]) + '">' + (bankSrc[x[0]] ? '<span class="bkdot" title="Linked bank"></span>' : '') + esc(x[1]) + '</button>'; }).join('') + '</div>';
+  if (SPV.cat) h += '<div class="flex" style="margin:-2px 0 10px"><span class="tp-pill">' + esc(SPV.cat) + '</span><button class="chip" data-act="spSet" data-k="cat" data-a="">Show all categories</button></div>';
+  /* hero */
+  var days = Math.max(1, daysBetween(R.from, R.to < td ? R.to : td) + 1), nBank = cur.filter(function (x) { return x.ext || x.bank; }).length;
+  h += '<div class="glass hero tp-rise"><span class="label">' + esc(R.name) + (SPV.cat ? ' · ' + esc(SPV.cat) : '') + (SPV.src !== 'all' ? ' · ' + esc(srcName(SPV.src)) : '') + '</span><div class="big" style="font-size:52px" data-count="' + tot + '">' + money(tot) + '</div>' +
+    '<div class="heroSub">' + (ptot || tot ? deltaTxt(tot, ptot) + ' vs ' + esc(R.vs) + ' · ' : '') + 'about ' + money(tot / days * 7) + ' a week</div>' +
+    '<div class="heroMath">' + cur.length + ' purchase' + (cur.length === 1 ? '' : 's') + (nBank ? ' · ' + nBank + ' from your bank' + (cur.length - nBank ? ', ' + (cur.length - nBank) + ' logged by you' : '') : '') + '. Card payments and transfers aren’t counted.</div></div>';
+  if (!all.length) return h + '<div class="glass"><div class="empty">Connect your bank in Settings, or tap <b>+</b> when you buy something. This fills in as purchases come in.</div></div>';
+  /* over time */
+  var months = monthsBack(td, R.months), mSums = {}; spFilter(spendIn(months[0], td)).forEach(function (x) { var m = monthStart(x.date); mSums[m] = (mSums[m] || 0) + (+x.amt || 0); });
+  h += '<div class="tp-sect"><span>By month</span><span class="sp"></span><span class="small muted">' + (SPV.cat ? esc(SPV.cat) : 'All categories') + '</span></div><div class="glass pad">' + spBars(months, mSums, SPV.range === 'last' ? addMonths(td, -1) : monthStart(td)) + '</div>';
+  /* tips */
+  var tips = spendTips(R, cur, prev, spFilter(all));
+  if (tips.length) h += '<div class="tp-sect"><span>Tips</span></div><div class="glass">' + tips.map(function (t) {
+    var inner = '<span class="tp-tile">' + TP.svg(t.i) + '</span><span class="tp-t"><b>' + esc(t.t) + '</b><span>' + esc(t.s) + '</span></span>';
+    return t.cat ? '<button class="tp-row" data-act="spSet" data-k="cat" data-a="' + esc(t.cat) + '">' + inner + '<span class="tp-chev">' + TP.svg('chev') + '</span></button>' : t.act ? '<button class="tp-row" data-act="' + t.act + '">' + inner + '<span class="tp-chev">' + TP.svg('chev') + '</span></button>' : '<div class="tp-row static">' + inner + '</div>';
+  }).join('') + '</div>';
+  /* categories with their last 6 months */
+  if (!SPV.cat && cur.length) {
+    var cc = byKey(cur, function (x) { return x.cat || 'Other'; }), pc = byKey(prev, function (x) { return x.cat || 'Other'; }), keys = Object.keys(cc).sort(function (a, b) { return cc[b] - cc[a]; }), mx = cc[keys[0]] || 1;
+    var six = monthsBack(td, 6), hist = {}; spFilter(spendIn(six[0], td)).forEach(function (x) { var k = x.cat || 'Other', m = monthStart(x.date); hist[k] = hist[k] || {}; hist[k][m] = (hist[k][m] || 0) + (+x.amt || 0); });
+    h += '<div class="tp-sect"><span>By category</span><span class="sp"></span><span class="small muted">tap to filter</span></div><div class="glass">' + keys.map(function (k) {
+      return '<button class="tp-row catrow" data-act="spSet" data-k="cat" data-a="' + esc(k) + '"><span class="tp-t"><b>' + esc(k) + ' <em>' + Math.round(cc[k] / tot * 100) + '%</em></b><span class="bar thin"><i style="width:' + (cc[k] / mx * 100).toFixed(1) + '%"></i></span><span>' + deltaTxt(cc[k], pc[k] || 0) + '</span></span>' +
+        '<span class="catr"><b>' + money(cc[k]) + '</b>' + spark(six.map(function (m) { return (hist[k] || {})[m] || 0; })) + '</span></button>';
+    }).join('') + '</div>';
+  }
+  /* where it went */
+  if (cur.length) {
+    var mm = {}, mc = {}; cur.forEach(function (x) { var m = spMerchant(x); mm[m] = (mm[m] || 0) + (+x.amt || 0); mc[m] = (mc[m] || 0) + 1; });
+    var top = Object.keys(mm).sort(function (a, b) { return mm[b] - mm[a]; }).slice(0, 6);
+    h += '<div class="tp-sect"><span>Top places</span></div><div class="glass pad">' + top.map(function (m) { return '<div class="kv"><span>' + esc(m) + ' <em class="muted">· ' + mc[m] + '×</em></span><b>' + money(mm[m]) + '</b></div>'; }).join('') + '</div>';
+  }
+  /* purchases */
+  var shown = cur.slice(0, 60 + SPV.more * 100);
+  h += '<div class="tp-sect"><span>Purchases</span><span class="sp"></span><span class="small muted">' + cur.length + '</span></div><div class="glass">' + (shown.length ? shown.map(function (x) {
+    return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc((x.cat || 'Other') + ' · ' + srcName(x.src)) + (x.ext || x.bank ? ' · <i class="bkdot" title="From your bank"></i>bank' : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>';
+  }).join('') : '<div class="empty">Nothing here for this filter.</div>') + '</div>';
+  if (cur.length > shown.length) h += '<button class="tp-btn tp-ghost tp-block" data-act="spMore">Show more</button>';
+  h += '<p class="small muted">Categories are guesses for bank purchases. Tap one to change it; Tally keeps your choice.</p>';
   return h;
-};
+}
 /* credit score: entered at check-in as "TransUnion/Equifax" (Credit Karma shows both) */
 function parseScore(v) { var m = String(v || '').match(/\d{3}/g); if (!m) return null; return { tu: +m[0], eq: m[1] ? +m[1] : null }; }
 function scoreSnaps() { return S.snaps.filter(function (s) { return parseScore(s.score); }); }
@@ -1585,12 +1780,23 @@ PAGES.home = function () {
   var td = today(), d = new Date(), h = topBar('Hi, ' + S.profile.name, DOW[d.getDay()] + ', ' + MONTHS[d.getMonth()] + ' ' + d.getDate());
   if (S.profile.sample) h += '<div class="tp-banner tp-rise"><span class="tp-bi">' + TP.svg('spark') + '</span><b>Sample data</b>Made-up numbers so you can look around. <a href="#" data-act="go" data-a="settings">Start for real in Settings.</a></div>';
   h += setupCard();
-  /* hero */
-  var st = safeToSpend(), np = st.payday;
-  h += '<div class="glass hero tp-rise"><span class="shine"></span><span class="label">Safe to spend' + (st.end ? ' through ' + shortDate(st.end) : '') + '</span><div class="big" data-count="' + st.value + '">' + money(st.value) + '</div>' +
-    '<div class="heroSub">' + (np ? 'Next payday ' + (daysBetween(td, np) === 0 ? 'today' : DOW[parseD(np).getDay()] + ', ' + shortDate(np)) + (st.value > 0 ? ' · about ' + money(st.value / Math.max(1, st.days)) + ' a day' : '') : 'Set your payday for a sharper number') + '</div>' +
-    '<div class="heroMath">' + money(st.cash) + ' in spending accounts' + (st.pays ? ' + ' + money(st.pays) + ' pay coming' : '') + ' − ' + money(st.due.total) + ' in bills and card payments by ' + shortDate(st.end) + (floorOf('spend') ? ' − ' + money(floorOf('spend')) + ' cushion' : '') + (st.plan && st.plan.spend < st.room ? '. Capped at this week’s plan of ' + money(st.plan.spend) + '.' : '.') + '</div>' +
-    (st.value < 0 ? '<div class="tp-err">Short before payday. Move ' + money(-st.value) + ' from savings, or pay a card closer to its due date.</div>' : '') + '</div>';
+  /* hero: what's left to spend until the next payday after this week, and how that's worked out */
+  var st = safeToSpend(), np = st.end ? addDays(st.end, 1) : null, fl = floorOf('spend'), capped = st.plan && st.planLeft < st.room;
+  var untilTxt = st.payday && np ? 'until payday ' + DOW[parseD(np).getDay()].slice(0, 3) + ', ' + shortDate(np) : 'through ' + shortDate(st.end) + ' · set your payday for a sharper number';
+  h += '<div class="glass hero tp-rise"><span class="shine"></span><span class="label">Left to spend</span><div class="big" data-count="' + st.value + '">' + money(st.value) + '</div>' +
+    '<div class="heroSub">' + untilTxt + (st.value > 0 ? ' · about ' + money(st.value / Math.max(1, st.days)) + ' a day' : '') + '</div>';
+  if (st.plan && +st.plan.spend > 0) { var pct = Math.min(100, st.spent / +st.plan.spend * 100);
+    h += '<div class="pmeter"><span class="bar"><i style="width:' + pct.toFixed(1) + '%' + (st.spent > +st.plan.spend ? ';background:var(--bad)' : '') + '"></i></span><div class="pm"><span>Spent <b>' + money(st.spent) + '</b> since your check-in</span><span>Plan ' + money(+st.plan.spend) + '</span></div></div>'; }
+  h += '<details class="hwhy"><summary>How it’s worked out</summary><div class="hrows">' +
+    '<div><span>In checking now</span><b>' + money(st.cash) + '</b></div>' +
+    (st.pays ? '<div><span>Pay coming before then</span><b class="up">+' + money(st.pays) + '</b></div>' : '') +
+    '<div><span>Bills and card payments due</span><b>−' + money(st.due.total) + '</b></div>' +
+    (fl ? '<div><span>Cushion you keep in checking</span><b>−' + money(fl) + '</b></div>' : '') +
+    '<div class="tot"><span>Free before payday</span><b>' + money(st.room) + '</b></div>' +
+    (st.plan ? '<div><span>Your plan for the week, minus what you’ve spent</span><b>' + money(st.planLeft) + '</b></div><p>' + (capped ? 'Showing your plan, since it’s the smaller number.' : 'Showing what’s free, since it’s smaller than what’s left of your plan.') + '</p>' : '<p>Set a spending plan at your next check-in and this tracks against it.</p>') +
+    (st.due.list.length ? '<p>Due: ' + st.due.list.map(function (x) { return esc(x.e.title.replace(/ payment due$/, '')) + ' ' + money(x.amt) + ' (' + shortDate(x.e.date) + ')'; }).join(', ') + '.</p>' : '') +
+    '</div></details>' +
+    (st.value < 0 || st.room < 0 ? '<div class="tp-err">Short before payday. Move ' + money(-Math.min(st.value, st.room)) + ' from savings, or pay a card closer to its due date.</div>' : '') + '</div>';
   /* check-in prompt */
   var tw = thisWeek();
   var lck = lastCheckin();
@@ -1981,7 +2187,7 @@ PAGES.checkin = function () {
     h += '<button class="tp-btn tp-block mt big1" data-act="ckSave">Use this plan</button>';
   } else {
     var sfs = safeToSpend();
-    h += '<div class="center tp-rise" style="padding-top:12px">' + TP.done('Checked in', dowDate(today())) + '<div class="eyebrow muted">Safe to spend through ' + shortDate(sfs.end) + '</div><div class="disp donebig" data-count="' + sfs.value + '">' + money(sfs.value) + '</div><p class="muted">' + esc(CK.doneLine || '') + '</p><p style="font-size:15px">' + esc(sayFor(SAY_OFF + 3)) + '</p><button class="tp-btn tp-block mt big1" data-act="ckFinish">See home</button></div>';
+    h += '<div class="center tp-rise" style="padding-top:12px">' + TP.done('Checked in', dowDate(today())) + '<div class="eyebrow muted">Left to spend until payday ' + shortDate(addDays(sfs.end, 1)) + '</div><div class="disp donebig" data-count="' + sfs.value + '">' + money(sfs.value) + '</div><p class="muted">' + esc(CK.doneLine || '') + '</p><p style="font-size:15px">' + esc(sayFor(SAY_OFF + 3)) + '</p><button class="tp-btn tp-block mt big1" data-act="ckFinish">See home</button></div>';
   }
   return h;
 };
@@ -2216,7 +2422,8 @@ var ACT = {
   qaDel: function (d, el) { armDelete(el, function () { var tx = (S.txns || []).filter(function (t) { return t.id === d.id; })[0]; if (tx && tx.shared && typeof SH !== 'undefined' && SH.on() && SH.doc) { var ex = (SH.doc.exp || []).filter(function (e) { return e.id === tx.shared; })[0]; if (ex) { ex.del = true; shTouch('exp', ex); } } S.txns = (S.txns || []).filter(function (t) { return t.id !== d.id; }); QA = null; closeSheet(); render._keep = true; save(); }); },
   scoreAdd: function () { sheet(sxHead('Today\u2019s credit score') + '<p class="muted small">From Credit Karma or your card\u2019s app.</p><div class="fgrid">' + textField('sc_tu', 'TransUnion', '', 'e.g. 724', 'number') + textField('sc_eq', 'Equifax (optional)', '', 'e.g. 766', 'number') + '</div><div id="sc_err"></div><div class="acts"><button class="tp-btn" data-act="scoreSave">Save</button></div>'); },
   scoreSave: function () { var a = Math.round(num(val('sc_tu'))), b = Math.round(num(val('sc_eq'))); if (a < 300 || a > 900) { document.getElementById('sc_err').innerHTML = '<div class="tp-err">Scores run from 300 to 850.</div>'; return; } setTodayBal('none'); var td = today(), sn = S.snaps.filter(function (s) { return s.date === td; })[0]; sn.score = a + (b >= 300 ? '/' + b : ''); closeSheet(); render._keep = true; save(); },
-  spRange: function (d) { SP_RANGE = d.a; rerender(); },
+  spSet: function (d) { SPV[d.k] = d.a; SPV.more = 0; if (d.k !== 'cat') render(); else rerender(); },
+  spMore: function () { SPV.more++; rerender(); },
   ckBack: function () { if (!CK || CK.step === 0 || CK.step === 3) { CK = null; VIEW = 'home'; render(); return; } ckKeep(); CK.step--; render(); },
   ckNext: function () { ckKeep(); CK.step++; render(); },
   ckAddMove: function () { ckKeep(); var d = S.accounts.filter(function (a) { return !a.closed && a.kind !== 'spend'; })[0]; CK.moves.push({ to: d ? d.id : 'out', amt: '' }); rerender(); var i = document.getElementById('mv_a_' + (CK.moves.length - 1)); if (i) i.focus(); },
@@ -2230,7 +2437,7 @@ var ACT = {
     var pay = 0, other = 0; CK.inc.forEach(function (x) { if (x.kind === 'pay') pay += num(x.amt); else other += num(x.amt); });
     var cats = {}; m.logged.forEach(function (x) { cats[x.cat || 'Other'] = r2((cats[x.cat || 'Other'] || 0) + (+x.amt || 0)); });
     var rest = m.unlogged != null ? m.unlogged : 0; if (CK.cats.length && rest > 0) { var each = r2(rest / CK.cats.length); CK.cats.forEach(function (c) { cats[c] = r2((cats[c] || 0) + each); }); }
-    w.date = td; w.ckDate = td; w.ws = ws; w.app = true; w.payroll = r2(pay); w.other = r2(other); w.transfer = 0; w.out = r2(m.outBills + m.outCards); w.invest = r2(m.invest); w.moves = CK.moves.filter(function (mv) { return num(mv.amt); }).map(function (mv) { return { to: mv.to, amt: r2(num(mv.amt)) }; });
+    w.date = td; w.ckDate = td; w.at = new Date().toISOString(); w.ws = ws; w.app = true; w.payroll = r2(pay); w.other = r2(other); w.transfer = 0; w.out = r2(m.outBills + m.outCards); w.invest = r2(m.invest); w.moves = CK.moves.filter(function (mv) { return num(mv.amt); }).map(function (mv) { return { to: mv.to, amt: r2(num(mv.amt)) }; });
     w.spendCash = m.gap == null ? null : r2(Math.max(0, m.gap)); w.spendCards = m.cardSpend == null ? null : r2(Math.max(0, m.cardSpend)); w.spendTotal = m.gap == null ? null : m.total; w.cats = cats;
     w.gap = m.gap == null || CK.cats.length || m.unlogged <= 25 ? null : -m.unlogged; /* coach convention: negative = spent but not explained */
     w.plan = { spend: CK.spend, save: CK.save, auto: plan.auto, bills: plan.bills, cards: plan.cards }; w.autoSave = r2(CK.inc.reduce(function (t, x) { return t + (x.kind === 'pay' ? autoSaveOf(num(x.amt)) : 0); }, 0)); w.period = { from: CK.from, to: CK.to }; delete w.planned;
@@ -2288,7 +2495,7 @@ var ACT = {
   },
   incEdit: function (d) {
     var x = d.id ? byId(S.incomes || [], d.id) : { id: '', name: '', amount: '', freq: 'm', to: (S.accounts.filter(function (a) { return a.kind === 'spend' && !a.closed; })[0] || {}).id };
-    sheet(sxHead(x.id ? 'Edit income' : 'Other income') + '<p class="muted small">Money that comes in on a schedule besides your paycheck. Tally adds it to your projections, safe to spend, and the check-in.</p><input type="hidden" id="in_id" value="' + esc(x.id) + '"><div class="fgrid">' + textField('in_name', 'Name', x.name, 'e.g. Side work') + moneyField('in_amt', 'Usual amount', x.amount) + '</div>' + schedFields(x) +
+    sheet(sxHead(x.id ? 'Edit income' : 'Other income') + '<p class="muted small">Money that comes in on a schedule besides your paycheck. Tally adds it to your projections, what’s left to spend, and the check-in.</p><input type="hidden" id="in_id" value="' + esc(x.id) + '"><div class="fgrid">' + textField('in_name', 'Name', x.name, 'e.g. Side work') + moneyField('in_amt', 'Usual amount', x.amount) + '</div>' + schedFields(x) +
       '<div><label class="tp-label" for="in_to">Goes into</label><select class="tp-input" id="in_to">' + S.accounts.filter(function (a) { return !a.closed && (a.kind === 'spend' || a.kind === 'save'); }).map(function (a) { return '<option value="' + a.id + '"' + (x.to === a.id ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('') + '</select></div>' +
       '<label class="tp-opt mt"><input type="checkbox" id="in_off" ' + (x.off ? 'checked' : '') + '><span><b>Paused</b><span>Keeps it listed but out of projections.</span></span></label><div id="in_err"></div>' +
       '<div class="acts">' + (x.id ? '<button class="tp-btn tp-danger" data-act="incDel" data-id="' + x.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="incSave">Save</button></div>');
@@ -2496,11 +2703,12 @@ var SH = {
   sync: function () { var self = this; clearTimeout(self.timer); self.timer = setTimeout(function () { if (self.cloud()) self.push(); else self.pull().then(function () { return self.push(); }); }, 900); }
 };
 function shStrip(d) { if (!d) return null; var c = JSON.parse(JSON.stringify(d)); delete c.updatedAt; return c; }
-function shBlank() { return { v: 1, updatedAt: '', people: [], exp: [], bills: [], goals: [], contrib: [], settle: [] }; }
+function shBlank() { return { v: 1, updatedAt: '', people: [], exp: [], bills: [], goals: [], contrib: [], settle: [], todo: [], shop: [] }; }
 function shMerge(a, b) {
   if (!a) return b ? JSON.parse(JSON.stringify(b)) : null; if (!b) return a;
-  var out = shBlank();
-  ['people', 'exp', 'bills', 'goals', 'contrib', 'settle'].forEach(function (k) {
+  var out = shBlank(), keys = {};
+  Object.keys(out).concat(Object.keys(a), Object.keys(b)).forEach(function (k) { if (Array.isArray(out[k]) || Array.isArray(a[k]) || Array.isArray(b[k])) keys[k] = 1; });
+  Object.keys(keys).forEach(function (k) {
     var m = {}; (a[k] || []).concat(b[k] || []).forEach(function (x) { var o = m[x.id]; if (!o || (x.upd || '') > (o.upd || '')) m[x.id] = x; });
     out[k] = Object.keys(m).map(function (id) { return m[id]; });
   });
@@ -2511,7 +2719,7 @@ function shLive(k) { return SH.doc ? (SH.doc[k] || []).filter(function (x) { ret
 function shPerson(id) { return shLive('people').filter(function (p) { return p.id === id; })[0] || { id: id, name: '?' }; }
 function shMe() { return shPerson(SH.cfg.me); }
 function shThem() { return shLive('people').filter(function (p) { return p.id !== SH.cfg.me; })[0] || { id: '', name: 'Partner' }; }
-function shTouch(list, item) { item.upd = new Date().toISOString(); var arr = SH.doc[list]; var i = arr.map(function (x) { return x.id; }).indexOf(item.id); if (i >= 0) arr[i] = item; else arr.push(item); SH.keep(); SH.sync(); }
+function shTouch(list, item) { item.upd = new Date().toISOString(); var arr = SH.doc[list] = SH.doc[list] || []; var i = arr.map(function (x) { return x.id; }).indexOf(item.id); if (i >= 0) arr[i] = item; else arr.push(item); SH.keep(); SH.sync(); }
 function payerShare(x) { return x.split === 'pct' ? Math.max(0, Math.min(100, +x.pct || 0)) / 100 : x.split === 'other' ? 0 : x.split === 'solo' ? 1 : 0.5; }
 /* positive: they owe me. negative: I owe them */
 function shNet() {
@@ -2529,6 +2737,10 @@ function togetherPage() {
   var h = topBar('Together', SH.on() && SH.doc ? shLive('people').map(function (p) { return p.name; }).join(' & ') : 'A shared space for two', 'home');
   if (!SH.on() || !SH.doc || !shLive('people').length) return h + togetherSetup();
   var me = shMe(), them = shThem(), net = shNet(), td = today();
+  var nShop = shLive('shop').filter(function (x) { return !x.got; }).length, nTodo = shLive('todo').filter(function (x) { return !x.done; }).length;
+  h += '<div class="seg shtabs" role="tablist">' + [['money', 'Money'], ['shop', 'Shopping' + (nShop ? ' · ' + nShop : '')], ['todo', 'To-do' + (nTodo ? ' · ' + nTodo : '')]].map(function (t) { return '<button role="tab" aria-selected="' + (SHV === t[0]) + '" class="' + (SHV === t[0] ? 'on' : '') + '" data-act="shTab" data-a="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>';
+  if (SHV === 'shop') return h + shopPage();
+  if (SHV === 'todo') return h + todoPage();
   h += '<div class="glass hero tp-rise"><span class="label">' + (Math.abs(net) < 0.5 ? 'All square' : net > 0 ? esc(them.name) + ' owes you' : 'You owe ' + esc(them.name)) + '</span><div class="big" data-count="' + Math.abs(net) + '">' + money(Math.abs(net)) + '</div>' +
     '<div class="flex mt"><button class="tp-btn tp-sm" data-act="shExp">+ Shared expense</button>' + (Math.abs(net) >= 0.5 ? '<button class="tp-btn tp-ghost tp-sm" data-act="shSettle">Record a payback</button>' : '') + '</div>' +
     (SH.status === 'bad' ? '<div class="tp-err">Couldn’t sync: ' + esc(SH.msg) + '. Changes are saved here and will send later.</div>' : '') + '</div>';
@@ -2578,6 +2790,66 @@ function togetherSetup() {
   return h + '<div class="glass pad"><b>Start a shared space</b><p class="small muted">It lives in a separate, hidden tab of your Sheet with its own key. The invite link only opens that tab.</p>' + textField('sh_me', 'Your name', S.profile.name || '', '') + textField('sh_them', 'Their name', '', 'e.g. Fernanda') + '<div id="sh_err"></div><button class="tp-btn tp-block mt" data-act="shStart">Start it</button><p class="small muted mb0">Needs the latest Sheet script (it adds the shared tab and key).</p></div>';
 }
 PAGES.together = togetherPage;
+
+/* ---------- Together lists: shopping and to-dos, shared live between you two ---------- */
+var SHV = 'money';
+function whoName(id) { return id === SH.cfg.me ? 'You' : shPerson(id).name; }
+function agoTxt(iso) { if (!iso) return ''; var d = iso.slice(0, 10), td = today(), n = daysBetween(d, td); return n <= 0 ? 'today' : n === 1 ? 'yesterday' : n < 7 ? DOW[parseD(d).getDay()] : shortDate(d); }
+function shopPage() {
+  var items = shLive('shop'), need = items.filter(function (x) { return !x.got; }).sort(function (a, b) { return (a.addedAt || '') < (b.addedAt || '') ? -1 : 1; }), td = today();
+  var gotToday = items.filter(function (x) { return x.got && (x.gotAt || '').slice(0, 10) === td; });
+  var usual = items.filter(function (x) { return x.got && (x.gotAt || '').slice(0, 10) !== td; }).sort(function (a, b) { return (b.n || 0) - (a.n || 0) || ((b.gotAt || '') > (a.gotAt || '') ? 1 : -1); }).slice(0, 16);
+  var h = '<div class="glass pad tp-rise"><div class="addline"><input class="tp-input" id="sh_new" placeholder="Add to the list" autocomplete="off" enterkeyhint="done" aria-label="Add to the shopping list"><button class="tp-btn" data-act="shopAdd">Add</button></div><p class="small muted mb0">Add a few at once with commas: milk, eggs, coffee</p></div>';
+  h += '<div class="tp-sect"><span>Need' + (need.length ? ' · ' + need.length : '') + '</span></div><div class="glass">' + (need.length ? need.map(function (x) {
+    return '<div class="tp-row static chkrow"><button class="chk" data-act="shopGot" data-id="' + x.id + '" aria-label="Got ' + esc(x.name) + '"></button><button class="tp-t chkt" data-act="shopEdit" data-id="' + x.id + '"><b>' + esc(x.name) + (x.qty ? ' <em>× ' + esc(x.qty) + '</em>' : '') + '</b><span>' + esc(whoName(x.by) + ' added ' + agoTxt(x.addedAt) + (x.note ? ' · ' + x.note : '')) + '</span></button></div>';
+  }).join('') : '<div class="empty">Nothing on the list. Add something, or tap a usual below when you run out.</div>') + '</div>';
+  if (gotToday.length) h += '<div class="tp-sect"><span>Got today · ' + gotToday.length + '</span></div><div class="glass">' + gotToday.map(function (x) { return '<div class="tp-row static chkrow done"><button class="chk on" data-act="shopGot" data-id="' + x.id + '" aria-label="Put ' + esc(x.name) + ' back on the list">' + TP.svg('check') + '</button><span class="tp-t"><b>' + esc(x.name) + '</b><span>' + esc(whoName(x.gotBy) + ' got it') + '</span></span></div>'; }).join('') +
+    '<button class="tp-row" data-act="shopLog"><span class="tp-tile">' + TP.svg('receipt') + '</span><span class="tp-t"><b>Log the receipt as a shared expense</b><span>Then the split and who owes whom stay right</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button></div>';
+  if (usual.length) h += '<div class="tp-sect"><span>Out of something?</span><span class="sp"></span><span class="small muted">tap to add back</span></div><div class="chips usual">' + usual.map(function (x) { return '<button class="chip" data-act="shopAgain" data-id="' + x.id + '">+ ' + esc(x.name) + '</button>'; }).join('') + '</div>';
+  return h + '<p class="small muted">Both of you see changes within a few seconds while this screen is open.</p>';
+}
+function todoPage() {
+  var items = shLive('todo'), open = items.filter(function (x) { return !x.done; }).sort(function (a, b) { return (a.due || '9') < (b.due || '9') ? -1 : (a.due || '9') > (b.due || '9') ? 1 : (a.addedAt || '') < (b.addedAt || '') ? -1 : 1; }), td = today();
+  var done = items.filter(function (x) { return x.done; }).sort(function (a, b) { return (b.doneAt || '') > (a.doneAt || '') ? 1 : -1; }).slice(0, 12);
+  var h = '<div class="glass pad tp-rise"><div class="addline"><input class="tp-input" id="td_new" placeholder="Add a to-do or a plan" autocomplete="off" enterkeyhint="done" aria-label="Add a to-do"><button class="tp-btn" data-act="todoAdd">Add</button></div><p class="small muted mb0">Tap one to set who’s on it and a date.</p></div>';
+  var row = function (x) {
+    var late = x.due && x.due < td && !x.done, sub = [x.who ? (x.who === SH.cfg.me ? 'You' : shPerson(x.who).name) : 'Either of you'].concat(x.due ? [(late ? 'was due ' : 'by ') + shortDate(x.due)] : [], x.note ? [x.note] : []).join(' · ');
+    return '<div class="tp-row static chkrow' + (x.done ? ' done' : '') + '"><button class="chk' + (x.done ? ' on' : '') + '" data-act="todoDone" data-id="' + x.id + '" aria-label="' + (x.done ? 'Not done: ' : 'Done: ') + esc(x.text) + '">' + (x.done ? TP.svg('check') : '') + '</button><button class="tp-t chkt" data-act="todoEdit" data-id="' + x.id + '"><b>' + esc(x.text) + '</b><span' + (late ? ' class="late"' : '') + '>' + esc(x.done ? whoName(x.doneBy) + ' did it ' + agoTxt(x.doneAt) : sub) + '</span></button></div>';
+  };
+  h += '<div class="tp-sect"><span>To do' + (open.length ? ' · ' + open.length : '') + '</span></div><div class="glass">' + (open.length ? open.map(row).join('') : '<div class="empty">Chores, errands, plans, things to book. Either of you can add and check off.</div>') + '</div>';
+  if (done.length) h += '<details class="glass pad donebox"><summary>Done · ' + done.length + '</summary>' + done.map(row).join('') + '</details>';
+  return h;
+}
+function shAddMany(list, raw, make) {
+  var names = String(raw || '').split(/[,\n]/).map(function (x) { return x.trim(); }).filter(Boolean); if (!names.length) return 0;
+  names.forEach(function (n) { shTouch(list, make(n)); }); return names.length;
+}
+ACT.shTab = function (d) { SHV = d.a; render(); if (SH.on()) SH.pull(); };
+ACT.shopAdd = function () {
+  var el = document.getElementById('sh_new'), now = new Date().toISOString();
+  var n = shAddMany('shop', el && el.value, function (name) {
+    var old = shLive('shop').filter(function (x) { return x.name.toLowerCase() === name.toLowerCase(); })[0];
+    if (old) { old.got = false; old.addedAt = now; old.by = SH.cfg.me; return old; }
+    var m = /^(\d+)\s*x?\s+(.+)$/i.exec(name); return { id: 'i' + uid(), name: m ? m[2] : name, qty: m ? m[1] : '', got: false, n: 0, by: SH.cfg.me, addedAt: now };
+  });
+  if (n) { rerender(); var e2 = document.getElementById('sh_new'); if (e2) e2.focus(); }
+};
+ACT.shopGot = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; if (x.got) { x.got = false; x.n = Math.max(0, (x.n || 1) - 1); } else { x.got = true; x.gotAt = new Date().toISOString(); x.gotBy = SH.cfg.me; x.n = (x.n || 0) + 1; } shTouch('shop', x); rerender(); };
+ACT.shopAgain = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; x.got = false; x.addedAt = new Date().toISOString(); x.by = SH.cfg.me; shTouch('shop', x); rerender(); toast(x.name + ' is back on the list'); };
+ACT.shopEdit = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; sheet(sxHead('Edit item') + '<div class="fgrid">' + textField('se_name', 'Item', x.name) + textField('se_qty', 'How many', x.qty || '', 'e.g. 2') + '</div>' + textField('se_note', 'Note', x.note || '', 'Brand, size, store') + '<div class="acts"><button class="tp-btn tp-danger" data-act="shDel" data-list="shop" data-id="' + x.id + '" data-label="Delete">Delete</button><button class="tp-btn" data-act="shopSave" data-id="' + x.id + '">Save</button></div>'); };
+ACT.shopSave = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; x.name = val('se_name').trim() || x.name; x.qty = val('se_qty').trim(); x.note = val('se_note').trim(); shTouch('shop', x); closeSheet(); rerender(); };
+ACT.shopLog = function () { var g = shLive('shop').filter(function (x) { return x.got && (x.gotAt || '').slice(0, 10) === today() && x.gotBy === SH.cfg.me; }); SHX = { payer: SH.cfg.me, split: 'half', date: today(), cat: 'Groceries', note: 'Groceries' + (g.length ? ' (' + g.slice(0, 4).map(function (x) { return x.name; }).join(', ') + (g.length > 4 ? '…' : '') + ')' : ''), src: ((S.profile.last || {}).src) || ((srcList()[0] || {}).id) }; shExpSheet(); };
+ACT.todoAdd = function () {
+  var el = document.getElementById('td_new'), now = new Date().toISOString();
+  var n = shAddMany('todo', el && el.value, function (t) { return { id: 'd' + uid(), text: t, who: '', due: '', done: false, by: SH.cfg.me, addedAt: now }; });
+  if (n) { rerender(); var e2 = document.getElementById('td_new'); if (e2) e2.focus(); }
+};
+ACT.todoDone = function (d) { var x = shLive('todo').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; x.done = !x.done; if (x.done) { x.doneAt = new Date().toISOString(); x.doneBy = SH.cfg.me; } shTouch('todo', x); rerender(); };
+ACT.todoEdit = function (d) { var x = shLive('todo').filter(function (i) { return i.id === d.id; })[0], me = shMe(), th = shThem(); if (!x) return; sheet(sxHead('Edit to-do') + textField('te_text', 'What', x.text) + '<label class="tp-label">Who’s on it</label>' + seg('te_who', [['', 'Either'], [me.id, me.name], [th.id, th.name]], x.who || '') + textField('te_due', 'By', x.due || '', '', 'date') + textField('te_note', 'Note', x.note || '', 'Details, links, where') + '<div class="acts"><button class="tp-btn tp-danger" data-act="shDel" data-list="todo" data-id="' + x.id + '" data-label="Delete">Delete</button><button class="tp-btn" data-act="todoSave" data-id="' + x.id + '">Save</button></div>'); };
+ACT.todoSave = function (d) { var x = shLive('todo').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; x.text = val('te_text').trim() || x.text; x.who = val('te_who') || ''; x.due = val('te_due'); x.note = val('te_note').trim(); shTouch('todo', x); closeSheet(); rerender(); };
+document.addEventListener('keydown', function (e) { if (e.key !== 'Enter') return; if (e.target.id === 'sh_new') { e.preventDefault(); ACT.shopAdd(); } if (e.target.id === 'td_new') { e.preventDefault(); ACT.todoAdd(); } });
+/* while Together is open, pick up the other person's changes every 15 seconds (not while typing) */
+setInterval(function () { if (VIEW === 'together' && !document.hidden && SH.on() && !(document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) && !document.getElementById('sheet')) SH.pull(); }, 15000);
 
 /* ---------- forms ---------- */
 var SHX = null;
@@ -2719,12 +2991,13 @@ function shBoot() {
 }
 
 /* ---------- hooks into the rest of the app ---------- */
+function shTileSub() { var n = shLive('shop').filter(function (x) { return !x.got; }).length, t = shLive('todo').filter(function (x) { return !x.done; }).length, out = []; if (n) out.push(n + ' on the shopping list'); if (t) out.push(t + ' to-do' + (t > 1 ? 's' : '')); return out.length ? out.join(' · ') : 'Shared bills, paybacks, goals, lists'; }
 /* Home tile */
 var _home = PAGES.home;
 PAGES.home = function () {
   var h = _home();
   if (SH.on() && SH.doc && shLive('people').length) {
-    var net = shNet(), th = shThem(), tile = '<button class="glass tp-row cta" data-act="go" data-a="together"><span class="tp-tile">' + TP.svg('people') + '</span><span class="tp-t"><b>' + (Math.abs(net) < 0.5 ? 'Together · all square with ' + esc(th.name) : net > 0 ? esc(th.name) + ' owes you ' + money(net) : 'You owe ' + esc(th.name) + ' ' + money(-net)) + '</b><span>Shared bills, paybacks, goals</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+    var net = shNet(), th = shThem(), tile = '<button class="glass tp-row cta" data-act="go" data-a="together"><span class="tp-tile">' + TP.svg('people') + '</span><span class="tp-t"><b>' + (Math.abs(net) < 0.5 ? 'Together · all square with ' + esc(th.name) : net > 0 ? esc(th.name) + ' owes you ' + money(net) : 'You owe ' + esc(th.name) + ' ' + money(-net)) + '</b><span>' + esc(shTileSub()) + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
     var at = h.indexOf('<div class="tp-sect"><span>Goals</span>'); h = at >= 0 ? h.slice(0, at) + tile + h.slice(at) : h + tile;
   }
   return h;
