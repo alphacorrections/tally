@@ -403,7 +403,7 @@ details.hist summary .small{margin-left:auto}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.17.5';
+var APP_VERSION = '2026.11.17.6';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1065,6 +1065,7 @@ function paidFromField(id, cur) {
     (cards.length ? '<optgroup label="Cards">' + cards.map(opt).join('') + '</optgroup>' : '') +
     (cur && !known ? '<optgroup label="Saved before">' + opt(cur) + '</optgroup>' : '') + '</select></div>';
 }
+function limitUse() { var o = 0, l = 0; S.cards.forEach(function (c) { if (!c.off && +c.limit) { o += cardBal(c); l += +c.limit; } }); return l ? Math.round(o / l * 100) : null; }
 function payLabel(p) { return { 7: 'every week', 14: 'every 2 weeks', 15: 'twice a month', 30: 'every month' }[+p.every] || ''; }
 
 /* ---------- shell ---------- */
@@ -1205,7 +1206,7 @@ PAGES.accounts = function () {
   });
   var lim = S.cards.reduce(function (t, c) { return t + (c.off ? 0 : +c.limit || 0); }, 0), owed = cardsOwed();
   h += '<div class="tp-sect"><span>Owed</span><span class="sp"></span><span>−' + money(owed) + '</span></div>';
-  h += '<button class="deep tp-row" style="padding:14px 16px" data-act="go" data-a="cards"><span class="tp-tile">' + TP.svg('card') + '</span><span class="tp-t"><b>' + S.cards.filter(function (c) { return !c.off; }).length + ' credit cards</b><span>' + (lim ? Math.round(owed / lim * 100) + '% of your limits used · ' : '') + 'see Cards</span></span><span class="amt">' + money(owed) + '</span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+  h += '<button class="deep tp-row" style="padding:14px 16px" data-act="go" data-a="cards"><span class="tp-tile">' + TP.svg('card') + '</span><span class="tp-t"><b>' + S.cards.filter(function (c) { return !c.off; }).length + ' credit cards</b><span>' + (limitUse() != null ? limitUse() + '% of your limits used · ' : '') + 'see Cards</span></span><span class="amt">' + money(owed) + '</span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
   h += '<button class="tp-btn tp-ghost tp-block" data-act="acctEdit">+ Add an account</button>';
   var closed = S.accounts.filter(function (a) { return a.closed; });
   if (closed.length) h += '<div class="tp-sect"><span>Closed</span></div><div class="glass">' + closed.map(acctRow).join('') + '</div>';
@@ -1224,7 +1225,7 @@ PAGES.cards = function () {
   var owed = cardsOwed(), due14 = 0, lim = 0;
   eventsBetween(td, addDays(td, 14)).forEach(function (e) { if (e.type === 'due' && e.st !== 'paid') due14 += cardDueAmt(e); });
   S.cards.forEach(function (c) { if (!c.off) lim += +c.limit || 0; });
-  h += '<div class="tp-stats tp-rise"><div class="tp-stat"><span>You owe</span><b>' + money(owed) + '</b></div><div class="tp-stat"><span>Due in 14 days</span><b>' + money(due14) + '</b></div><div class="tp-stat"><span>Limits used</span><b>' + (lim ? Math.round(owed / lim * 100) + '%' : '—') + '</b></div></div>';
+  h += '<div class="tp-stats tp-rise"><div class="tp-stat"><span>You owe</span><b>' + money(owed) + '</b></div><div class="tp-stat"><span>Due in 14 days</span><b>' + money(due14) + '</b></div><div class="tp-stat"><span>Limits used</span><b>' + (limitUse() != null ? limitUse() + '%' : '—') + '</b></div></div>';
   var tipC = null;
   eventsBetween(td, addDays(td, 6)).forEach(function (e) { if (tipC || e.type !== 'stmt') return; var c = byId(S.cards, e.card); if (c && c.limit && cardBal(c) / c.limit > .3) tipC = { c: c, e: e, pay: Math.ceil((cardBal(c) - c.limit * .3) / 50) * 50 }; });
   if (tipC) h += '<div class="solid tp-rise"><b>Tip:</b> ' + esc(tipC.c.name) + ' closes ' + DOW[parseD(tipC.e.date).getDay()] + '. Paying ' + money(tipC.pay) + ' before then keeps it under 30% on your credit report.</div>';
