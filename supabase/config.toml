@@ -1,0 +1,12 @@
+# Supabase CLI settings for Tally. Deployed by .github/workflows/supabase.yml.
+project_id = "xklfnsqypmsqvcernpwq"
+
+# Each function checks the caller's sign-in itself, so the gateway check is off.
+[functions.bank]
+verify_jwt = false
+
+[functions.market]
+verify_jwt = false
+
+[functions.remind]
+verify_jwt = false

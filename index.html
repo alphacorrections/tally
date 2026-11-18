@@ -595,6 +595,14 @@ details.rwedit summary{cursor:pointer;font-weight:650;font-size:14px;min-height:
 .bkrow .tp-input{min-height:42px;padding:8px}
 .accseg{margin-bottom:12px}
 
+/* v2.3 accounts: sign-in code field, invite code, older Sheet setup */
+.sicode{font:700 26px/1.2 'Space Grotesk',Inter,system-ui,sans-serif;letter-spacing:.3em;text-align:center}
+.invcode{font:700 30px/1.2 'Space Grotesk',Inter,system-ui,sans-serif;letter-spacing:.18em;text-align:center;padding:14px 10px;margin:4px 0 12px;border-radius:16px;background:var(--tp-card);border:1px dashed var(--tp-line);user-select:all;-webkit-user-select:all}
+details.oldsheet>summary{cursor:pointer;list-style:none;padding:2px 0}
+details.oldsheet>summary::-webkit-details-marker{display:none}
+details.oldsheet>summary::after{content:'›';display:inline-block;margin-left:6px;transition:transform .2s}
+details.oldsheet[open]>summary::after{transform:rotate(90deg)}
+
 </style>
 </head>
 <body class="tp-page">
@@ -604,7 +612,7 @@ details.rwedit summary{cursor:pointer;font-weight:650;font-size:14px;min-height:
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.9';
+var APP_VERSION = '2026.11.18.10';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -880,26 +888,77 @@ function sayFor(offset) {
   return pool[seed % pool.length];
 }
 
-/* ---------- sync (optional): your own Google Sheet through a small Apps Script ---------- */
+/* ---------- Tally account (Supabase): sign in with a code from your email; your data is a private row only you can read ---------- */
+var LS_CLOUD = 'tally.cloud', LS_SHEET_OLD = 'tally.sync.sheet';
+var CLOUD = {
+  url: 'https://xklfnsqypmsqvcernpwq.supabase.co', key: 'sb_publishable_uO6MhxRpVJETKLdhIbuaLg_ZB6WW1Wk',
+  s: lsGet(LS_CLOUD) || null, _ref: null,
+  on: function () { return !!(this.s && this.s.rt); },
+  email: function () { return (this.s && this.s.email) || ''; },
+  keep: function () { lsSet(LS_CLOUD, this.s); },
+  raw: function (method, path, body, at, prefer) {
+    var h = { apikey: this.key, 'Content-Type': 'application/json' }; if (at) h.Authorization = 'Bearer ' + at; if (prefer) h.Prefer = prefer;
+    return fetch(this.url + path, { method: method, headers: h, body: body == null ? undefined : JSON.stringify(body) }).then(function (r) {
+      return r.text().then(function (t) {
+        var j = null; try { j = t ? JSON.parse(t) : null; } catch (e) {}
+        if (!r.ok) { var e2 = new Error((j && (j.msg || j.message || j.error_description || j.error)) || ('Error ' + r.status)); e2.status = r.status; e2.code = j && (j.error_code || j.code); throw e2; }
+        return j;
+      });
+    });
+  },
+  sendCode: function (email) { return this.raw('POST', '/auth/v1/otp', { email: email, create_user: true }); },
+  verify: function (email, code) { var self = this; return self.raw('POST', '/auth/v1/verify', { type: 'email', email: email, token: code }).then(function (j) { self.take(j); return j; }); },
+  take: function (j) {
+    var o = this.s || {};
+    this.s = { at: j.access_token, rt: j.refresh_token, exp: j.expires_at ? j.expires_at * 1000 : Date.now() + (+j.expires_in || 3600) * 1000, email: (j.user && j.user.email) || o.email || '', uid: (j.user && j.user.id) || o.uid || '' };
+    this.lost = false; this.keep();
+  },
+  /* a fresh access token; refreshes are shared so two calls never spend the same refresh token */
+  token: function () {
+    var self = this; if (!self.on()) return Promise.reject(new Error('Not signed in'));
+    var other = lsGet(LS_CLOUD); if (other && other.rt && other.rt !== self.s.rt && other.exp > self.s.exp) self.s = other; /* another tab refreshed */
+    if (self.s.exp - Date.now() > 90000) return Promise.resolve(self.s.at);
+    if (!self._ref) self._ref = self.raw('POST', '/auth/v1/token?grant_type=refresh_token', { refresh_token: self.s.rt }).then(function (j) { self._ref = null; self.take(j); return self.s.at; }, function (e) {
+      self._ref = null;
+      if (e.status >= 400 && e.status < 500) { self.lost = true; self.s.rt = ''; self.keep(); e.message = 'Signed out. Sign in again in Settings.'; }
+      throw e;
+    });
+    return self._ref;
+  },
+  api: function (method, path, body, prefer) { var self = this; return self.token().then(function (at) { return self.raw(method, path, body, at, prefer); }); },
+  rpc: function (fn, args) { return this.api('POST', '/rest/v1/rpc/' + fn, args || {}); },
+  fn: function (name, body) { return this.api('POST', '/functions/v1/' + name, body || {}); },
+  signOut: function () { var at = this.s && this.s.at, em = this.email(); if (at) this.raw('POST', '/auth/v1/logout', {}, at).catch(function () {}); this.s = { email: em }; this.keep(); }
+};
+function tzName() { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'; } catch (e) { return 'America/New_York'; } }
+function appUrl() { return /^https:/.test(location.href) ? location.href.split('#')[0].split('?')[0] : ''; }
+
+/* ---------- sync: your Tally account, or (older setup) your own Google Sheet through a small Apps Script ---------- */
 var Sync = {
   cfg: lsGet(LS_SYNC) || { url: '', key: '' },
   status: 'off', msg: '', timer: null,
-  on: function () { return !!(this.cfg.url && this.cfg.key); },
+  sheet: function () { return !CLOUD.on() && !!(this.cfg.url && this.cfg.key); },
+  on: function () { return CLOUD.on() || !!(this.cfg.url && this.cfg.key); },
   set: function (st, msg) { this.status = st; this.msg = msg || ''; if (window.paintSync) paintSync(); },
   get: function (params) {
     var q = Object.keys(params).map(function (k) { return k + '=' + encodeURIComponent(params[k]); }).join('&');
     return fetch(this.cfg.url + (this.cfg.url.indexOf('?') >= 0 ? '&' : '?') + q, { redirect: 'follow' }).then(function (r) { return r.json(); });
   },
-  pull: function () { return this.get({ action: 'load', key: this.cfg.key }).then(function (j) { if (!j.ok) throw new Error(j.error || 'Sheet said no'); return j; }); },
+  pull: function () {
+    if (CLOUD.on()) return CLOUD.api('GET', '/rest/v1/docs?select=state,updated_at').then(function (rows) { return { ok: true, state: rows && rows[0] ? rows[0].state : null }; });
+    return this.get({ action: 'load', key: this.cfg.key }).then(function (j) { if (!j.ok) throw new Error(j.error || 'Sheet said no'); return j; });
+  },
   push: function () {
     var self = this;
     if (!self.on()) return Promise.resolve();
     self.set('busy');
-    return fetch(self.cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'save', key: self.cfg.key, state: S, appUrl: /^https:/.test(location.href) ? location.href.split('#')[0] : '' }) })
-      .then(function (r) { return r.json(); })
+    var sent = S.updatedAt;
+    var go = CLOUD.on() ? CLOUD.api('POST', '/rest/v1/docs?on_conflict=user_id', { user_id: CLOUD.s.uid || undefined, state: S, updated_at: S.updatedAt || '', tz: tzName(), app_url: appUrl() }, 'resolution=merge-duplicates,return=minimal').then(function () { return { ok: true }; })
+      : fetch(self.cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'save', key: self.cfg.key, state: S, appUrl: appUrl() }) }).then(function (r) { return r.json(); });
+    return go
       .then(function (j) {
         if (!j.ok) throw new Error(j.error || 'Save failed');
-        META.dirty = false; META.lastSync = S.updatedAt; lsSet(LS_META, META); self.set('ok');
+        META.lastSync = sent; if (S.updatedAt === sent) META.dirty = false; lsSet(LS_META, META); self.set('ok');
       }).catch(function (e) { self.set('bad', e.message || 'Offline'); });
   },
   schedule: function () {
@@ -927,14 +986,15 @@ var Sync = {
     this.set('ok'); if (window.render) render();
   },
   inbox: function () {
-    var self = this;
+    var self = this; if (!self.sheet()) return Promise.reject(new Error('Reading bank emails needs the Google Sheet'));
     return self.get({ action: 'inbox', key: self.cfg.key }).then(function (j) { if (!j.ok) throw new Error(j.error || 'No inbox data'); return j.items || []; });
   },
   market: function (force) {
     var self = this, cache = lsGet(LS_MKT);
     var want = S.watch.map(function (w) { return w.sym; }).join(',') + '|' + S.topics.join(',');
     if (!force && cache && cache.want === want && Date.now() - cache.at < 30 * 60000) return Promise.resolve(cache.data);
-    return self.get({ action: 'market', key: self.cfg.key, symbols: S.watch.map(function (w) { return w.sym; }).join(','), topics: S.topics.join('|') })
+    var args = { symbols: S.watch.map(function (w) { return w.sym; }).join(','), topics: S.topics.join('|') };
+    return (CLOUD.on() ? CLOUD.fn('market', args) : self.get({ action: 'market', key: self.cfg.key, symbols: args.symbols, topics: args.topics }))
       .then(function (j) { if (!j.ok) throw new Error(j.error || 'No market data'); lsSet(LS_MKT, { at: Date.now(), want: want, data: j }); return j; });
   }
 };
@@ -1511,9 +1571,9 @@ function paintSync() {
   b.title = { off: 'Settings · saved on this device only', ok: 'Settings · synced', busy: 'Settings · syncing', bad: 'Settings · ' + (Sync.msg || 'sync issue') }[st];
 }
 function askConflict(remote) {
-  sheet(sxHead('Two versions of your data') + '<p class="muted">This device and your Sheet both changed since the last sync. Pick the one to keep.</p>' +
-    '<div class="kv"><span>This device</span><b>' + esc(new Date(S.updatedAt).toLocaleString()) + '</b></div><div class="kv"><span>Your Sheet</span><b>' + esc(new Date(remote.updatedAt).toLocaleString()) + '</b></div>' +
-    '<div class="acts"><button class="tp-btn tp-ghost" data-act="conflictLocal">Keep this device</button><button class="tp-btn" data-act="conflictRemote">Use the Sheet</button></div>');
+  sheet(sxHead('Two versions of your data') + '<p class="muted">This device and ' + (CLOUD.on() ? 'your account' : 'your Sheet') + ' both changed since the last sync. Pick the one to keep.</p>' +
+    '<div class="kv"><span>This device</span><b>' + esc(new Date(S.updatedAt).toLocaleString()) + '</b></div><div class="kv"><span>' + (CLOUD.on() ? 'Your account' : 'Your Sheet') + '</span><b>' + esc(new Date(remote.updatedAt).toLocaleString()) + '</b></div>' +
+    '<div class="acts"><button class="tp-btn tp-ghost" data-act="conflictLocal">Keep this device</button><button class="tp-btn" data-act="conflictRemote">' + (CLOUD.on() ? 'Use my account' : 'Use the Sheet') + '</button></div>');
   askConflict.remote = remote;
 }
 
@@ -1583,7 +1643,7 @@ function setupCard() {
     { done: S.accounts.some(function (a) { return !a.closed && acctBal(a.id) > 0; }), t: 'Add your account balances', s: 'Checking, savings, investing', act: 'go', a: 'accounts' },
     { done: S.cards.length > 0, t: 'Add your cards', s: 'Statement and due dates', act: 'cardEdit' },
     { done: S.bills.length > 0, t: 'Add your bills', s: 'Rent, car, phone, subscriptions', act: 'billEdit' },
-    { done: Sync.on(), t: 'Turn on sync and the weekly email', s: 'Uses your own Google Sheet', act: 'go', a: 'settings' },
+    { done: Sync.on(), t: 'Sign in to sync and get the weekly email', s: 'Settings › Your account', act: 'go', a: 'settings' },
     { done: appWeeks().length > 0, t: 'Do your first check-in', s: 'About a minute', act: 'checkinStart' }
   ], n = items.filter(function (x) { return x.done; }).length;
   if (n === items.length) return '';
@@ -1810,7 +1870,7 @@ function ckInit() {
 function ckStart() {
   closeSheet(); ckInit(); VIEW = 'checkin'; render();
   if (typeof BANK !== 'undefined' && BANK.on()) BANK.refresh(false).then(function () { if (VIEW === 'checkin' && CK && CK.step === 0) { BANK.fillCheckin(); rerender(); } });
-  if (Sync.on()) {
+  if (Sync.sheet()) {
     INBOX_ERR = '';
     Sync.inbox().then(function (items) { INBOX = items || []; ckApplyInbox(); if (VIEW === 'checkin' && CK && CK.step === 0) rerender(); })
       .catch(function (e) { INBOX_ERR = e.message || 'offline'; if (VIEW === 'checkin' && CK && CK.step === 0) rerender(); });
@@ -1884,7 +1944,7 @@ PAGES.checkin = function () {
   if (!CK) ckInit();
   var st = CK.step, h = '<div class="sxhead flowhead"><button class="ibtn" data-act="ckBack" aria-label="' + (st && st < 3 ? 'Back' : 'Close') + '">' + TP.svg(st && st < 3 ? 'back' : 'close') + '</button><span class="stepdots">' + [0, 1, 2].map(function (i) { return '<i class="' + (i <= st ? 'on' : '') + '"></i>'; }).join('') + '</span><span class="small muted">' + (st < 3 ? st + 1 + ' of 3' : 'Done') + '</span></div>';
   if (st === 0) {
-    h += '<div class="tp-rise"><div class="eyebrow muted">Look back · ' + (CK.prev ? shortDate(CK.from) + ' to ' + shortDate(CK.to) : 'first check-in') + '</div><h2 class="flowh">Confirm your balances</h2><p class="muted flowp">' + (INBOX ? 'Filled in from your bank emails where they matched, and your last numbers elsewhere.' : Sync.on() ? (INBOX_ERR ? 'Couldn’t read your email (' + esc(INBOX_ERR) + '). Using your last numbers.' : 'Checking your bank emails… You can start typing.') : 'Filled in from last time. Change what moved.') + '</p></div>';
+    h += '<div class="tp-rise"><div class="eyebrow muted">Look back · ' + (CK.prev ? shortDate(CK.from) + ' to ' + shortDate(CK.to) : 'first check-in') + '</div><h2 class="flowh">Confirm your balances</h2><p class="muted flowp">' + (INBOX ? 'Filled in from your bank emails where they matched, and your last numbers elsewhere.' : Sync.sheet() ? (INBOX_ERR ? 'Couldn’t read your email (' + esc(INBOX_ERR) + '). Using your last numbers.' : 'Checking your bank emails… You can start typing.') : 'Filled in from last time. Change what moved.') + '</p></div>';
     var acc = S.accounts.filter(function (a) { return !a.closed; });
     if (!acc.length) h += '<div class="glass"><div class="empty">No accounts yet.<br><button class="tp-btn tp-sm" data-act="acctEdit">Add an account</button></div></div>';
     else h += '<div class="glass">' + acc.map(function (a) { var s = CK.src[a.id]; return '<div class="tp-row static"><span class="tp-t"><b>' + esc(a.name) + '</b><span>' + esc(s && s !== 'typed' ? s : KIND_NAME[a.kind] + ' · last ' + money(acctBal(a.id))) + '</span></span><div class="money balin"><input class="tp-input" data-ckbal="' + a.id + '" inputmode="decimal" value="' + esc(r2(CK.bal[a.id])) + '" aria-label="' + esc(a.name) + ' balance"></div></div>'; }).join('') + '</div>';
@@ -1988,27 +2048,28 @@ function updatePlay() {
 /* ---------- settings ---------- */
 PAGES.settings = function () {
   var p = S.profile.pay || {}, rm = S.profile.remind || {}, h = topBar('Settings', 'Tally ' + APP_VERSION, 'home');
+  h += accountSection();
   h += '<div class="tp-sect"><span>Look</span></div><div class="glass pad">' + lookHTML() + '</div>';
   var incs = S.incomes || [];
   h += '<div class="tp-sect"><span>Income</span><span class="sp"></span><button data-act="incEdit">+ Other income</button></div><div class="glass"><button class="tp-row" data-act="payEdit"><span class="tp-tile">' + TP.svg('calendar') + '</span><span class="tp-t"><b>' + (p.amt ? money(+p.amt) + ' ' + payLabel(p) : 'Not set') + '</b><span>' + (nextPayday() ? 'Next: ' + dowDate(nextPayday()) : 'Tap to set amount, how often, and the next date') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>' +
     incs.map(function (x) { var nx = eventsBetween(today(), addDays(today(), 400)).filter(function (e) { return e.inc === x.id; })[0], acct = byId(S.accounts, x.to); return '<button class="tp-row" data-act="incEdit" data-id="' + x.id + '"><span class="tp-tile">' + TP.svg('piggy') + '</span><span class="tp-t"><b style="' + (x.off ? 'opacity:.6' : '') + '">' + esc(x.name) + ' \u00b7 ' + money(+x.amount || 0) + '</b><span>' + esc(billEveryLabel(x) + (nx ? ' \u00b7 next ' + shortDate(nx.date) : '') + (acct ? ' \u00b7 into ' + acct.name : '') + (x.off ? ' \u00b7 paused' : '')) + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }).join('') + '</div>' +
     (incs.length ? '' : '<p class="small muted" style="margin:6px 2px 0">Side work, rent from a roommate, reimbursements, anything that comes in on a schedule.</p>');
-  h += '<div class="tp-sect"><span>Weekly reminder email</span></div><div class="glass pad"><label class="tp-opt" style="margin-bottom:6px"><input type="checkbox" id="r_on" ' + (rm.on !== false ? 'checked' : '') + '><span><b>Email me a check-in reminder</b><span>Includes the next 7 days of card and bill due dates. Your Sheet script sends it to your own Google account.</span></span></label>' +
+  h += '<div class="tp-sect"><span>Weekly reminder email</span></div><div class="glass pad"><label class="tp-opt" style="margin-bottom:6px"><input type="checkbox" id="r_on" ' + (rm.on !== false ? 'checked' : '') + '><span><b>Email me a check-in reminder</b><span>Includes the next 7 days of card and bill due dates. ' + (CLOUD.on() ? 'Sent to ' + esc(CLOUD.email()) + '.' : 'Your Sheet script sends it to your own Google account.') + '</span></span></label>' +
     '<label class="tp-label">Day</label>' + seg('r_day', [[0, 'Sun'], [1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat']], rm.day == null ? 0 : rm.day) +
     '<div class="fgrid"><div><label class="tp-label" for="r_hour">Around</label><select class="tp-input" id="r_hour">' + [6, 7, 8, 9, 10, 12, 15, 17, 18, 19, 20].map(function (x) { return '<option value="' + x + '"' + (+(rm.hour == null ? 9 : rm.hour) === x ? ' selected' : '') + '>' + (x % 12 || 12) + ':00 ' + (x < 12 ? 'AM' : 'PM') + '</option>'; }).join('') + '</select></div></div>' +
-    (Sync.on() ? '<p class="small muted">Google runs it within the hour you pick, in your Sheet’s time zone.</p>' : '<div class="tp-err">Needs sync turned on below. The email comes from your Sheet.</div>') + '<button class="tp-btn tp-sm mt" data-act="remindSave">Save reminder</button></div>';
+    (CLOUD.on() ? '<p class="small muted">Sent within the hour you pick, in this phone’s time zone (' + esc(tzName()) + ').</p>' : Sync.on() ? '<p class="small muted">Google runs it within the hour you pick, in your Sheet’s time zone.</p>' : '<div class="tp-err">Needs you signed in (Your account, at the top).</div>') + '<div class="flex mt"><button class="tp-btn tp-sm" data-act="remindSave">Save reminder</button>' + (CLOUD.on() ? '<button class="tp-btn tp-ghost tp-sm" data-act="remindTest">Send me one now</button>' : '') + '</div></div>';
   h += '<div class="tp-sect"><span>Your rules</span></div><div class="glass pad"><div class="fgrid">' + textField('s_name', 'Name', S.profile.name) + '<div style="grid-column:1/-1"><label class="tp-label">Week starts on</label>' + seg('s_ws', [[1, 'Mon'], [3, 'Wed'], [5, 'Fri'], [0, 'Sun']], S.profile.weekStart == null ? 1 : S.profile.weekStart) + '</div>' + textField('s_fun', 'Fun money, % of spare', S.profile.funPct == null ? 10 : S.profile.funPct, '10', 'number') + '</div>' +
     '<p class="small muted">Cushions (the balance an account shouldn’t drop below) are set per account on the Accounts tab.</p>' +
     '<label class="tp-opt"><input type="checkbox" id="s_aff" ' + (S.affirmOn !== false ? 'checked' : '') + '><span><b>Show the daily line on Home</b><span>Short reminders that money is a tool.</span></span></label>' +
     '<label class="tp-label" for="s_mine">Your own lines (one per line)</label><textarea class="tp-input" id="s_mine" placeholder="Write the thing you need to hear">' + esc((S.affirm || []).join('\n')) + '</textarea><button class="tp-btn tp-sm mt" data-act="profileSave">Save</button></div>';
   h += typeof bankSettings === 'function' ? bankSettings() : '';
-  h += '<div class="tp-sect"><span>Sync with your Google Sheet</span></div><div class="glass pad"><p class="small muted" style="margin-top:0">Keeps your phone and computer in step, sends the reminder email, reads bank alert emails, and fetches market data. Setup steps are in the README.</p>' +
+  if (!CLOUD.on() && (Sync.cfg.url || lsGet(LS_SHEET_OLD) == null)) h += '<details class="glass pad oldsheet"' + (Sync.cfg.url ? ' open' : '') + '><summary><b>Google Sheet sync</b> <span class="small muted">(the older setup)</span></summary><p class="small muted">Keeps your phone and computer in step through your own Sheet. Signing in above replaces this.</p>' +
     textField('y_url', 'Web app URL', Sync.cfg.url, 'https://script.google.com/macros/s/…/exec') + textField('y_key', 'Key', Sync.cfg.key, 'The key your script printed', 'password') +
     '<div class="flex mt"><button class="tp-btn tp-sm" data-act="syncConnect">' + (Sync.on() ? 'Reconnect' : 'Connect') + '</button>' + (Sync.on() ? '<button class="tp-btn tp-ghost tp-sm" data-act="syncNow">Sync now</button><button class="tp-btn tp-ghost tp-sm" data-act="inboxTest">Test email reading</button><button class="tp-btn tp-ghost tp-sm" data-act="copyLink">Copy my connect link</button><button class="tp-btn tp-ghost tp-sm" data-act="syncOff">Disconnect</button>' : '') + '</div>' +
-    '<p class="small muted mb0">Status: ' + esc({ off: 'not connected. Data is saved in this browser only.', ok: 'synced' + (META.lastSync ? ' ' + new Date(META.lastSync).toLocaleString() : ''), busy: 'syncing…', bad: Sync.msg || 'problem' }[Sync.status]) + '</p><div id="inboxOut"></div></div>';
+    '<p class="small muted mb0">Status: ' + esc({ off: 'not connected. Data is saved in this browser only.', ok: 'synced' + (META.lastSync ? ' ' + new Date(META.lastSync).toLocaleString() : ''), busy: 'syncing…', bad: Sync.msg || 'problem' }[Sync.status]) + '</p><div id="inboxOut"></div></details>';
   h += '<div class="tp-sect"><span>Your data</span></div><div class="glass pad"><div class="flex"><button class="tp-btn tp-ghost tp-sm" data-act="export">Download a backup</button><label class="tp-btn tp-ghost tp-sm" style="cursor:pointer">Load a file<input type="file" id="importFile" accept=".json,application/json" style="display:none"></label>' +
     (S.profile.setupDone ? '<button class="tp-btn tp-ghost tp-sm" data-act="setupShow">Show the setup checklist</button>' : '') + '</div>' +
-    '<p class="small muted">A backup is one file with everything. Loading a file replaces what’s here.</p><button class="tp-btn tp-danger tp-sm" data-act="wipe" data-label="Erase everything on this device">Erase everything on this device</button></div>';
+    '<p class="small muted">A backup is one file with everything. Loading a file replaces what’s here.' + (CLOUD.on() ? ' Erasing also signs this device out; your account keeps its copy.' : '') + '</p><button class="tp-btn tp-danger tp-sm" data-act="wipe" data-label="Erase everything on this device">Erase everything on this device</button></div>';
   return h;
 };
 function lookHTML() {
@@ -2017,13 +2078,46 @@ function lookHTML() {
 }
 
 /* ---------- first-run wizard ---------- */
+/* sign in with a code from your email: used by the first-run screens and Settings */
+var SIGN = { email: '', sent: false, err: '' };
+function signInHTML(block) {
+  var err = SIGN.err ? '<div class="tp-err">' + esc(SIGN.err) + '</div>' : '';
+  if (!SIGN.sent) return '<div><label class="tp-label" for="si_email">Email</label><input class="tp-input" id="si_email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" value="' + esc(SIGN.email || CLOUD.email()) + '" placeholder="you@example.com"></div>' + err +
+    '<button class="tp-btn' + (block ? ' tp-block' : ' tp-sm') + ' mt" data-act="siSend">Email me a code</button>';
+  return '<p class="small" style="margin:0 0 6px">We sent a code to <b>' + esc(SIGN.email) + '</b>. It can take a minute; check spam too.</p><div><label class="tp-label" for="si_code">Code from the email</label><input class="tp-input sicode" id="si_code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder=""></div>' + err +
+    '<button class="tp-btn' + (block ? ' tp-block' : ' tp-sm') + ' mt" data-act="siVerify">Sign in</button><div class="flex mt"><button class="chip" data-act="siSend" data-again="1">Send a new code</button><button class="chip" data-act="siBack">Different email</button></div>';
+}
+function accountSection() {
+  var h = '<div class="tp-sect"><span>Your account</span></div><div class="glass pad">';
+  if (!CLOUD.on()) return h + '<p class="small" style="margin-top:0">' + (CLOUD.lost ? '<b>You were signed out.</b> Sign in again to keep syncing. ' : '') + 'Sign in to keep your phone and computer in step, get the weekly email, connect your banks, and share Together. No password: we email you a code.' +
+    (Sync.cfg.url ? ' Your Google Sheet data comes with you; the Sheet stays as it is as a backup.' : '') + '</p>' + signInHTML(false) + '</div>';
+  var sheetOld = lsGet(LS_SHEET_OLD);
+  return h + '<div class="kv" style="margin-top:0"><span>Signed in as</span><b>' + esc(CLOUD.email()) + '</b></div>' +
+    '<p class="small muted">Status: ' + esc({ off: 'not syncing', ok: 'synced' + (META.lastSync ? ' ' + new Date(META.lastSync).toLocaleString() : ''), busy: 'syncing…', bad: Sync.msg || 'problem' }[Sync.status]) + '</p>' +
+    '<div class="flex"><button class="tp-btn tp-ghost tp-sm" data-act="syncNow">Sync now</button><button class="tp-btn tp-ghost tp-sm" data-act="signOut" data-label="Sign out of this device">Sign out of this device</button></div>' +
+    (sheetOld && sheetOld.url ? '<p class="small muted mb0">Your old Google Sheet isn’t used anymore. It still has a copy of your data from before you signed in.</p>' : '') + '</div>';
+}
+function signedIn() {
+  /* the Sheet becomes a backup: this device stops syncing to it */
+  if (Sync.cfg.url) { lsSet(LS_SHEET_OLD, Sync.cfg); Sync.cfg = { url: '', key: '' }; lsSet(LS_SYNC, Sync.cfg); }
+  SIGN = { email: '', sent: false, err: '' };
+  return Sync.start().then(function () { if (typeof shBoot === 'function') shBoot(); if (typeof BANK !== 'undefined') BANK.afterSignIn(); });
+}
 function wizard() {
+  if (CLOUD.on() && WIZ.step === 1) WIZ.step = 2;
+  var st = WIZ.step, cloud = CLOUD.on();
+  var titles = ['Money, on your terms.', 'What should Tally call you?', 'Pick a look.', 'How do you want to start?'];
+  var subs = ['A one-minute weekly check-in. Reminders before card dates. Goals you can see.', 'Signed in as ' + CLOUD.email() + '.', 'Change it any time from the dots on Home.', cloud ? 'Everything saves to your account.' : 'Everything stays in this browser.'];
+  if (st > 1 && !cloud) subs[1] = 'Using Tally on this device only. You can sign in later from Settings.';
   var h = '<main class="tp-wrap" style="padding-top:40px"><div class="flex" style="margin-bottom:24px"><span class="brandmark"></span><b class="disp" style="font-size:22px">Tally</b></div>' +
-    '<h2 class="disp" style="font-size:34px;line-height:1.1;margin:0 0 6px">' + ['Money, on your terms.', 'Pick a look.', 'How do you want to start?'][WIZ.step - 1] + '</h2><p class="muted" style="margin:0 0 18px">' + ['A one-minute weekly check-in. Reminders before card dates. Goals you can see.', 'Change it any time from the dots on Home.', 'Everything stays in this browser unless you connect your own Google Sheet.'][WIZ.step - 1] + '</p>' +
-    '<div class="tp-prog" style="margin-bottom:16px"><b>Step ' + WIZ.step + ' of 3</b><span class="tp-bar" data-fill="' + (WIZ.step / 3 * 100) + '"><i></i></span></div><div class="glass pad tp-rise">';
-  if (WIZ.step === 1) h += textField('z_name', 'What should Tally call you?', WIZ.name, 'First name') + '<label class="tp-label">Your week starts on</label>' + seg('z_ws', [[1, 'Mon'], [3, 'Wed'], [5, 'Fri'], [0, 'Sun']], WIZ.ws == null ? 1 : WIZ.ws) + '<div class="small muted" style="margin-top:4px">The day you usually get paid or sit down with your money.</div><button class="tp-btn tp-block mt" data-act="wizNext">Next</button><div id="z_err"></div>';
-  else if (WIZ.step === 2) h += lookHTML() + '<div class="acts flex mt"><button class="tp-btn tp-ghost grow" data-act="wizBack">Back</button><button class="tp-btn grow" data-act="wizNext">Next</button></div>';
-  else h += [['fresh', 'Start fresh', 'Tally walks you through payday, accounts, cards, and bills.'], ['file', 'Load my file', 'A Tally backup, or the file made from your old spreadsheet.'], ['sheet', 'Connect my Google Sheet', 'You already set up sync on another device.'], ['sample', 'Look around with sample data', 'Made-up numbers. Erase them when you’re ready.']].map(function (o) { return '<button class="tp-opt ' + (WIZ.how === o[0] ? 'tp-on' : '') + '" data-act="wizHow" data-a="' + o[0] + '"><span><b>' + o[1] + '</b><span>' + o[2] + '</span></span></button>'; }).join('') +
+    '<h2 class="disp" style="font-size:34px;line-height:1.1;margin:0 0 6px">' + titles[st - 1] + '</h2><p class="muted" style="margin:0 0 18px">' + esc(subs[st - 1]) + '</p>' +
+    (st > 1 ? '<div class="tp-prog" style="margin-bottom:16px"><b>Step ' + (st - 1) + ' of 3</b><span class="tp-bar" data-fill="' + ((st - 1) / 3 * 100) + '"><i></i></span></div>' : '') + '<div class="glass pad tp-rise">';
+  if (st === 1) {
+    h += '<b style="font-size:17px">Sign in</b><p class="small muted" style="margin:4px 0 10px">Type your email and we’ll send you a code. No password. Same email on every device.</p>' + signInHTML(true) +
+      '</div><div class="glass pad"><b>Or use Tally on this device only</b><p class="small muted" style="margin:4px 0 10px">Nothing leaves this browser. You can sign in later from Settings.</p><button class="tp-btn tp-ghost tp-block" data-act="wizLocal">Continue without an account</button>';
+  } else if (st === 2) h += textField('z_name', 'Your name', WIZ.name, 'First name') + '<label class="tp-label">Your week starts on</label>' + seg('z_ws', [[1, 'Mon'], [3, 'Wed'], [5, 'Fri'], [0, 'Sun']], WIZ.ws == null ? 1 : WIZ.ws) + '<div class="small muted" style="margin-top:4px">The day you usually get paid or sit down with your money.</div><div id="z_err"></div><div class="acts flex mt">' + (cloud ? '' : '<button class="tp-btn tp-ghost grow" data-act="wizBack">Back</button>') + '<button class="tp-btn grow" data-act="wizNext">Next</button></div>';
+  else if (st === 3) h += lookHTML() + '<div class="acts flex mt"><button class="tp-btn tp-ghost grow" data-act="wizBack">Back</button><button class="tp-btn grow" data-act="wizNext">Next</button></div>';
+  else h += [['fresh', 'Start fresh', 'Tally walks you through payday, accounts, cards, and bills.'], ['file', 'Load my file', 'A Tally backup, or the file made from your old spreadsheet.']].concat(cloud ? [] : [['sheet', 'Connect my Google Sheet', 'The older setup, if you already use it on another device.']], [['sample', 'Look around with sample data', 'Made-up numbers. Erase them when you’re ready.']]).map(function (o) { return '<button class="tp-opt ' + (WIZ.how === o[0] ? 'tp-on' : '') + '" data-act="wizHow" data-a="' + o[0] + '"><span><b>' + o[1] + '</b><span>' + o[2] + '</span></span></button>'; }).join('') +
     (WIZ.how === 'file' ? '<label class="tp-btn tp-ghost tp-block" style="cursor:pointer">Choose the file<input type="file" id="importFile" accept=".json,application/json" style="display:none"></label>' : '') +
     (WIZ.how === 'sheet' ? textField('y_url', 'Web app URL', '', 'https://script.google.com/macros/s/…/exec') + textField('y_key', 'Key', '', '', 'password') : '') +
     '<div id="z_err"></div><div class="acts flex mt"><button class="tp-btn tp-ghost grow" data-act="wizBack">Back</button>' + (WIZ.how === 'file' ? '' : '<button class="tp-btn grow" data-act="wizDone">' + (WIZ.how === 'sheet' ? 'Connect' : 'Start') + '</button>') + '</div>';
@@ -2233,7 +2327,8 @@ var ACT = {
       '<div id="p_err"></div><div class="acts"><button class="tp-btn" data-act="paySave">Save</button></div>');
   },
   paySave: function () { if (!val('p_next')) { document.getElementById('p_err').innerHTML = '<div class="tp-err">Pick the next payday.</div>'; return; } var apct = Math.max(0, Math.min(100, num(val('p_apct')))); S.profile.pay = { amt: r2(num(val('p_amt'))), every: +val('p_every') || 7, next: val('p_next'), auto: apct && val('p_ato') ? { pct: apct, to: val('p_ato') } : null }; closeSheet(); render._keep = true; save(); },
-  remindSave: function () { S.profile.remind = { on: checked('r_on'), day: +val('r_day'), hour: +val('r_hour') }; render._keep = true; save(); toast(!S.profile.remind.on ? 'Reminder off' : Sync.on() ? 'Saved. The email goes out ' + DOW[S.profile.remind.day] + 's.' : 'Saved. Turn on sync for the email to send.'); },
+  remindSave: function () { S.profile.remind = { on: checked('r_on'), day: +val('r_day'), hour: +val('r_hour') }; render._keep = true; save(); toast(!S.profile.remind.on ? 'Reminder off' : Sync.on() ? 'Saved. The email goes out ' + DOW[S.profile.remind.day] + 's.' : 'Saved. Sign in for the email to send.'); },
+  remindTest: function () { TP.busy(true, 'Sending', 'A sample reminder to ' + CLOUD.email() + '.'); Sync.push().then(function () { return CLOUD.fn('remind', { test: true }); }).then(function (j) { TP.busy(false); toast(j && j.ok ? 'Sent to ' + j.to + '. Check your inbox.' : 'Didn’t send: ' + ((j && j.error) || 'unknown')); }).catch(function (e) { TP.busy(false); toast('Didn’t send: ' + e.message); }); },
   /* goals */
   goalEdit: function (d) {
     var g = d.id ? byId(S.goals, d.id) : { id: '', name: '', kind: d.kind || 'save', target: '', acct: '', manual: '', due: '', note: '', trip: {} }, t = g.trip || {};
@@ -2290,10 +2385,10 @@ var ACT = {
   conflictRemote: function () { closeSheet(); Sync.adopt(askConflict.remote); },
   export: function () { download('tally-backup-' + today() + '.json', JSON.stringify(S, null, 1)); },
   ics: function () { if (!S.cards.length) { toast('Add a card first'); return; } download('tally-reminders.ics', buildICS(false), 'text/calendar'); toast('Import once. Importing twice makes duplicates.'); },
-  wipe: function (d, el) { armDelete(el, function () { lsDel(LS_STATE); lsDel(LS_META); lsDel(LS_MKT); S = normalize(null); META = { dirty: false, lastSync: '' }; WIZ = { step: 1, name: '', how: 'fresh', ws: 1 }; VIEW = 'home'; render(); }); },
+  wipe: function (d, el) { armDelete(el, function () { if (CLOUD.on()) CLOUD.signOut(); Sync.set('off'); lsDel(LS_STATE); lsDel(LS_META); lsDel(LS_MKT); S = normalize(null); META = { dirty: false, lastSync: '' }; WIZ = { step: 1, name: '', how: 'fresh', ws: 1 }; VIEW = 'home'; render(); }); },
   /* wizard */
-  wizNext: function () { if (WIZ.step === 1) { var n = val('z_name').trim(); if (!n) { document.getElementById('z_err').innerHTML = '<div class="tp-err">Type a name to continue.</div>'; return; } WIZ.name = n; WIZ.ws = +val('z_ws'); } WIZ.step++; render(); },
-  wizBack: function () { WIZ.step = Math.max(1, WIZ.step - 1); render(); },
+  wizNext: function () { if (WIZ.step === 2) { var n = val('z_name').trim(); if (!n) { document.getElementById('z_err').innerHTML = '<div class="tp-err">Type a name to continue.</div>'; return; } WIZ.name = n; WIZ.ws = +val('z_ws'); } WIZ.step++; render(); },
+  wizBack: function () { WIZ.step = Math.max(CLOUD.on() ? 2 : 1, WIZ.step - 1); render(); },
   wizHow: function (d) { WIZ.how = d.a; render(); },
   wizDone: function () {
     if (WIZ.how === 'sample') { S = sampleState(); S.profile.name = WIZ.name; S.profile.weekStart = WIZ.ws; VIEW = 'home'; save(); return; }
@@ -2341,21 +2436,45 @@ document.addEventListener('input', function (e) {
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
 window.addEventListener('focus', function () { if (Sync.on() && Sync.status !== 'busy' && VIEW !== 'checkin' && Date.now() - (window._lastPull || 0) > 60000) { window._lastPull = Date.now(); Sync.start(); } });
 
+/* sign-in actions (ACT exists by now) */
+ACT.siSend = function (d) {
+  var e = d.again ? SIGN.email : (val('si_email') || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { SIGN.err = 'Type your email address.'; render._keep = true; render(); return; }
+  SIGN.email = e; SIGN.err = ''; TP.busy(true, 'Sending your code', e);
+  CLOUD.sendCode(e).then(function () { TP.busy(false); SIGN.sent = true; render._keep = true; render(); var c = document.getElementById('si_code'); if (c) c.focus(); if (d.again) toast('New code sent.'); })
+    .catch(function (x) { TP.busy(false); SIGN.err = /after \d+ seconds|rate limit/i.test(x.message) ? 'Wait a minute, then try again. (' + x.message + ')' : x.message || 'Couldn’t send the code'; render._keep = true; render(); });
+};
+ACT.siBack = function () { SIGN.sent = false; SIGN.err = ''; render._keep = true; render(); };
+ACT.siVerify = function () {
+  var c = (val('si_code') || '').replace(/\D/g, ''); if (c.length < 6) { SIGN.err = 'Type the code from the email.'; render._keep = true; render(); return; }
+  TP.busy(true, 'Signing in', 'Bringing your data in.');
+  CLOUD.verify(SIGN.email, c).then(function () { return signedIn(); }).then(function () {
+    TP.busy(false);
+    if (!S.profile.name) { WIZ.step = 2; render(); return; }
+    toast('Signed in as ' + CLOUD.email()); if (VIEW !== 'settings') VIEW = 'home'; render();
+  }).catch(function (x) { TP.busy(false); SIGN.err = /expired|invalid/i.test(x.message) ? 'That code didn’t work or has expired. Send a new one.' : x.message || 'Couldn’t sign in'; render._keep = true; render(); });
+};
+ACT.signOut = function (d, el) { armDelete(el, function () { CLOUD.signOut(); Sync.set('off'); toast('Signed out. Your data stays on this device until you erase it.'); rerender(); }); };
+
+ACT.wizLocal = function () { WIZ.step = 2; render(); };
 
 /* Tally — Together: a shared space for two people (shared bills, who paid, paybacks, shared goals).
-   Lives in its own hidden tab of the owner's Sheet, opened with a key that can't reach personal data. */
+   With accounts: a row in "spaces" that only its two members can read; saves merge on the server.
+   Older setup: its own hidden tab of the owner's Sheet, opened with a key that can't reach personal data. */
 var LS_SHARED = 'tally.shared', LS_SHDOC = 'tally.shared.doc';
 TP.icons.people = '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2c3 .2 5.5 2.6 5.5 5.8"/>';
 var SH = {
   cfg: lsGet(LS_SHARED) || null, doc: lsGet(LS_SHDOC) || null, status: 'off', msg: '', timer: null,
-  on: function () { return !!(this.cfg && this.cfg.url && this.cfg.key && this.cfg.me); },
+  on: function () { var c = this.cfg; return !!(c && c.me && (c.cloud ? c.sid && CLOUD.on() : c.url && c.key)); },
+  cloud: function () { return !!(this.cfg && this.cfg.cloud); },
   get: function (params) { var c = this.cfg, q = Object.keys(params).map(function (k) { return k + '=' + encodeURIComponent(params[k]); }).join('&'); return fetch(c.url + (c.url.indexOf('?') >= 0 ? '&' : '?') + q, { redirect: 'follow' }).then(function (r) { return r.json(); }); },
   post: function (body) { return fetch(this.cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }); },
   keep: function () { lsSet(LS_SHDOC, this.doc); },
   pull: function () {
     var self = this; if (!self.on()) return Promise.resolve();
     self.status = 'busy';
-    return self.get({ action: 'sload', key: self.cfg.key }).then(function (j) {
+    var get = self.cloud() ? CLOUD.api('GET', '/rest/v1/spaces?id=eq.' + encodeURIComponent(self.cfg.sid) + '&select=state').then(function (rows) { if (!rows || !rows[0]) throw new Error('You’re not in this shared space anymore'); return { ok: true, state: rows[0].state }; }) : self.get({ action: 'sload', key: self.cfg.key });
+    return get.then(function (j) {
       if (!j.ok) throw new Error(j.error || 'Shared space didn’t answer');
       var before = JSON.stringify(self.doc || {});
       self.doc = shMerge(self.doc, j.state); self.keep(); self.status = 'ok';
@@ -2366,11 +2485,15 @@ var SH = {
   push: function () {
     var self = this; if (!self.on() || !self.doc) return Promise.resolve();
     self.doc.updatedAt = new Date().toISOString(); self.keep();
+    if (self.cloud()) return CLOUD.rpc('space_save', { sid: self.cfg.sid, doc: self.doc }).then(function (st) {
+      var before = JSON.stringify(shStrip(self.doc)); self.doc = shMerge(self.doc, st); self.keep(); self.status = 'ok';
+      if (JSON.stringify(shStrip(self.doc)) !== before && (VIEW === 'together' || VIEW === 'home')) rerender();
+    }).catch(function (e) { self.status = 'bad'; self.msg = e.message || 'Offline'; });
     return self.post({ action: 'ssave', key: self.cfg.key, state: self.doc }).then(function (j) { if (!j.ok) throw new Error(j.error || 'Save failed'); self.status = 'ok'; })
       .catch(function (e) { self.status = 'bad'; self.msg = e.message || 'Offline'; });
   },
   /* pull first, merge, then push, so two phones editing at once both keep their changes */
-  sync: function () { var self = this; clearTimeout(self.timer); self.timer = setTimeout(function () { self.pull().then(function () { return self.push(); }); }, 900); }
+  sync: function () { var self = this; clearTimeout(self.timer); self.timer = setTimeout(function () { if (self.cloud()) self.push(); else self.pull().then(function () { return self.push(); }); }, 900); }
 };
 function shStrip(d) { if (!d) return null; var c = JSON.parse(JSON.stringify(d)); delete c.updatedAt; return c; }
 function shBlank() { return { v: 1, updatedAt: '', people: [], exp: [], bills: [], goals: [], contrib: [], settle: [] }; }
@@ -2440,12 +2563,18 @@ function togetherPage() {
     return '<button class="tp-row" data-act="shExp" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Shared expense') + '</b><span>' + esc(shPerson(x.payer).name) + ' paid · ' + splitLabel(x) + (other ? ' · ' + (x.payer === SH.cfg.me ? shThem().name + ' owes ' : 'you owe ') + money(other, 1) : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>';
   }).join('') : '<div class="empty">Shared expenses and paybacks show up here for both of you.</div>') + '</div>';
   /* invite / settings */
-  h += '<div class="tp-sect"><span>Space settings</span></div><div class="glass pad"><div class="flex">' + (SH.cfg.owner ? '<button class="tp-btn tp-sm" data-act="shInvite">Copy invite link for ' + esc(them.name) + '</button>' : '') + '<button class="tp-btn tp-ghost tp-sm" data-act="shNames">Names</button><button class="tp-btn tp-ghost tp-sm" data-act="shLeave">Disconnect this device</button></div><p class="small muted mb0">Only what you add here is shared. Your own accounts, cards, and spending stay private.</p></div>';
+  if (!SH.cloud() && CLOUD.on()) h += '<div class="glass pad"><b>Move Together to your account</b><p class="small muted">Right now this space lives in your Google Sheet. Moving it keeps everything here and gives you an invite code for ' + esc(them.name) + ' to join with her own account.</p><div id="sh_err"></div><button class="tp-btn tp-sm" data-act="shMove">Move it</button></div>';
+  var code = SH.cloud() && SH.cfg.invite ? SH.cfg.invite : '';
+  h += '<div class="tp-sect"><span>Space settings</span></div><div class="glass pad">' +
+    (code ? '<p class="small" style="margin-top:0">' + esc(them.name) + ' hasn’t joined yet. In Tally she signs in, opens Together, and types this code:</p><div class="invcode">' + esc(code.slice(0, 4) + ' ' + code.slice(4)) + '</div>' : '') +
+    '<div class="flex">' + (SH.cfg.owner && (!SH.cloud() || code) ? '<button class="tp-btn tp-sm" data-act="shInvite">Copy invite ' + (code ? 'link' : 'link for ' + esc(them.name)) + '</button>' : '') + '<button class="tp-btn tp-ghost tp-sm" data-act="shNames">Names</button><button class="tp-btn tp-ghost tp-sm" data-act="shLeave">' + (SH.cloud() ? 'Leave this space' : 'Disconnect this device') + '</button></div><p class="small muted mb0">Only what you add here is shared. Your own accounts, cards, and spending stay private.</p></div>';
   return h;
 }
 function togetherSetup() {
   var h = '<div class="glass hero tp-rise"><span class="label">Together</span><div class="disp" style="font-size:24px;font-weight:700;line-height:1.25;margin:6px 0 8px">One place for what you two share.</div><div class="heroSub">Shared bills, who paid, paybacks, and shared goals. Neither of you sees the other’s accounts.</div></div>';
-  if (!Sync.on()) return h + '<div class="glass pad"><b>Two ways in</b><ul class="small" style="margin:8px 0 0;padding-left:18px"><li>Got an invite link? Open it on this phone and it connects you.</li><li>Starting it yourself? Turn on sync with your Google Sheet first (Settings), then come back.</li></ul></div>';
+  if (CLOUD.on()) return h + '<div class="glass pad"><b>Got an invite code?</b><p class="small muted">The one your partner sent you, 8 letters and numbers.</p>' + textField('sh_code', 'Invite code', SH.pending || '', 'ABCD 2345') + '<div id="sh_jerr"></div><button class="tp-btn tp-block mt" data-act="shJoin">Join</button></div>' +
+    '<div class="glass pad"><b>Or start a shared space</b><p class="small muted">You get an invite code to send your partner. They join with their own account.</p>' + textField('sh_me', 'Your name', S.profile.name || '', '') + textField('sh_them', 'Their name', '', 'e.g. Fernanda') + '<div id="sh_err"></div><button class="tp-btn tp-block mt" data-act="shStart">Start it</button></div>';
+  if (!Sync.on()) return h + '<div class="glass pad"><b>Sign in first</b><p class="small muted mb0">Together needs an account so the two of you can see the same space. Settings › Your account. It takes a minute and there’s no password.</p><button class="tp-btn tp-sm mt" data-act="go" data-a="settings">Go to Settings</button></div>';
   return h + '<div class="glass pad"><b>Start a shared space</b><p class="small muted">It lives in a separate, hidden tab of your Sheet with its own key. The invite link only opens that tab.</p>' + textField('sh_me', 'Your name', S.profile.name || '', '') + textField('sh_them', 'Their name', '', 'e.g. Fernanda') + '<div id="sh_err"></div><button class="tp-btn tp-block mt" data-act="shStart">Start it</button><p class="small muted mb0">Needs the latest Sheet script (it adds the shared tab and key).</p></div>';
 }
 PAGES.together = togetherPage;
@@ -2477,6 +2606,12 @@ function shHint() {
 }
 ACT.shStart = function () {
   var a = val('sh_me').trim(), b = val('sh_them').trim(); if (!a || !b) { document.getElementById('sh_err').innerHTML = '<div class="tp-err">Type both names.</div>'; return; }
+  if (CLOUD.on()) {
+    var t = new Date().toISOString(), doc = shBlank(); doc.people = [{ id: 'p1', name: a, upd: t }, { id: 'p2', name: b, upd: t }]; doc.updatedAt = t;
+    TP.busy(true, 'Setting up', 'Making your shared space.');
+    return CLOUD.rpc('space_create', { doc: doc, me: 'p1' }).then(function (j) { shTake(j); TP.busy(false); rerender(); toast('Shared space ready. Send ' + b + ' the invite code.'); })
+      .catch(function (e) { TP.busy(false); document.getElementById('sh_err').innerHTML = '<div class="tp-err">' + esc(e.message) + '</div>'; });
+  }
   TP.busy(true, 'Setting up', 'Making the shared tab in your Sheet.');
   Sync.get({ action: 'sharedKey', key: Sync.cfg.key }).then(function (j) {
     if (!j.ok) throw new Error(j.error === 'Unknown action' || !j.key ? 'Update the Sheet script first (it adds the shared tab).' : j.error);
@@ -2489,9 +2624,24 @@ ACT.shStart = function () {
   }).then(function () { TP.busy(false); rerender(); toast('Shared space ready. Copy the invite link at the bottom.'); })
     .catch(function (e) { TP.busy(false); SH.cfg = null; lsDel(LS_SHARED); document.getElementById('sh_err').innerHTML = '<div class="tp-err">' + esc(e.message || 'Couldn’t reach your Sheet') + '</div>'; });
 };
-function shInviteLink() { var t = shThem(); return location.href.split('#')[0].split('?')[0] + '#join=' + btoa(JSON.stringify({ u: SH.cfg.url, k: SH.cfg.key, p: t.id })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function shTake(j) { var same = SH.cfg && (SH.cfg.sid === j.id || !SH.cfg.cloud); SH.cfg = { cloud: true, sid: j.id, me: j.person, owner: !!j.owner, invite: j.invite || '' }; lsSet(LS_SHARED, SH.cfg); SH.doc = shMerge(same ? SH.doc : null, j.state) || shBlank(); SH.keep(); SH.status = 'ok'; }
+function shInviteLink() { if (SH.cloud()) return appUrl() + '#invite=' + SH.cfg.invite; var t = shThem(); return location.href.split('#')[0].split('?')[0] + '#join=' + btoa(JSON.stringify({ u: SH.cfg.url, k: SH.cfg.key, p: t.id })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 ACT.shInvite = function () { var l = shInviteLink(), done = function () { toast('Invite link copied. Send it to ' + shThem().name + ' privately. It only opens the shared space.'); }; if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(l).then(done, function () { prompt('Copy this link', l); }); else prompt('Copy this link', l); };
-ACT.shLeave = function (d, el) { el.setAttribute('data-label', 'Disconnect this device'); armDelete(el, function () { SH.cfg = null; SH.doc = null; lsDel(LS_SHARED); lsDel(LS_SHDOC); rerender(); }); };
+ACT.shLeave = function (d, el) { var cl = SH.cloud(), sid = cl && SH.cfg.sid; el.setAttribute('data-label', cl ? 'Leave this space' : 'Disconnect this device'); armDelete(el, function () { if (cl) CLOUD.rpc('space_leave', { sid: sid }).catch(function () {}); SH.cfg = null; SH.doc = null; lsDel(LS_SHARED); lsDel(LS_SHDOC); rerender(); }); };
+ACT.sheetClose = function () { closeSheet(); };
+ACT.shJoin = function () {
+  var c = (val('sh_code') || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase(), box = document.getElementById('sh_jerr');
+  if (c.length !== 8) { box.innerHTML = '<div class="tp-err">The code is 8 letters and numbers.</div>'; return; }
+  TP.busy(true, 'Joining', 'Connecting you to the shared space.');
+  CLOUD.rpc('space_join', { code: c }).then(function (j) { TP.busy(false); SH.pending = ''; lsDel(LS_INVITE); shTake(j); rerender(); toast('You’re in. This is your shared space with ' + shThem().name + '.'); })
+    .catch(function (e) { TP.busy(false); box.innerHTML = '<div class="tp-err">' + esc(e.message) + '</div>'; });
+};
+ACT.shMove = function () {
+  if (!SH.doc) return; TP.busy(true, 'Moving Together', 'Copying your shared space to your account.');
+  var doc = JSON.parse(JSON.stringify(SH.doc)); doc.updatedAt = new Date().toISOString();
+  CLOUD.rpc('space_create', { doc: doc, me: SH.cfg.me || 'p1' }).then(function (j) { TP.busy(false); shTake(j); rerender(); toast('Moved. Send ' + shThem().name + ' the invite code.'); })
+    .catch(function (e) { TP.busy(false); document.getElementById('sh_err').innerHTML = '<div class="tp-err">' + esc(e.message) + '</div>'; });
+};
 ACT.shNames = function () { var me = shMe(), th = shThem(); sheet(sxHead('Names') + textField('sn_a', 'You', me.name) + textField('sn_b', 'Them', th.name) + '<div class="acts"><button class="tp-btn" data-act="shNamesSave">Save</button></div>'); };
 ACT.shNamesSave = function () { var me = shMe(), th = shThem(); me.name = val('sn_a').trim() || me.name; th.name = val('sn_b').trim() || th.name; shTouch('people', me); shTouch('people', th); closeSheet(); rerender(); };
 ACT.shExp = function (d) { var x = d.id ? shLive('exp').filter(function (e) { return e.id === d.id; })[0] : null; SHX = x ? JSON.parse(JSON.stringify(x)) : { payer: SH.cfg.me, split: 'half', date: today(), cat: '', src: ((S.profile.last || {}).src) || ((srcList()[0] || {}).id) }; shExpSheet(); };
@@ -2529,12 +2679,35 @@ document.addEventListener('input', function (e) { if (/^sx_/.test(e.target.id ||
 document.addEventListener('click', function (e) { var b = e.target.closest ? e.target.closest('[data-act=seg]') : null; if (b && /^sx_/.test(b.getAttribute('data-id') || '')) setTimeout(shHint, 0); });
 
 /* ---------- joining from an invite link ---------- */
+var LS_INVITE = 'tally.invite';
+SH.pending = lsGet(LS_INVITE) || '';
+(function () {
+  var m = /#invite=([A-Za-z0-9]{8})/.exec(location.hash || ''); if (!m) return;
+  SH.pending = m[1].toUpperCase(); lsSet(LS_INVITE, SH.pending); SH.fromLink = true;
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; }
+})();
+function shInviteNote() {
+  var c = SH.pending; if (!c || !SH.fromLink) return; SH.fromLink = false;
+  sheet(sxHead('You’re invited to Together') + '<p>Your invite code:</p><div class="invcode">' + esc(c.slice(0, 4) + ' ' + c.slice(4)) + '</div>' +
+    (CLOUD.on() ? '<p class="small muted">Joining now…</p>' : '<p class="small">Sign in first. You’ll join automatically right after.</p><p class="small muted">Use Tally from your Home Screen icon? Open it there, sign in, go to Together, and type this code. Links open in Safari, which keeps a separate sign-in.</p>') +
+    '<div class="acts"><button class="tp-btn" data-act="sheetClose">OK</button></div>');
+}
 (function () {
   var m = /#join=([A-Za-z0-9_\-]+)/.exec(location.hash || ''); if (!m) return;
   try { var o = JSON.parse(atob(m[1].replace(/-/g, '+').replace(/_/g, '/'))); if (/^https:\/\/script\.google\.com\//.test(o.u) && o.k && o.p) { SH.cfg = { url: o.u, key: o.k, me: o.p, owner: false }; lsSet(LS_SHARED, SH.cfg); SH.joined = true; } } catch (e) {}
   try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { location.hash = ''; }
 })();
 function shBoot() {
+  if (CLOUD.on() && (!SH.cfg || SH.cloud())) {
+    if (SH.pending && !(SH.cfg && SH.cfg.sid)) {
+      shInviteNote();
+      return CLOUD.rpc('space_join', { code: SH.pending }).then(function (j) { SH.pending = ''; lsDel(LS_INVITE); closeSheet(); shTake(j); if (S.profile.name) { VIEW = 'together'; render(); } toast('You’re in. This is your shared space with ' + shThem().name + '.'); })
+        .catch(function (e) { closeSheet(); toast('Couldn’t join: ' + e.message); });
+    }
+    return CLOUD.rpc('space_mine', {}).then(function (j) { if (j && j.id) { var had = JSON.stringify(SH.doc || null); shTake(j); if (SH.pending) { SH.pending = ''; lsDel(LS_INVITE); } if (JSON.stringify(SH.doc) !== had && (VIEW === 'together' || VIEW === 'home')) rerender(); } else if (SH.cloud()) { SH.cfg = null; SH.doc = null; lsDel(LS_SHARED); lsDel(LS_SHDOC); } })
+      .catch(function (e) { SH.status = 'bad'; SH.msg = e.message || 'Offline'; });
+  }
+  shInviteNote();
   if (!SH.on()) return;
   SH.pull().then(function () {
     if (SH.joined) {
@@ -2619,19 +2792,31 @@ ACT.calMove = function (d) { var y = +CAL.ym.slice(0, 4), m = +CAL.ym.slice(5) -
 ACT.calToday = function () { CAL.ym = null; CAL.sel = null; rerender(); };
 ACT.calSel = function (d) { CAL.sel = d.a; rerender(); };
 
-/* ---------- bank connection (SimpleFIN through your Sheet script) ---------- */
+/* ---------- bank connection (SimpleFIN through your account's server, or the older Sheet script) ---------- */
 var LS_BANK = 'tally.bank';
 var BANK = {
   data: lsGet(LS_BANK) || null, busy: false, err: '',
-  on: function () { return !!(S.profile.bank && S.profile.bank.on && Sync.on()); },
+  on: function () { var b = S.profile.bank; return !!(b && b.on && (CLOUD.on() ? b.cloud : Sync.sheet())); },
+  /* one door for both setups: get (balances + transactions), claim (a setup token), off */
+  call: function (action, extra) {
+    var body = Object.assign({ action: action }, extra || {});
+    if (CLOUD.on()) return CLOUD.fn('bank', body);
+    if (action === 'get') return Sync.get({ action: 'bank', key: Sync.cfg.key, force: body.force ? '1' : '0' });
+    return fetch(Sync.cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: action === 'claim' ? 'bankClaim' : 'bankOff', key: Sync.cfg.key, token: body.token }) }).then(function (r) { return r.json(); });
+  },
+  /* after signing in: if another device already moved the bank link to the account, use it */
+  afterSignIn: function () {
+    var b = S.profile.bank, self = this; if (!CLOUD.on() || !b || !b.on || b.cloud) return;
+    self.call('get', { force: false }).then(function (j) { if (j && j.ok && j.connected) { b.cloud = true; self.data = j; lsSet(LS_BANK, j); save(true); self.apply(); } }).catch(function () {});
+  },
   refresh: function (force) {
     var self = this; if (!self.on() || self.busy) return Promise.resolve();
     if (!force && self.data && self.data.at && Date.now() - Date.parse(self.data.at) < 6 * 3600000) return Promise.resolve();
     self.busy = true; self.err = '';
-    return Sync.get({ action: 'bank', key: Sync.cfg.key, force: force ? '1' : '0' }).then(function (j) {
+    return self.call('get', { force: !!force }).then(function (j) {
       self.busy = false;
       if (!j.ok) { self.err = j.error || 'Bank refresh failed'; return; }
-      if (!j.connected) { self.err = 'Not connected in your Sheet script.'; return; }
+      if (!j.connected) { self.err = CLOUD.on() ? 'Your bank isn’t connected to your account yet.' : 'Not connected in your Sheet script.'; return; }
       self.data = j; lsSet(LS_BANK, j); self.apply();
     }).catch(function (e) { self.busy = false; self.err = e.message || 'Offline'; });
   },
@@ -2713,8 +2898,8 @@ function bankGuessMap(a) {
 }
 function bankSettings() {
   var b = S.profile.bank || {}, d = BANK.data, h = '<div class="tp-sect"><span>Bank connection</span></div><div class="glass pad">';
-  if (!Sync.on()) return h + '<p class="small muted mb0">Turn on sync with your Google Sheet first. The bank link lives in your Sheet’s script, not on your phone.</p></div>';
-  if (!b.on) return h + '<p class="small" style="margin-top:0">Pull balances and transactions from your banks through <b>SimpleFIN Bridge</b> ($15/yr, read-only: it can’t move money).</p><ol class="small" style="padding-left:18px;margin:0 0 10px"><li>At bridge.simplefin.org, connect your banks.</li><li>Under <b>Apps</b>, choose <b>New connection</b> and copy the setup token.</li><li>Paste it here. It’s used once, then thrown away.</li></ol>' + textField('bk_tok', 'Setup token', '', 'Long code from SimpleFIN') + '<div id="bk_err"></div><button class="tp-btn tp-sm mt" data-act="bankConnect">Connect</button><p class="small muted mb0">Needs the latest Sheet script.</p></div>';
+  if (!Sync.on()) return h + '<p class="small muted mb0">Sign in first (Your account, at the top of Settings). The bank link is kept on the server with your account, not on your phone.</p></div>';
+  if (!BANK.on()) return h + (b.on && CLOUD.on() ? '<p class="small" style="margin-top:0"><b>Move your bank link to your account.</b> It’s in your Google Sheet right now. In SimpleFIN, make a new setup token (Apps › New connection) and paste it here. Your matches are kept.</p>' : '') + '<p class="small" style="margin-top:0">Pull balances and transactions from your banks through <b>SimpleFIN Bridge</b> ($15/yr, read-only: it can’t move money).</p><ol class="small" style="padding-left:18px;margin:0 0 10px"><li>At bridge.simplefin.org, connect your banks.</li><li>Under <b>Apps</b>, choose <b>New connection</b> and copy the setup token.</li><li>Paste it here. It’s used once, then thrown away.</li></ol>' + textField('bk_tok', 'Setup token', '', 'Long code from SimpleFIN') + '<div id="bk_err"></div><button class="tp-btn tp-sm mt" data-act="bankConnect">Connect</button>' + (CLOUD.on() ? '' : '<p class="small muted mb0">Needs the latest Sheet script.</p>') + '</div>';
   var mp = BANK.map(), opts = [['', 'Skip this one'], ['new:acct', '+ Add as a new account'], ['new:card', '+ Add as a new card']].concat(S.accounts.filter(function (x) { return !x.closed; }).map(function (x) { return ['a:' + x.id, x.name]; }), S.cards.filter(function (c) { return !c.off; }).map(function (c) { return ['c:' + c.id, c.name + ' (card)']; }));
   h += '<div class="flex" style="justify-content:space-between;align-items:center"><span class="small">' + (d && d.at ? 'Updated ' + new Date(d.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not refreshed yet') + '</span><button class="tp-btn tp-sm" data-act="bankRefresh">' + (BANK.busy ? 'Refreshing…' : 'Refresh now') + '</button></div>';
   if (BANK.err) h += '<div class="tp-err">' + esc(BANK.err) + '</div>';
@@ -2724,24 +2909,25 @@ function bankSettings() {
   return h;
 }
 function bankConnected(j) {
-  var mp = {}; (j.accounts || []).forEach(function (a) { mp[a.id] = bankGuessMap(a); });
-  S.profile.bank = { on: true, map: mp, since: addDays(today(), -30) }; BANK.data = j; lsSet(LS_BANK, j); save(true); rerender();
-  toast('Connected ' + (j.accounts || []).length + ' accounts. Check the matches, then Save matches.');
+  var old = S.profile.bank || {}, om = old.map || {}, mp = {}; (j.accounts || []).forEach(function (a) { mp[a.id] = om[a.id] != null ? om[a.id] : bankGuessMap(a); });
+  S.profile.bank = { on: true, cloud: CLOUD.on(), map: mp, since: old.since || addDays(today(), -30) }; BANK.data = j; lsSet(LS_BANK, j); save(true);
+  if (Object.keys(om).length) { BANK.apply(); rerender(); toast('Bank connected. Your matches are kept.'); return; }
+  rerender(); toast('Connected ' + (j.accounts || []).length + ' accounts. Check the matches, then Save matches.');
 }
 /* the claim can succeed even when the phone gives up waiting (the first bank pull is slow), so check before calling it a failure */
 function bankCheck(errMsg) {
   TP.busy(true, 'Checking the connection', 'Your banks can take a minute the first time.');
-  return Sync.get({ action: 'bank', key: Sync.cfg.key, force: '0' }).then(function (j) {
+  return BANK.call('get', { force: false }).then(function (j) {
     TP.busy(false);
     if (j.ok && j.connected && j.accounts) return bankConnected(j);
-    if (j.ok && j.connected) { S.profile.bank = { on: true, map: {}, since: addDays(today(), -30) }; save(true); rerender(); toast('Connected. Tap Refresh now in a minute to load your accounts.'); return; }
+    if (j.ok && j.connected) { var o = S.profile.bank || {}; S.profile.bank = { on: true, cloud: CLOUD.on(), map: o.map || {}, since: o.since || addDays(today(), -30) }; save(true); rerender(); toast('Connected. Tap Refresh now in a minute to load your accounts.'); return; }
     document.getElementById('bk_err').innerHTML = '<div class="tp-err">' + esc(j.error || errMsg || 'Not connected yet') + '</div>';
-  }).catch(function () { TP.busy(false); document.getElementById('bk_err').innerHTML = '<div class="tp-err">' + esc(errMsg || 'Couldn’t reach your Sheet') + '. Check that the Sheet script is updated and deployed as a new version.</div>'; });
+  }).catch(function () { TP.busy(false); document.getElementById('bk_err').innerHTML = '<div class="tp-err">' + esc(errMsg || 'Couldn’t reach the server') + (CLOUD.on() ? '. Try again in a minute.' : '. Check that the Sheet script is updated and deployed as a new version.') + '</div>'; });
 }
 ACT.bankConnect = function () {
   var t = val('bk_tok').trim(); if (!t) return;
-  TP.busy(true, 'Connecting your banks', 'Your Sheet is claiming the token with SimpleFIN. The first pull can take a minute.');
-  fetch(Sync.cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'bankClaim', key: Sync.cfg.key, token: t }) }).then(function (r) { return r.json(); }).then(function (j) {
+  TP.busy(true, 'Connecting your banks', 'Claiming the token with SimpleFIN. The first pull can take a minute.');
+  BANK.call('claim', { token: t }).then(function (j) {
     TP.busy(false);
     if (!j.ok) { if (/already used/.test(j.error || '')) return bankCheck(j.error); document.getElementById('bk_err').innerHTML = '<div class="tp-err">' + esc(j.error === 'Unknown action' ? 'Update the Sheet script first.' : j.error) + '</div>'; return; }
     if (j.accounts) bankConnected(j); else bankCheck();
@@ -2757,7 +2943,7 @@ ACT.bankMapSave = function () {
   });
   if (made) toast('Added ' + made + '. Open each new card on the Cards tab to set its statement and due days.'); S.profile.bank.map = mp; save(true); BANK.apply(); toast('Saved. Balances updated from your bank.'); };
 ACT.bankRefresh = function () { BANK.refresh(true).then(function () { rerender(); if (BANK.err) toast(BANK.err); }); rerender(); };
-ACT.bankOff = function (d, el) { armDelete(el, function () { fetch(Sync.cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'bankOff', key: Sync.cfg.key }) }).catch(function () {}); S.profile.bank = { on: false }; BANK.data = null; lsDel(LS_BANK); save(true); rerender(); }); };
+ACT.bankOff = function (d, el) { armDelete(el, function () { BANK.call('off').catch(function () {}); S.profile.bank = { on: false }; BANK.data = null; lsDel(LS_BANK); save(true); rerender(); }); };
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
