@@ -603,7 +603,7 @@ details.rwedit summary{cursor:pointer;font-weight:650;font-size:14px;min-height:
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.7';
+var APP_VERSION = '2026.11.18.8';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -746,7 +746,7 @@ function save(quiet) {
 function acctsOf(kind) { return S.accounts.filter(function (a) { return a.kind === kind; }); }
 function snapSum(s, kinds) {
   if (!s) return 0; var t = 0;
-  S.accounts.forEach(function (a) { if (kinds.indexOf(a.kind) >= 0 && s.bal && s.bal[a.id] != null) t += +s.bal[a.id] || 0; });
+  S.accounts.forEach(function (a) { if (kinds.indexOf(a.kind) >= 0 && s.bal && s.bal[a.id] != null && !(a.closed && a.closedAt && s.date >= a.closedAt)) t += +s.bal[a.id] || 0; });
   return r2(t);
 }
 function snapSpend(s) { return r2(snapSum(s, ['spend']) - (s && s.cc ? +s.cc : 0)); }
@@ -2058,7 +2058,7 @@ function setTodayBal(kind, id, amount, src) {
   var td = today(), sn = S.snaps.filter(function (s) { return s.date === td; })[0];
   if (!sn) { var l = lastSnap(); sn = { date: td, bal: l ? JSON.parse(JSON.stringify(l.bal || {})) : {}, cards: l && l.cards ? JSON.parse(JSON.stringify(l.cards)) : {}, cc: l ? l.cc : null, score: '', note: '' }; S.snaps.push(sn); }
   /* fold purchases logged so far into this snapshot, then stamp it */
-  Object.keys(sn.bal).forEach(function (k) { sn.bal[k] = acctBal(k); }); S.cards.forEach(function (c) { if (sn.cards && sn.cards[c.id] != null) sn.cards[c.id] = cardBal(c); }); sn.at = new Date().toISOString();
+  Object.keys(sn.bal).forEach(function (k) { var ac = byId(S.accounts, k); if (ac && ac.closed) delete sn.bal[k]; else sn.bal[k] = acctBal(k); }); S.cards.forEach(function (c) { if (sn.cards && sn.cards[c.id] != null) sn.cards[c.id] = cardBal(c); }); sn.at = new Date().toISOString();
   if (kind === 'none') { S = normalize(S); return; }
   if (kind === 'card') { sn.cards = sn.cards || {}; sn.cards[id] = amount; sn.cc = r2(Object.keys(sn.cards).reduce(function (t, k) { var c = byId(S.cards, k); return t + (c && !c.off ? +sn.cards[k] || 0 : 0); }, 0)); }
   else { sn.bal[id] = amount; if (src) { sn.src = sn.src || {}; sn.src[id] = src; } }
@@ -2212,7 +2212,7 @@ var ACT = {
   acctSave: function () {
     var n = val('a_name').trim(); if (!n) { document.getElementById('a_err').innerHTML = '<div class="tp-err">Give it a name.</div>'; return; }
     var a = byId(S.accounts, val('a_id')); if (!a) { a = { id: 'a' + uid() }; S.accounts.push(a); }
-    a.name = n; a.kind = val('a_kind'); a.floor = r2(num(val('a_floor'))) || ''; a.match = val('a_match').trim(); a.closed = checked('a_closed');
+    a.name = n; a.kind = val('a_kind'); a.floor = r2(num(val('a_floor'))) || ''; a.match = val('a_match').trim(); var wasClosed = a.closed; a.closed = checked('a_closed'); if (a.closed && !wasClosed) a.closedAt = today(); if (!a.closed) delete a.closedAt;
     if (val('a_bal') !== '' && r2(num(val('a_bal'))) !== acctBal(a.id)) setTodayBal('acct', a.id, r2(num(val('a_bal'))));
     closeSheet(); render._keep = true; save();
   },
@@ -2634,11 +2634,14 @@ var BANK = {
     var d = this.data, mp = this.map(); if (!d || !d.accounts) return;
     var td = today(), sn = S.snaps.filter(function (x) { return x.date === td; })[0], changed = false;
     if (!sn) { var l = lastSnap(); sn = { date: td, bal: l ? JSON.parse(JSON.stringify(l.bal || {})) : {}, cards: l && l.cards ? JSON.parse(JSON.stringify(l.cards)) : {}, cc: null, score: '', note: 'From your bank', auto: 'bank' }; Object.keys(sn.bal).forEach(function (k) { sn.bal[k] = acctBal(k); }); S.cards.forEach(function (c) { if (sn.cards[c.id] != null) sn.cards[c.id] = cardBal(c); }); S.snaps.push(sn); }
-    d.accounts.forEach(function (a) {
-      var t = mp[a.id]; if (!t) return;
-      if (t.indexOf('a:') === 0) { sn.bal[t.slice(2)] = r2(a.bal); sn.src = sn.src || {}; sn.src[t.slice(2)] = 'bank'; changed = true; }
-      else if (t.indexOf('c:') === 0) { sn.cards = sn.cards || {}; sn.cards[t.slice(2)] = r2(Math.abs(a.bal)); changed = true; }
+    /* several bank accounts can feed one Tally account: add them up */
+    var sums = {};
+    d.accounts.forEach(function (a) { var t = mp[a.id]; if (!t || t.indexOf('new:') === 0) return; sums[t] = r2((sums[t] || 0) + (t.indexOf('c:') === 0 ? Math.abs(a.bal) : a.bal)); });
+    Object.keys(sums).forEach(function (t) {
+      if (t.indexOf('a:') === 0) { sn.bal[t.slice(2)] = sums[t]; sn.src = sn.src || {}; sn.src[t.slice(2)] = 'bank'; changed = true; }
+      else if (t.indexOf('c:') === 0) { sn.cards = sn.cards || {}; sn.cards[t.slice(2)] = sums[t]; changed = true; }
     });
+    S.accounts.forEach(function (x) { if (x.closed) delete sn.bal[x.id]; });
     if (changed) { sn.at = new Date().toISOString(); sn.cc = r2(Object.keys(sn.cards || {}).reduce(function (t, k) { var c = byId(S.cards, k); return t + (c && !c.off ? +sn.cards[k] || 0 : 0); }, 0)); }
     var added = this.importTxns();
     S = normalize(S); save(true); if (VIEW !== 'checkin') rerender();
@@ -2741,7 +2744,7 @@ ACT.bankMapSave = function () {
   var mp = {}, made = 0, accts = (BANK.data && BANK.data.accounts) || [];
   $all('[data-bkmap]').forEach(function (sel) {
     var id = sel.getAttribute('data-bkmap'), v = sel.value, a = accts.filter(function (x) { return x.id === id; })[0] || { name: 'Account', conn: '' };
-    if (v === 'new:acct') { var nm = a.name, low = (a.name + ' ' + a.conn).toLowerCase(), kind = /saving|reserve|money market|hysa/.test(low) ? 'save' : /401|ira|roth|retire/.test(low) ? 'retire' : /brokerage|invest|stock|robinhood|fidelity|schwab|vanguard|webull/.test(low) ? 'invest' : 'spend', na = { id: 'a' + uid(), name: nm, kind: kind, match: '' }; S.accounts.push(na); v = 'a:' + na.id; made++; }
+    if (v === 'new:acct') { var nm = a.name, low = (a.name + ' ' + a.conn).toLowerCase(), kind = /saving|reserve|money market|hysa/.test(low) ? 'save' : /401|ira|roth|retire/.test(low) ? 'retire' : /brokerage|invest|stock|robo|etf|crypto|robinhood|fidelity|schwab|vanguard|webull|acorns|betterment|wealthfront/.test(low) ? 'invest' : 'spend', na = { id: 'a' + uid(), name: nm, kind: kind, match: '' }; S.accounts.push(na); v = 'a:' + na.id; made++; }
     else if (v === 'new:card') { var nc = { id: 'k' + uid(), name: a.name, color: 'charcoal', perk: '', use: '', stmtDay: '', dueDay: '', limit: '', match: '' }; S.cards.push(nc); v = 'c:' + nc.id; made++; }
     mp[id] = v;
   });
