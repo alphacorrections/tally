@@ -593,6 +593,7 @@ details.rwedit summary{cursor:pointer;font-weight:650;font-size:14px;min-height:
 .bkrow>span{display:flex;flex-direction:column;min-width:0}
 .bkrow b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bkrow .tp-input{min-height:42px;padding:8px}
+.accseg{margin-bottom:12px}
 
 </style>
 </head>
@@ -603,7 +604,7 @@ details.rwedit summary{cursor:pointer;font-weight:650;font-size:14px;min-height:
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.8';
+var APP_VERSION = '2026.11.18.9';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1292,6 +1293,7 @@ function runway(days) {
 }
 
 /* Tally v2 — pages, flows, actions, boot */
+var ACC_VIEW = 'net', ACC_VIEWS = { net: { tab: 'Net worth', label: 'Net worth' }, cash: { tab: 'Cash', label: 'Spending accounts', kinds: ['spend'] }, save: { tab: 'Savings', label: 'Savings', kinds: ['save'] }, inv: { tab: 'Investing', label: 'Investing + retirement', kinds: ['invest', 'retire'] } };
 var VIEW = 'home', NW_RANGE = 'year', CARD_YEAR = null, SAY_OFF = 0, TIP_OFF = 0, WIZ = { step: 1, name: '', how: 'fresh', ws: 1 };
 var CK = null, CW = null, INBOX = null, INBOX_ERR = '';
 var PLAY = { save: 500, side: 0, cut: 0, apy: 3.75, goal: '', b_amt: 1000, b_fee: 100, b_apr: 4.99, b_mo: 6, b_apy: 3.75, c_amt: 3000, c_apr: 28.49, c_pay: 300 };
@@ -1603,12 +1605,16 @@ function runwayCard() {
 /* ---------- accounts ---------- */
 PAGES.accounts = function () {
   var td = today(), last = lastSnap(), h = topBar('Accounts', 'Everything you have and owe');
+  var V = ACC_VIEWS[ACC_VIEW] || ACC_VIEWS.net;
   var pts = S.snaps.filter(function (s) { return NW_RANGE === 'all' || s.date >= (NW_RANGE === '3m' ? addDays(td, -92) : addDays(td, -365)); });
-  var first = pts[0], dNW = last && first ? snapNet(last) - snapNet(first) : 0;
-  h += '<div class="glass hero tp-rise"><span class="label">Net worth</span><div class="flex" style="align-items:baseline"><span class="big" style="font-size:44px" data-count="' + liveNet() + '">' + money(liveNet()) + '</span>' + (first && first !== last ? '<span class="tp-pill light">' + (dNW >= 0 ? '▲ ' : '▼ ') + money(Math.abs(dNW)) + ' since ' + shortDate(first.date) + '</span>' : '') + '</div>' +
-    (pts.length > 1 ? lineChart('nw', [{ name: 'Net worth', color: 'var(--c1)', pts: pts.map(function (s) { return { t: +parseD(s.date), y: snapNet(s), note: s.note }; }) }], { h: 150, label: 'Net worth over time' }) : '') +
+  var val = function (s) { return V.kinds ? snapSum(s, V.kinds) : snapNet(s); }, live = V.kinds ? r2(S.accounts.reduce(function (t, a) { return t + (!a.closed && V.kinds.indexOf(a.kind) >= 0 ? acctBal(a.id) : 0); }, 0)) : liveNet();
+  pts = pts.filter(function (s) { return !V.kinds || V.kinds.some(function (k) { return S.accounts.some(function (a) { return a.kind === k && s.bal && s.bal[a.id] != null; }); }); });
+  var first = pts[0], dNW = first ? live - val(first) : 0;
+  h += '<div class="seg accseg" role="tablist">' + Object.keys(ACC_VIEWS).map(function (k) { return '<button data-act="accView" data-a="' + k + '" class="' + (ACC_VIEW === k ? 'on' : '') + '" role="tab" aria-selected="' + (ACC_VIEW === k) + '">' + ACC_VIEWS[k].tab + '</button>'; }).join('') + '</div>';
+  h += '<div class="glass hero tp-rise"><span class="label">' + V.label + '</span><div class="flex" style="align-items:baseline"><span class="big" style="font-size:44px" data-count="' + live + '">' + money(live) + '</span>' + (first && first.date !== td ? '<span class="tp-pill light">' + (dNW >= 0 ? '▲ ' : '▼ ') + money(Math.abs(dNW)) + ' since ' + shortDate(first.date) + '</span>' : '') + '</div>' +
+    (pts.length > 1 ? lineChart('nw', [{ name: V.label, color: 'var(--c1)', pts: pts.map(function (s) { return { t: +parseD(s.date), y: val(s), note: s.note }; }) }], { h: 150, label: V.label + ' over time' }) : '<p class="small muted">The chart fills in as you check in.</p>') +
     '<div class="chips mt">' + [['3m', '3M'], ['year', '1Y'], ['all', 'All']].map(function (r) { return '<button class="chip ' + (NW_RANGE === r[0] ? 'on' : '') + '" data-act="nwRange" data-a="' + r[0] + '">' + r[1] + '</button>'; }).join('') + '</div>' +
-    (S.profile.chartNote && NW_RANGE === 'all' ? '<p class="small muted mb0">' + esc(S.profile.chartNote) + '</p>' : '') + '</div>';
+    (S.profile.chartNote && NW_RANGE === 'all' && !V.kinds ? '<p class="small muted mb0">' + esc(S.profile.chartNote) + '</p>' : '') + '</div>';
   [['Cash', ['spend', 'save']], ['Investing', ['invest', 'retire']]].forEach(function (g) {
     var list = S.accounts.filter(function (a) { return !a.closed && g[1].indexOf(a.kind) >= 0; }), tot = list.reduce(function (t, a) { return t + acctBal(a.id); }, 0);
     h += '<div class="tp-sect"><span>' + g[0] + '</span><span class="sp"></span><span>' + money(tot) + '</span></div><div class="glass">' + (list.length ? list.map(acctRow).join('') : '<div class="empty">None yet.</div>') + '</div>';
@@ -2085,6 +2091,7 @@ var ACT = {
   say: function () { SAY_OFF++; var e = document.getElementById('sayTxt'); if (e) e.textContent = sayFor(SAY_OFF); },
   tip: function () { TIP_OFF++; var e = document.getElementById('tipTxt'); if (e) e.textContent = tipFor(TIP_OFF); },
   nwRange: function (d) { NW_RANGE = d.a; rerender(); },
+  accView: function (d) { ACC_VIEW = d.a; render._keep = true; render(); },
   cardYear: function (d) { CARD_YEAR = String(+CARD_YEAR + +d.a); rerender(); var h = $('.hist'); if (h) h.open = true; },
   setupHide: function () { S.profile.setupDone = true; render._keep = true; save(); },
   setupShow: function () { S.profile.setupDone = false; VIEW = 'home'; save(); },
