@@ -699,6 +699,10 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .covnote{margin-top:10px;font-size:13px;line-height:1.45;color:var(--tp-ink2);border-top:1px solid var(--tp-line2);padding-top:10px}
 .covnote .pillbtn{margin-left:6px;vertical-align:middle}
 
+/* charts: scrub with a finger instead of selecting text */
+.chart,.chart *,.sbars,.sbars *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.chart svg{touch-action:pan-y}
+
 </style>
 </head>
 <body class="tp-page">
@@ -708,7 +712,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.16';
+var APP_VERSION = '2026.11.18.17';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1179,7 +1183,10 @@ function bindCharts(root) {
       tip.style.left = left + 'px'; tip.style.top = (c.T / c.H * rc.height + 14) + 'px';
     }
     function leave() { tip.style.display = 'none'; cross.classList.remove('on'); hov.innerHTML = ''; }
-    svg.addEventListener('pointermove', move); svg.addEventListener('pointerdown', move); svg.addEventListener('pointerleave', leave);
+    svg.addEventListener('pointermove', move); svg.addEventListener('pointerleave', leave); svg.addEventListener('pointercancel', leave);
+    /* touch: press and slide sideways to scrub; no text selection or copy menu */
+    svg.addEventListener('pointerdown', function (ev) { if (ev.pointerType !== 'mouse') { ev.preventDefault(); try { svg.setPointerCapture(ev.pointerId); } catch (e) {} } move(ev); });
+    el.addEventListener('contextmenu', function (ev) { ev.preventDefault(); }); el.addEventListener('selectstart', function (ev) { ev.preventDefault(); });
   });
 }
 /* tiny sparkline for fare logs */
