@@ -478,6 +478,13 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 .tp-wrap{padding-bottom:calc(170px + env(safe-area-inset-bottom))}
 .tp-wrap.ckflow{padding-bottom:40px}
 
+/* update banner */
+.updbar{position:fixed;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top));z-index:70;width:calc(100% - 28px);max-width:520px;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:16px;border:0;cursor:pointer;
+  background:var(--hi);color:var(--tp-btn-ink);font:500 13.5px var(--tp-font);text-align:left;box-shadow:0 14px 34px rgba(0,0,0,.3);animation:tp-rise .35s both}
+:root[data-theme="light"] .updbar{color:#FFFFFF}
+.updbar span{flex:1;min-width:0;opacity:.85}
+.updbar i{font-style:normal;font-weight:800;padding:6px 12px;border-radius:99px;background:rgba(0,0,0,.14)}
+
 </style>
 </head>
 <body class="tp-page">
@@ -487,7 +494,7 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.17.12';
+var APP_VERSION = '2026.11.17.13';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -2091,6 +2098,22 @@ document.addEventListener('input', function (e) {
 });
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
 window.addEventListener('focus', function () { if (Sync.on() && Sync.status !== 'busy' && VIEW !== 'checkin' && Date.now() - (window._lastPull || 0) > 60000) { window._lastPull = Date.now(); Sync.start(); } });
+
+/* ---------- update check: version.json next to the page says what's live ---------- */
+var UPD = { last: 0, shown: '' };
+function verCmp(a, b) { var x = String(a).split('.'), y = String(b).split('.'); for (var i = 0; i < Math.max(x.length, y.length); i++) { var d = (+x[i] || 0) - (+y[i] || 0); if (d) return d; } return 0; }
+function checkUpdate() {
+  if (!/^https?:/.test(location.protocol) || Date.now() - UPD.last < 60000) return; UPD.last = Date.now();
+  fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+    if (!j || !j.version || verCmp(j.version, APP_VERSION) <= 0 || UPD.shown === j.version) return;
+    UPD.shown = j.version; var b = document.createElement('button'); b.className = 'updbar'; b.setAttribute('data-act', 'doUpdate'); b.setAttribute('data-v', j.version);
+    b.innerHTML = '<b>Update ready</b><span>' + esc(j.note || 'Tap to refresh') + '</span><i>Refresh</i>'; document.body.appendChild(b);
+  }).catch(function () {});
+}
+ACT.doUpdate = function (d) { location.replace(location.pathname + '?v=' + encodeURIComponent(d.v)); };
+document.addEventListener('visibilitychange', function () { if (!document.hidden) checkUpdate(); });
+setInterval(checkUpdate, 30 * 60000);
+setTimeout(checkUpdate, 2500);
 
 /* ---------- boot ---------- */
 /* one-tap reconnect: a link ending in #sync=<code> saves the Sheet URL and key on this device, then pulls your data */
