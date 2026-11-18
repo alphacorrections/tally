@@ -588,6 +588,12 @@ details.rwedit summary{cursor:pointer;font-weight:650;font-size:14px;min-height:
 .rwgrid label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--tp-ink2)}
 .rwgrid .tp-input{min-height:42px;padding:8px 10px}
 
+/* bank matching */
+.bkrow{display:grid;grid-template-columns:1fr minmax(0,170px);gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--tp-line2)}
+.bkrow>span{display:flex;flex-direction:column;min-width:0}
+.bkrow b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bkrow .tp-input{min-height:42px;padding:8px}
+
 </style>
 </head>
 <body class="tp-page">
@@ -597,7 +603,7 @@ details.rwedit summary{cursor:pointer;font-weight:650;font-size:14px;min-height:
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.4';
+var APP_VERSION = '2026.11.18.5';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1776,7 +1782,9 @@ PAGES.history = function () {
 /* ---------- check-in flow ---------- */
 function ckInit() {
   var last = lastSnap(), td = today();
-  var prev = last && last.date === td ? (S.snaps.length > 1 ? S.snaps[S.snaps.length - 2] : null) : last;
+  /* compare against your last check-in, not an automatic bank update */
+  var before = S.snaps.filter(function (x) { return x.date < td; }), manual = before.filter(function (x) { return !x.auto; });
+  var prev = manual.length ? manual[manual.length - 1] : (before.length ? before[before.length - 1] : null);
   CK = { step: 0, prev: prev, bal: {}, src: {}, cards: {}, stmt: {}, moves: [], inc: [], paid: {}, cats: [], invest: '', spend: null, save: null };
   S.accounts.filter(function (a) { return !a.closed; }).forEach(function (a) { CK.bal[a.id] = acctBal(a.id); });
   S.cards.filter(function (c) { return !c.off; }).forEach(function (c) { CK.cards[c.id] = cardBal(c); });
@@ -1795,6 +1803,7 @@ function ckInit() {
 }
 function ckStart() {
   closeSheet(); ckInit(); VIEW = 'checkin'; render();
+  if (typeof BANK !== 'undefined' && BANK.on()) BANK.refresh(false).then(function () { if (VIEW === 'checkin' && CK && CK.step === 0) { BANK.fillCheckin(); rerender(); } });
   if (Sync.on()) {
     INBOX_ERR = '';
     Sync.inbox().then(function (items) { INBOX = items || []; ckApplyInbox(); if (VIEW === 'checkin' && CK && CK.step === 0) rerender(); })
@@ -1986,6 +1995,7 @@ PAGES.settings = function () {
     '<p class="small muted">Cushions (the balance an account shouldn’t drop below) are set per account on the Accounts tab.</p>' +
     '<label class="tp-opt"><input type="checkbox" id="s_aff" ' + (S.affirmOn !== false ? 'checked' : '') + '><span><b>Show the daily line on Home</b><span>Short reminders that money is a tool.</span></span></label>' +
     '<label class="tp-label" for="s_mine">Your own lines (one per line)</label><textarea class="tp-input" id="s_mine" placeholder="Write the thing you need to hear">' + esc((S.affirm || []).join('\n')) + '</textarea><button class="tp-btn tp-sm mt" data-act="profileSave">Save</button></div>';
+  h += typeof bankSettings === 'function' ? bankSettings() : '';
   h += '<div class="tp-sect"><span>Sync with your Google Sheet</span></div><div class="glass pad"><p class="small muted" style="margin-top:0">Keeps your phone and computer in step, sends the reminder email, reads bank alert emails, and fetches market data. Setup steps are in the README.</p>' +
     textField('y_url', 'Web app URL', Sync.cfg.url, 'https://script.google.com/macros/s/…/exec') + textField('y_key', 'Key', Sync.cfg.key, 'The key your script printed', 'password') +
     '<div class="flex mt"><button class="tp-btn tp-sm" data-act="syncConnect">' + (Sync.on() ? 'Reconnect' : 'Connect') + '</button>' + (Sync.on() ? '<button class="tp-btn tp-ghost tp-sm" data-act="syncNow">Sync now</button><button class="tp-btn tp-ghost tp-sm" data-act="inboxTest">Test email reading</button><button class="tp-btn tp-ghost tp-sm" data-act="copyLink">Copy my connect link</button><button class="tp-btn tp-ghost tp-sm" data-act="syncOff">Disconnect</button>' : '') + '</div>' +
@@ -2125,7 +2135,7 @@ var ACT = {
     w.plan = { spend: CK.spend, save: CK.save, auto: plan.auto, bills: plan.bills, cards: plan.cards }; w.autoSave = r2(CK.inc.reduce(function (t, x) { return t + (x.kind === 'pay' ? autoSaveOf(num(x.amt)) : 0); }, 0)); w.period = { from: CK.from, to: CK.to }; delete w.planned;
     CK.known.forEach(function (x) { if (x.card && CK.paid[x.k]) { var ym = x.date.slice(0, 7); S.statements[ym] = S.statements[ym] || {}; var st = S.statements[ym][x.card] || { amt: x.amt }; st.st = 'paid'; S.statements[ym][x.card] = st; } });
     var sn = S.snaps.filter(function (s) { return s.date === td; })[0]; if (!sn) { sn = { date: td, bal: {}, cards: {}, cc: null, score: '', note: '' }; S.snaps.push(sn); }
-    sn.at = new Date().toISOString(); Object.keys(CK.bal).forEach(function (k) { sn.bal[k] = r2(num(CK.bal[k])); }); sn.cards = {}; Object.keys(CK.cards).forEach(function (k) { sn.cards[k] = r2(num(CK.cards[k])); }); sn.cc = ckCards();
+    sn.at = new Date().toISOString(); delete sn.auto; Object.keys(CK.bal).forEach(function (k) { sn.bal[k] = r2(num(CK.bal[k])); }); sn.cards = {}; Object.keys(CK.cards).forEach(function (k) { sn.cards[k] = r2(num(CK.cards[k])); }); sn.cc = ckCards();
     Object.keys(CK.stmt).forEach(function (k) { var c = byId(S.cards, k), due = c && nextDueDate(c.dueDay, td); if (due && CK.stmt[k] !== '') setStmt(k, due, num(CK.stmt[k])); });
     sn.src = {}; Object.keys(CK.src).forEach(function (k) { if (k.indexOf('c_') !== 0 && CK.src[k] !== 'typed') sn.src[k] = 'email'; });
     if (!sn.note) sn.note = 'Weekly check-in';
@@ -2602,6 +2612,122 @@ ACT.calMove = function (d) { var y = +CAL.ym.slice(0, 4), m = +CAL.ym.slice(5) -
 ACT.calToday = function () { CAL.ym = null; CAL.sel = null; rerender(); };
 ACT.calSel = function (d) { CAL.sel = d.a; rerender(); };
 
+/* ---------- bank connection (SimpleFIN through your Sheet script) ---------- */
+var LS_BANK = 'tally.bank';
+var BANK = {
+  data: lsGet(LS_BANK) || null, busy: false, err: '',
+  on: function () { return !!(S.profile.bank && S.profile.bank.on && Sync.on()); },
+  refresh: function (force) {
+    var self = this; if (!self.on() || self.busy) return Promise.resolve();
+    if (!force && self.data && self.data.at && Date.now() - Date.parse(self.data.at) < 6 * 3600000) return Promise.resolve();
+    self.busy = true; self.err = '';
+    return Sync.get({ action: 'bank', key: Sync.cfg.key, force: force ? '1' : '0' }).then(function (j) {
+      self.busy = false;
+      if (!j.ok) { self.err = j.error || 'Bank refresh failed'; return; }
+      if (!j.connected) { self.err = 'Not connected in your Sheet script.'; return; }
+      self.data = j; lsSet(LS_BANK, j); self.apply();
+    }).catch(function (e) { self.busy = false; self.err = e.message || 'Offline'; });
+  },
+  map: function () { return (S.profile.bank && S.profile.bank.map) || {}; },
+  /* balances into today's snapshot, then new transactions into Spending */
+  apply: function () {
+    var d = this.data, mp = this.map(); if (!d || !d.accounts) return;
+    var td = today(), sn = S.snaps.filter(function (x) { return x.date === td; })[0], changed = false;
+    if (!sn) { var l = lastSnap(); sn = { date: td, bal: l ? JSON.parse(JSON.stringify(l.bal || {})) : {}, cards: l && l.cards ? JSON.parse(JSON.stringify(l.cards)) : {}, cc: null, score: '', note: 'From your bank', auto: 'bank' }; Object.keys(sn.bal).forEach(function (k) { sn.bal[k] = acctBal(k); }); S.cards.forEach(function (c) { if (sn.cards[c.id] != null) sn.cards[c.id] = cardBal(c); }); S.snaps.push(sn); }
+    d.accounts.forEach(function (a) {
+      var t = mp[a.id]; if (!t) return;
+      if (t.indexOf('a:') === 0) { sn.bal[t.slice(2)] = r2(a.bal); sn.src = sn.src || {}; sn.src[t.slice(2)] = 'bank'; changed = true; }
+      else if (t.indexOf('c:') === 0) { sn.cards = sn.cards || {}; sn.cards[t.slice(2)] = r2(Math.abs(a.bal)); changed = true; }
+    });
+    if (changed) { sn.at = new Date().toISOString(); sn.cc = r2(Object.keys(sn.cards || {}).reduce(function (t, k) { var c = byId(S.cards, k); return t + (c && !c.off ? +sn.cards[k] || 0 : 0); }, 0)); }
+    var added = this.importTxns();
+    S = normalize(S); save(true); if (VIEW !== 'checkin') rerender();
+    if (added) toast(added + ' new purchase' + (added > 1 ? 's' : '') + ' from your bank');
+  },
+  importTxns: function () {
+    var d = this.data, mp = this.map(), added = 0, since = (S.profile.bank && S.profile.bank.since) || addDays(today(), -45);
+    S.txns = S.txns || [];
+    var have = {}; S.txns.forEach(function (x) { if (x.ext) have[x.ext] = 1; });
+    d.accounts.forEach(function (a) {
+      var src = mp[a.id]; if (!src) return;
+      a.txns.forEach(function (t) {
+        var key = a.id + ':' + t.id; if (have[key] || t.amt >= 0 || t.date < since) return;
+        if (bankSkip(t.desc, src)) return;
+        var amt = r2(-t.amt);
+        /* already logged by hand? link it instead of adding a second copy */
+        var twin = S.txns.filter(function (x) { return !x.ext && x.src === src && Math.abs(+x.amt - amt) < 0.01 && Math.abs(daysBetween(x.date, t.date)) <= 3; })[0];
+        if (twin) { twin.ext = key; twin.bankDesc = t.desc; return; }
+        S.txns.push({ id: 't' + uid(), ext: key, at: t.date + 'T12:00:00', date: t.date, amt: amt, src: src, cat: guessCat(t.desc), note: cleanDesc(t.desc), bank: true });
+        added++;
+      });
+    });
+    return added;
+  },
+  fillCheckin: function () {
+    if (!CK || !this.data) return; var mp = this.map();
+    this.data.accounts.forEach(function (a) {
+      var t = mp[a.id]; if (!t) return;
+      if (t.indexOf('a:') === 0 && CK.src[t.slice(2)] !== 'typed') { CK.bal[t.slice(2)] = r2(a.bal); CK.src[t.slice(2)] = 'From bank ' + shortDate(a.date || today()); }
+      if (t.indexOf('c:') === 0 && CK.src['c_' + t.slice(2)] !== 'typed') { CK.cards[t.slice(2)] = r2(Math.abs(a.bal)); CK.src['c_' + t.slice(2)] = 'From bank ' + shortDate(a.date || today()); }
+    });
+  }
+};
+function bankSkip(desc, src) {
+  var d = String(desc || '').toLowerCase();
+  if (/payment\s*(thank|received)|autopay|auto pay|epay|online payment|transfer|xfer|to savings|from savings|round ?up|interest charge|credit card pmt|card payment/.test(d)) return true;
+  if (src.indexOf('a:') === 0 && /amex|american express|capital one|chase card|chase credit|barclay|synchrony|carecredit|discover|citi card|crd epay|card pymt/.test(d)) return true;
+  return false;
+}
+function cleanDesc(d) { return String(d || '').replace(/\s{2,}/g, ' ').replace(/\b(pos|debit|purchase|card|recurring|sq \*|tst\*|pp\*)\b\s*/ig, '').replace(/\s#\d+.*$/, '').replace(/\s\d{3,}.*$/, '').replace(/\*/g, ' ').replace(/\s{2,}/g, ' ').trim().replace(/\b([A-Z])([A-Z]+)\b/g, function (m, a, b) { return a + b.toLowerCase(); }).slice(0, 40) || 'Purchase'; }
+function guessCat(desc) {
+  var d = String(desc || '').toLowerCase(), rules = [
+    ['Groceries', /market basket|whole foods|hannaford|shaw'?s|stop ?& ?shop|trader joe|aldi|price chopper|wegmans|costco|bj'?s|grocery|instacart|sprouts|big y/],
+    ['Eating out', /doordash|uber ?eats|grubhub|mcdonald|starbucks|dunkin|chipotle|restaurant|pizza|cafe|coffee|grill|taco|burger|wendy|chick-fil|panera|sushi|kitchen|tavern|pub\b|bar\b|bistro|diner/],
+    ['Gas', /shell|exxon|mobil|sunoco|irving|gulf|citgo|cumberland|speedway|circle k|bp\b|gas|fuel/],
+    ['Travel', /jetblue|delta|united|american air|southwest|spirit|airbnb|hotel|marriott|hilton|expedia|booking\.com|lyft|uber(?! ?eats)|parking|toll|ez ?pass/],
+    ['Shopping', /amazon|amzn|target|walmart|best buy|etsy|ebay|home depot|lowe'?s|tj ?maxx|marshalls|kohl|apple\.com|nike/],
+    ['Fun', /spotify|netflix|hulu|disney|hbo|max\.com|youtube|ticketmaster|stubhub|steam|playstation|xbox|nintendo|movie|cinema|amc |regal/],
+    ['Pets', /chewy|petco|petsmart|vet\b|veterinar|animal/],
+    ['Health', /cvs|walgreens|rite aid|pharmacy|dental|dentist|clinic|medical|hospital|optom|gym|ymca|crunch|planet fitness/],
+    ['Venmo / split', /venmo|cash app|cashapp|zelle|paypal/]
+  ];
+  for (var i = 0; i < rules.length; i++) if (rules[i][1].test(d)) return rules[i][0];
+  return 'Other';
+}
+function bankGuessMap(a) {
+  var n = (a.name + ' ' + a.conn).toLowerCase(), best = '', score = 0;
+  var test = function (id, name, extra) { var words = (name + ' ' + (extra || '')).toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2; }), sc = 0; words.forEach(function (w) { if (n.indexOf(w) >= 0) sc++; }); if (sc > score) { score = sc; best = id; } };
+  S.cards.forEach(function (c) { test('c:' + c.id, c.name, c.match); });
+  S.accounts.filter(function (x) { return !x.closed; }).forEach(function (x) { test('a:' + x.id, x.name, x.match); });
+  if (!best && a.bal < 0) return ''; return best;
+}
+function bankSettings() {
+  var b = S.profile.bank || {}, d = BANK.data, h = '<div class="tp-sect"><span>Bank connection</span></div><div class="glass pad">';
+  if (!Sync.on()) return h + '<p class="small muted mb0">Turn on sync with your Google Sheet first. The bank link lives in your Sheet’s script, not on your phone.</p></div>';
+  if (!b.on) return h + '<p class="small" style="margin-top:0">Pull balances and transactions from your banks through <b>SimpleFIN Bridge</b> ($15/yr, read-only: it can’t move money).</p><ol class="small" style="padding-left:18px;margin:0 0 10px"><li>At bridge.simplefin.org, connect your banks.</li><li>Under <b>Apps</b>, choose <b>New connection</b> and copy the setup token.</li><li>Paste it here. It’s used once, then thrown away.</li></ol>' + textField('bk_tok', 'Setup token', '', 'Long code from SimpleFIN') + '<div id="bk_err"></div><button class="tp-btn tp-sm mt" data-act="bankConnect">Connect</button><p class="small muted mb0">Needs the latest Sheet script.</p></div>';
+  var mp = BANK.map(), opts = [['', 'Skip this one']].concat(S.accounts.filter(function (x) { return !x.closed; }).map(function (x) { return ['a:' + x.id, x.name]; }), S.cards.filter(function (c) { return !c.off; }).map(function (c) { return ['c:' + c.id, c.name + ' (card)']; }));
+  h += '<div class="flex" style="justify-content:space-between;align-items:center"><span class="small">' + (d && d.at ? 'Updated ' + new Date(d.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not refreshed yet') + '</span><button class="tp-btn tp-sm" data-act="bankRefresh">' + (BANK.busy ? 'Refreshing…' : 'Refresh now') + '</button></div>';
+  if (BANK.err) h += '<div class="tp-err">' + esc(BANK.err) + '</div>';
+  if (d && d.errors && d.errors.length) h += '<div class="tp-err">SimpleFIN: ' + esc(d.errors.join('; ')) + '</div>';
+  if (d && d.accounts) h += '<label class="tp-label">Match each bank account to Tally</label>' + d.accounts.map(function (a) { var cur = mp[a.id] != null ? mp[a.id] : ''; return '<div class="bkrow"><span><b>' + esc(a.name) + '</b><span class="small muted">' + esc(a.conn) + ' · ' + money(a.bal, 1) + '</span></span><select class="tp-input" data-bkmap="' + esc(a.id) + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></div>'; }).join('') + '<button class="tp-btn tp-sm mt" data-act="bankMapSave">Save matches</button>';
+  h += '<p class="small muted">Refreshes when you open Tally (every 6 hours at most) and when you check in. Purchases come into Spending with a category guess you can change. Card payments and transfers are skipped.</p><button class="tp-btn tp-ghost tp-sm" data-act="bankOff" data-label="Disconnect bank">Disconnect bank</button></div>';
+  return h;
+}
+ACT.bankConnect = function () {
+  var t = val('bk_tok').trim(); if (!t) return;
+  TP.busy(true, 'Connecting your banks', 'Your Sheet is claiming the token with SimpleFIN.');
+  fetch(Sync.cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'bankClaim', key: Sync.cfg.key, token: t }) }).then(function (r) { return r.json(); }).then(function (j) {
+    TP.busy(false);
+    if (!j.ok) { document.getElementById('bk_err').innerHTML = '<div class="tp-err">' + esc(j.error === 'Unknown action' ? 'Update the Sheet script first.' : j.error) + '</div>'; return; }
+    var mp = {}; (j.accounts || []).forEach(function (a) { mp[a.id] = bankGuessMap(a); });
+    S.profile.bank = { on: true, map: mp, since: addDays(today(), -30) }; BANK.data = j; lsSet(LS_BANK, j); save(true); rerender();
+    toast('Connected ' + (j.accounts || []).length + ' accounts. Check the matches, then Save matches.');
+  }).catch(function (e) { TP.busy(false); document.getElementById('bk_err').innerHTML = '<div class="tp-err">' + esc(e.message || 'Couldn’t reach your Sheet') + '</div>'; });
+};
+ACT.bankMapSave = function () { var mp = {}; $all('[data-bkmap]').forEach(function (s) { mp[s.getAttribute('data-bkmap')] = s.value; }); S.profile.bank.map = mp; save(true); BANK.apply(); toast('Saved. Balances updated from your bank.'); };
+ACT.bankRefresh = function () { BANK.refresh(true).then(function () { rerender(); if (BANK.err) toast(BANK.err); }); rerender(); };
+ACT.bankOff = function (d, el) { armDelete(el, function () { fetch(Sync.cfg.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'bankOff', key: Sync.cfg.key }) }).catch(function () {}); S.profile.bank = { on: false }; BANK.data = null; lsDel(LS_BANK); save(true); rerender(); }); };
+
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
 function verCmp(a, b) { var x = String(a).split('.'), y = String(b).split('.'); for (var i = 0; i < Math.max(x.length, y.length); i++) { var d = (+x[i] || 0) - (+y[i] || 0); if (d) return d; } return 0; }
@@ -2631,6 +2757,7 @@ render();
 window._lastPull = Date.now();
 Sync.start();
 shBoot();
+setTimeout(function () { if (BANK.on()) BANK.refresh(false); }, 1500);
 
 </script>
 </body>

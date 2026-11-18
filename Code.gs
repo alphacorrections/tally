@@ -8,6 +8,7 @@
  *   - Fetches quotes, the weekly mortgage rate, and headlines for Explore.
  *   - Reads bank and card alert emails from the last 10 days in YOUR Gmail (balances, new statements,
  *     payments due) so the weekly check-in can fill numbers in. Nothing is stored except what you save.
+ *   - Optional: pulls balances and transactions from your banks through SimpleFIN Bridge (read-only).
  *   - Emails you a weekly check-in reminder on the day and hour you pick in Tally > Settings,
  *     with the next 7 days of card and bill due dates.
  *
@@ -62,6 +63,7 @@ function doGet(e) {
     if (p.action === 'sload') return out_({ ok: true, state: loadState_(SHARED_TAB) });
     if (role !== 'owner') return out_({ ok: false, error: 'This key only opens the shared space' });
     if (p.action === 'sharedKey') return out_({ ok: true, key: sharedKey_() });
+    if (p.action === 'bank') return out_(bank_(p.force === '1'));
     if (p.action === 'load') return out_({ ok: true, state: loadState_() });
     if (p.action === 'market') return out_(market_(p));
     if (p.action === 'inbox') return out_({ ok: true, items: inbox_(10) });
@@ -79,6 +81,8 @@ function doPost(e) {
       return out_({ ok: true, updatedAt: body.state.updatedAt });
     }
     if (role !== 'owner') return out_({ ok: false, error: 'This key only opens the shared space' });
+    if (body.action === 'bankClaim' && body.token) return out_(bankClaim_(String(body.token)));
+    if (body.action === 'bankOff') { PropertiesService.getScriptProperties().deleteProperty('SFIN_URL'); CacheService.getScriptCache().remove('bank1'); return out_({ ok: true }); }
     if (body.action === 'save' && body.state) {
       var lock = LockService.getScriptLock(); lock.waitLock(20000);
       try { saveState_(body.state); } finally { lock.releaseLock(); }
@@ -299,4 +303,48 @@ function sendReminder_(s) {
     '<p style="margin-top:26px;font-size:12px;color:#8A919C">Sent by the Tally script in your own Google Sheet. Change the day or turn it off in Tally &gt; Settings.</p></div>';
   var plain = 'Time to check in, ' + name + '.\n\nNext 7 days:\n' + (ev.map(function (e) { return Utilities.formatDate(e.d, tz, 'EEE MMM d') + '  ' + e.t + (e.a ? '  ' + fmt(e.a) : ''); }).join('\n') || 'Nothing due.') + (url ? '\n\nOpen Tally: ' + url : '');
   MailApp.sendEmail({ to: to, subject: 'Tally check-in · ' + ev.length + (ev.length === 1 ? ' date' : ' dates') + ' this week', body: plain, htmlBody: html, name: 'Tally' });
+}
+
+/* ---------- bank connection: SimpleFIN Bridge (read-only) ----------
+   The access link is kept in this script's properties. It never goes to the app.
+   SimpleFIN asks apps to stay under 24 requests a day, so results are cached for 2 hours
+   and a forced refresh is allowed at most every 15 minutes. */
+function bankClaim_(token) {
+  var claim = Utilities.newBlob(Utilities.base64Decode(token.trim())).getDataAsString().trim();
+  if (!/^https:\/\//.test(claim)) return { ok: false, error: 'That doesn’t look like a SimpleFIN setup token.' };
+  var r = UrlFetchApp.fetch(claim, { method: 'post', headers: { 'Content-Length': '0' }, muteHttpExceptions: true });
+  if (r.getResponseCode() === 403) return { ok: false, error: 'That token was already used or doesn’t exist. Make a new one in SimpleFIN.' };
+  if (r.getResponseCode() >= 300) return { ok: false, error: 'SimpleFIN said ' + r.getResponseCode() };
+  PropertiesService.getScriptProperties().setProperty('SFIN_URL', r.getContentText().trim());
+  CacheService.getScriptCache().remove('bank1');
+  return bank_(true);
+}
+function bankFetch_(path) {
+  var acc = PropertiesService.getScriptProperties().getProperty('SFIN_URL'); if (!acc) throw new Error('No bank connection yet');
+  var m = /^(https?):\/\/([^:\/@]+):([^@]+)@(.+)$/.exec(acc); if (!m) throw new Error('Saved bank link looks wrong. Reconnect.');
+  var url = m[1] + '://' + m[4].replace(/\/$/, '') + path;
+  return UrlFetchApp.fetch(url, { headers: { Authorization: 'Basic ' + Utilities.base64Encode(decodeURIComponent(m[2]) + ':' + decodeURIComponent(m[3])) }, muteHttpExceptions: true });
+}
+function bank_(force) {
+  var cache = CacheService.getScriptCache(), props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('SFIN_URL')) return { ok: true, connected: false };
+  var hit = cache.get('bank1'), lastAt = +props.getProperty('SFIN_LAST') || 0;
+  if (hit && (!force || Date.now() - lastAt < 15 * 60000)) { var c = JSON.parse(hit); c.cached = true; return c; }
+  var start = Math.floor((Date.now() - 45 * 864e5) / 1000);
+  var r = bankFetch_('/accounts?version=2&start-date=' + start);
+  if (r.getResponseCode() === 402) return { ok: false, error: 'SimpleFIN subscription needs payment.' };
+  if (r.getResponseCode() === 403) return { ok: false, error: 'SimpleFIN turned this connection off. Reconnect with a new token.' };
+  if (r.getResponseCode() >= 300) return { ok: false, error: 'SimpleFIN said ' + r.getResponseCode() };
+  var j = JSON.parse(r.getContentText()), tz = Session.getScriptTimeZone(), conns = {};
+  (j.connections || []).forEach(function (c) { conns[c.conn_id] = c.name || c.org_url || ''; });
+  var day = function (t) { return t ? Utilities.formatDate(new Date(t * 1000), tz, 'yyyy-MM-dd') : ''; };
+  var out = { ok: true, connected: true, at: new Date().toISOString(),
+    errors: (j.errlist || []).map(function (e) { return e.msg || e.code; }).concat(j.errors || []),
+    accounts: (j.accounts || []).map(function (a) {
+      return { id: a.id, name: a.name, conn: conns[a.conn_id] || (a.org && a.org.name) || '', bal: +a.balance, avail: a['available-balance'] != null ? +a['available-balance'] : null, date: day(a['balance-date']),
+        txns: (a.transactions || []).filter(function (t) { return !t.pending; }).slice(-120).map(function (t) { return { id: t.id, date: day(t.transacted_at || t.posted), amt: +t.amount, desc: String(t.description || '').slice(0, 70) }; }) };
+    }) };
+  props.setProperty('SFIN_LAST', String(Date.now()));
+  try { cache.put('bank1', JSON.stringify(out), 7200); } catch (e) { /* too big to cache; fine */ }
+  return out;
 }
