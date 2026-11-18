@@ -517,6 +517,9 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 @media (max-width:360px){.calday{min-height:44px}.calbal b{font-size:12px}}
 .calday.sel .cd-stmt{box-shadow:inset 0 0 0 1.5px var(--tp-btn-ink)}
 
+.top{gap:8px}
+@media (max-width:380px){.top .ibtn{width:40px;height:40px;border-radius:13px}.top{gap:6px}.top .who b{font-size:22px}}
+
 </style>
 </head>
 <body class="tp-page">
@@ -526,7 +529,7 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.17.15';
+var APP_VERSION = '2026.11.17.16';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1320,6 +1323,7 @@ function payLabel(p) { return { 7: 'every week', 14: 'every 2 weeks', 15: 'twice
 function topBar(title, sub, back) {
   var h = '<div class="top">' + (back ? '<button class="ibtn" data-act="go" data-a="' + back + '" aria-label="Back">' + TP.svg('back') + '</button>' : '') +
     '<div class="who"><span>' + esc(sub) + '</span><b>' + esc(title) + '</b></div>';
+  if (!back && VIEW === 'home') h += '<button class="ibtn" data-act="go" data-a="together" aria-label="Together: shared with your partner">' + TP.svg('people') + (typeof SH !== 'undefined' && SH.on() && SH.doc && Math.abs(shNet()) >= 0.5 ? '<span class="syncdot ok"></span>' : '') + '</button>';
   if (!back) h += '<button class="ibtn" data-act="go" data-a="calendar" aria-label="Calendar">' + TP.svg('calendar') + '</button><button class="ibtn" data-act="go" data-a="explore" aria-label="Explore: tips, trips, markets">' + TP.svg('compass') + '</button><button class="ibtn" id="syncBtn" data-act="go" data-a="settings" aria-label="Settings">' + TP.svg('gear') + '<span class="syncdot"></span></button>';
   h += '</div>';
   if (VIEW === 'home') h += '<div class="dotsrow"><span class="small">' + esc(syncLine()) + '</span><div class="dots" role="group" aria-label="Theme color">' + PALS.map(function (p) { return '<button data-act="pal" data-a="' + p.id + '" class="' + (UI.pal === p.id ? 'on' : '') + '" style="background:' + p.sw + '" aria-label="' + esc(p.name) + '" aria-pressed="' + (UI.pal === p.id) + '"></button>'; }).join('') + '</div></div>';
