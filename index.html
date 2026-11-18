@@ -577,7 +577,7 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.1';
+var APP_VERSION = '2026.11.18.2';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1073,17 +1073,21 @@ function suggestSplit(spare) {
   return jobs;
 }
 function coach() {
-  var out = [], td = today(), last = lastSnap(), spend = last ? snapSpend(last) : 0, save = last ? snapSum(last, ['save']) : 0;
-  var soon = eventsBetween(td, addDays(td, 7)), dues = soon.filter(function (e) { return e.type === 'due' && e.st !== 'paid'; }), bills = soon.filter(function (e) { return e.type === 'bill'; });
-  var need = 0, blank = 0; dues.forEach(function (e) { if (e.amt == null) blank++; else need += e.amt; }); bills.forEach(function (e) { need += e.amt || 0; });
-  if (last && (dues.length || bills.length)) {
-    var tail = blank ? ' ' + blank + ' statement amount' + (blank > 1 ? 's are' : ' is') + ' blank, so the real number is higher.' : '';
-    if (spend >= need) out.push({ p: 3, tone: 'ok', title: 'The next 7 days are covered', text: money(need) + ' in card payments and bills is due. Spending money is ' + money(spend) + '.' + tail });
-    else out.push({ p: 0, tone: 'warn', title: 'Next 7 days: short by ' + money(need - spend), text: money(need) + ' is due and spending money is ' + money(spend) + '. Line up the transfer now instead of on the due date.' + tail });
+  var out = [], td = today(), last = lastSnap();
+  /* next 7 days: spending accounts + money coming in vs. bills and card payments due (same math as the calendar) */
+  if (last) {
+    var end = addDays(td, 7), due = dueBetween(td, end), cash = spendCash(), inPay = paydaysBetween(td, end).length * netPay((S.profile.pay || {}).amt), inOther = incomeBetween(td, end).total, have = r2(cash + inPay + inOther), est = due.list.filter(function (x) { return x.e.type === 'due' && x.e.amt == null; }).length;
+    var tail = est ? ' ' + est + ' card payment' + (est > 1 ? 's are' : ' is') + ' estimated from the balance; add the statement for a sharper number.' : '';
+    if (due.total > 0) {
+      if (have >= due.total) out.push({ p: 3, tone: 'ok', title: 'The next 7 days are covered', text: money(due.total) + ' in bills and card payments is due. You have ' + money(cash) + ' in spending accounts' + (inPay + inOther ? ' plus ' + money(inPay + inOther) + ' coming in' : '') + '.' + tail });
+      else out.push({ p: 0, tone: 'warn', title: 'Next 7 days: short by ' + money(due.total - have), text: money(due.total) + ' is due by ' + shortDate(end) + '. You have ' + money(cash) + ' in spending accounts' + (inPay + inOther ? ' plus ' + money(inPay + inOther) + ' coming in' : '') + '. Move the difference from savings before the first due date.' + tail, act: 'go', a: 'calendar' });
+    }
   }
-  var fl = +S.profile.floor || 0;
-  if (!fl) out.push({ p: 1, tone: 'todo', title: 'Set your savings floor', text: 'Pick the balance savings shouldn’t drop below. Tally then tells you how much room you have and refills it first.', act: 'go', a: 'settings' });
-  else if (last) out.push(save < fl ? { p: 0, tone: 'warn', title: 'Savings is ' + money(fl - save) + ' under your floor', text: 'Your rule is ' + money(fl) + '. The suggested split refills it before anything else.' } : { p: 4, tone: 'ok', title: money(save - fl) + ' of room above your floor', text: 'Savings is ' + money(save) + '. Your rule is ' + money(fl) + '.' });
+  /* savings cushion: set per savings account */
+  var sv = S.accounts.filter(function (a) { return !a.closed && a.kind === 'save'; }), fl = 0, sb = 0;
+  sv.forEach(function (a) { fl += +a.floor || 0; sb += acctBal(a.id); });
+  if (sv.length && !fl) out.push({ p: 1, tone: 'todo', title: 'Set a savings cushion', text: 'The balance ' + sv[0].name + ' shouldn’t drop below. Tally then shows how much room you have above it.', act: 'acctEdit', id: sv[0].id });
+  else if (fl && last) out.push(sb < fl ? { p: 0, tone: 'warn', title: 'Savings is ' + money(fl - sb) + ' under your cushion', text: 'Your cushion is ' + money(fl) + '. Refill it before extra goals.', act: 'go', a: 'accounts' } : { p: 4, tone: 'ok', title: money(sb - fl) + ' of room above your cushion', text: 'Savings is ' + money(sb) + '. Your cushion is ' + money(fl) + '.' });
   var closing = eventsBetween(td, addDays(td, 3)).filter(function (e) { return e.type === 'stmt'; });
   if (closing.length) out.push({ p: 2, tone: 'info', title: closing.map(function (e) { return e.title.replace(' statement closes', ''); }).join(' and ') + ': statement closes ' + (closing[0].date === td ? 'today' : dowDate(closing[0].date)), text: 'The balance on closing day is the one reported to the credit bureaus. A payment before then lowers it.' });
   S.goals.forEach(function (g) {
