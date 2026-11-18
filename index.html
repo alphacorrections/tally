@@ -689,6 +689,8 @@ details.cashchk.bad .tp-tile{background:var(--bad-bg);color:var(--bad)}
 details.cashchk .tp-t{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
 details.cashchk .tp-t b{font-size:15px}
 details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
+.nav .plus{margin-left:4px}
+@media(max-width:400px){ .nav .plus{width:44px;min-width:44px;height:44px;border-radius:15px} }
 
 </style>
 </head>
@@ -699,7 +701,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.12';
+var APP_VERSION = '2026.11.18.14';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -887,14 +889,23 @@ function nextBillDate(b, from) { if (b.freq === 'c') return customDates(b, from,
 
 /* goals */
 function goalNow(g) {
-  if (g.kind === 'payoff') return Math.max(0, (+g.target || 0) - (+g.manual || 0));
+  if (g.kind === 'payoff') return Math.max(0, (+g.target || 0) - goalOwed(g));
   if (g.acct) return acctBal(g.acct);
   return +g.manual || 0;
 }
+/* a payoff goal can follow a card's balance (kept current by your bank) or a number you type */
+function goalOwed(g) { var c = g.card ? byId(S.cards, g.card) : null; return c ? Math.max(0, cardBal(c)) : (+g.manual || 0); }
 function goalPct(g) { var t = +g.target || 0; return t > 0 ? Math.max(0, Math.min(100, goalNow(g) / t * 100)) : 0; }
 function goalLeft(g) { return Math.max(0, (+g.target || 0) - goalNow(g)); }
 function monthsUntil(dateStr) { if (!dateStr) return null; var a = new Date(), b = parseD(dateStr); return Math.max(0, (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + (b.getDate() >= a.getDate() ? 0 : -1) + 1); }
-function goalPace(g) { var m = monthsUntil(g.due); if (!m) return null; return r2(goalLeft(g) / m); }
+function goalPace(g) { if (+g.monthly > 0) return goalLeft(g) > 0 ? r2(Math.min(+g.monthly, goalLeft(g))) : 0; var m = monthsUntil(g.due); if (!m) return null; return r2(goalLeft(g) / m); }
+/* with a set monthly amount: the month it's done, and what's still left on the target date (e.g. when a 0% offer ends) */
+function goalFinish(g) {
+  var left = goalLeft(g), m = +g.monthly; if (!(m > 0) || !(left > 0)) return null;
+  var n = Math.ceil(left / m), d = new Date(); d = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  var atDue = g.due ? Math.max(0, r2(left - m * (monthsUntil(g.due) || 0))) : null;
+  return { months: n, date: ymd(d), atDue: atDue };
+}
 /* average monthly change of an account over the last n days of snapshots */
 function recentPace(acctId, days) {
   var last = lastSnap(); if (!last) return 0;
@@ -1270,7 +1281,9 @@ function coach() {
   if (closing.length) out.push({ p: 2, tone: 'info', title: closing.map(function (e) { return e.title.replace(' statement closes', ''); }).join(' and ') + ': statement closes ' + (closing[0].date === td ? 'today' : dowDate(closing[0].date)), text: 'The balance on closing day is the one reported to the credit bureaus. A payment before then lowers it.' });
   S.goals.forEach(function (g) {
     if (goalPct(g) >= 100 || !g.due) return; var pace = goalPace(g), d = parseD(g.due), when = MON[d.getMonth()] + ' ' + d.getFullYear();
-    if (g.kind === 'payoff') { var m = monthsUntil(g.due); out.push({ p: m <= 3 ? 1 : 3, tone: m <= 3 ? 'warn' : 'info', title: g.name + ': ' + money(+g.manual || 0) + ' left, ' + m + (m === 1 ? ' month' : ' months'), text: money(pace) + ' a month clears it by ' + when + '.', act: 'goalEdit', id: g.id }); }
+    if (g.kind === 'payoff') { var m = monthsUntil(g.due), fin = goalFinish(g);
+      if (fin) { if (fin.atDue) out.push({ p: m <= 3 ? 1 : 3, tone: m <= 3 ? 'warn' : 'info', title: g.name + ': ' + money(fin.atDue) + ' still owed on ' + shortDate(g.due), text: 'At ' + money(+g.monthly) + ' a month it’s paid off around ' + MON[parseD(fin.date).getMonth()] + ' ' + parseD(fin.date).getFullYear() + '. If ' + shortDate(g.due) + ' is when a 0% offer ends, interest starts on what’s left then. Clearing it in time takes ' + money(goalLeft(g) / Math.max(1, m)) + ' a month.', act: 'goalEdit', id: g.id }); }
+      else out.push({ p: m <= 3 ? 1 : 3, tone: m <= 3 ? 'warn' : 'info', title: g.name + ': ' + money(goalOwed(g)) + ' left, ' + m + (m === 1 ? ' month' : ' months'), text: money(pace) + ' a month clears it by ' + when + '.', act: 'goalEdit', id: g.id }); }
     else if (g.acct) { var rp = Math.max(0, recentPace(g.acct, 180)); if (rp < pace * 0.8) out.push({ p: 2, tone: 'info', title: g.name + ' needs ' + money(pace) + ' a month. Lately: ' + money(rp), text: 'That’s to make ' + when + '. Three levers: more each month, a later date, or a smaller target. Slide them in What if.', act: 'playGoal', id: g.id }); else out.push({ p: 5, tone: 'ok', title: g.name + ' is on pace', text: money(rp) + ' a month lately. ' + money(pace) + ' needed for ' + when + '.' }); }
   });
   var aw = appWeeks(), lw = aw[aw.length - 1];
@@ -1468,7 +1481,7 @@ var ACC_VIEW = 'net', ACC_VIEWS = { net: { tab: 'Net worth', label: 'Net worth' 
 var VIEW = 'home', NW_RANGE = 'year', CARD_YEAR = null, SAY_OFF = 0, TIP_OFF = 0, WIZ = { step: 1, name: '', how: 'fresh', ws: 1 };
 var CK = null, CW = null, INBOX = null, INBOX_ERR = '';
 var PLAY = { save: 500, side: 0, cut: 0, apy: 3.75, goal: '', b_amt: 1000, b_fee: 100, b_apr: 4.99, b_mo: 6, b_apy: 3.75, c_amt: 3000, c_apr: 28.49, c_pay: 300 };
-var NAV = [{ id: 'home', name: 'Home', icon: 'home' }, { id: 'spending', name: 'Spending', icon: 'chart' }, { id: 'accounts', name: 'Accounts', icon: 'bank' }, { id: 'checkin', plus: 1 }, { id: 'cards', name: 'Cards', icon: 'card' }, { id: 'bills', name: 'Bills', icon: 'receipt' }];
+var NAV = [{ id: 'home', name: 'Home', icon: 'home' }, { id: 'spending', name: 'Spending', icon: 'chart' }, { id: 'accounts', name: 'Accounts', icon: 'bank' }, { id: 'cards', name: 'Cards', icon: 'card' }, { id: 'bills', name: 'Bills', icon: 'receipt' }, { id: 'checkin', plus: 1 }];
 TP.icons.bank = '<path d="M3 9l9-5 9 5M5 9v9M10 9v9M14 9v9M19 9v9M3 20h18"/>';
 TP.icons.compass = '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>';
 TP.icons.close = '<path d="M6 6l12 12M18 6L6 18"/>';
@@ -1528,7 +1541,8 @@ function ring(pct, size) { size = size || 62; var r = size / 2 - 5, C = 2 * Math
 function firstGoal() { return S.goals.filter(function (g) { return g.kind === 'save'; })[0] || null; }
 function goalLine(g) {
   if (goalPct(g) >= 100) return 'Done.';
-  var pace = goalPace(g), rp = g.acct ? Math.max(0, recentPace(g.acct, 180)) : null;
+  var pace = goalPace(g), rp = g.acct ? Math.max(0, recentPace(g.acct, 180)) : null, fin = goalFinish(g);
+  if (fin) { var fd = parseD(fin.date); return money(+g.monthly) + '/mo · ' + (g.kind === 'payoff' ? 'paid off' : 'done') + ' around ' + MON[fd.getMonth()] + ' ' + fd.getFullYear() + (fin.atDue ? '. ' + money(fin.atDue) + ' still left on ' + shortDate(g.due) + '.' : '.'); }
   if (g.due && pace != null) return money(pace) + '/mo makes ' + MON[parseD(g.due).getMonth()] + ' ' + parseD(g.due).getFullYear() + (rp != null ? '. Lately ' + money(rp) + '/mo.' : '.');
   return rp != null ? 'Lately ' + money(rp) + ' a month.' : '';
 }
@@ -2615,15 +2629,17 @@ var ACT = {
     var g = d.id ? byId(S.goals, d.id) : { id: '', name: '', kind: d.kind || 'save', target: '', acct: '', manual: '', due: '', note: '', trip: {} }, t = g.trip || {};
     sheet(sxHead(g.id ? 'Edit ' + g.name : (g.kind === 'trip' ? 'Add a trip' : 'Add a goal')) + '<input type="hidden" id="g_id" value="' + esc(g.id) + '">' + textField('g_name', 'Name', g.name, g.kind === 'trip' ? 'e.g. Lisbon in May' : 'e.g. Down payment') +
       '<label class="tp-label">Type</label>' + seg('g_kind', [['save', 'Save up'], ['payoff', 'Pay off'], ['trip', 'Trip']], g.kind) +
-      '<div class="fgrid">' + moneyField('g_target', GOAL_LBL[g.kind][0], g.target) + '<div><label class="tp-label" for="g_acct">Track from</label><select class="tp-input" id="g_acct"><option value="">An amount I type</option>' + S.accounts.map(function (a) { return '<option value="' + a.id + '"' + (g.acct === a.id ? ' selected' : '') + '>' + esc(a.name) + ' balance</option>'; }).join('') + '</select></div>' +
+      '<div class="fgrid">' + moneyField('g_target', GOAL_LBL[g.kind][0], g.target) + '<div><label class="tp-label" for="g_acct">Track from</label><select class="tp-input" id="g_acct"><option value="">An amount I type</option>' + S.cards.filter(function (c) { return !c.off; }).map(function (c) { return '<option value="c:' + c.id + '"' + (g.card === c.id ? ' selected' : '') + '>' + esc(c.name) + ' balance (pay off)</option>'; }).join('') + S.accounts.map(function (a) { return '<option value="' + a.id + '"' + (g.acct === a.id ? ' selected' : '') + '>' + esc(a.name) + ' balance</option>'; }).join('') + '</select></div>' +
       moneyField('g_manual', GOAL_LBL[g.kind][1], g.manual, 'Used when Track from is an amount you type') + textField('g_due', 'Target date', g.due, '', 'date') + '</div>' +
+      moneyField('g_monthly', 'Set amount each month (optional)', g.monthly || '', 'Leave empty to work it out from the target date. With an amount, the date is shown as a check: what’s still left by then.') +
       '<div id="g_trip"' + (g.kind === 'trip' ? '' : ' hidden') + '><div class="tp-sect"><span>Trip details</span></div><div class="fgrid">' + textField('t_from', 'From', t.from, 'BOS') + textField('t_to', 'To', t.to, 'LIS') + textField('t_dep', 'Leave', t.depart, '', 'date') + textField('t_ret', 'Return', t.ret, '', 'date') + moneyField('t_fare', 'Fare you’d be happy with', t.fare) + textField('t_pts', 'Points you could use', t.points, '', 'number') + '</div></div>' +
       textField('g_note', 'Note', g.note, '') + '<div id="g_err"></div><div class="acts">' + (g.id ? '<button class="tp-btn tp-danger" data-act="goalDel" data-id="' + g.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="goalSave">Save</button></div>');
   },
   goalSave: function () {
     var name = val('g_name').trim(); if (!name) { document.getElementById('g_err').innerHTML = '<div class="tp-err">Give it a name.</div>'; return; }
     var g = byId(S.goals, val('g_id')); if (!g) { g = { id: uid() }; S.goals.push(g); }
-    g.name = name; g.kind = val('g_kind') || 'save'; g.target = r2(num(val('g_target'))); g.acct = g.kind === 'payoff' ? '' : val('g_acct'); g.manual = r2(num(val('g_manual'))); g.due = val('g_due'); g.note = val('g_note').trim();
+    g.name = name; g.kind = val('g_kind') || 'save'; g.target = r2(num(val('g_target'))); g.acct = g.kind === 'payoff' ? '' : val('g_acct'); g.manual = r2(num(val('g_manual'))); g.due = val('g_due'); g.note = val('g_note').trim(); g.monthly = r2(num(val('g_monthly'))) || '';
+    var ta = val('g_acct'); g.card = ta.indexOf('c:') === 0 ? ta.slice(2) : ''; if (g.card) { g.kind = 'payoff'; g.acct = ''; }
     if (g.kind === 'trip') { var old = g.trip || {}; g.trip = { from: val('t_from').trim().toUpperCase(), to: val('t_to').trim().toUpperCase(), depart: val('t_dep'), ret: val('t_ret'), fare: r2(num(val('t_fare'))) || '', points: Math.round(num(val('t_pts'))) || '', log: old.log || [] }; }
     closeSheet(); render._keep = true; save();
   },
@@ -2813,7 +2829,7 @@ function togetherPage() {
   var me = shMe(), them = shThem(), net = shNet(), td = today();
   var nShop = shLive('shop').filter(function (x) { return !x.got; }).length, nTodo = shLive('todo').filter(function (x) { return !x.done; }).length;
   var nPlan = shLive('plans').filter(function (x) { return x.date >= td && x.date <= addDays(td, 7); }).length;
-  h += '<div class="seg shtabs" role="tablist">' + [['money', 'Money', 0], ['plans', 'Plans', nPlan], ['shop', 'Shopping', nShop], ['todo', 'To-do', nTodo]].map(function (t) { return '<button role="tab" aria-selected="' + (SHV === t[0]) + '" class="' + (SHV === t[0] ? 'on' : '') + '" data-act="shTab" data-a="' + t[0] + '">' + t[1] + (t[2] ? '<i class="cnt">' + t[2] + '</i>' : '') + '</button>'; }).join('') + '</div>';
+  h += '<div class="seg shtabs" role="tablist">' + [['money', 'Money', 0], ['plans', 'Calendar', nPlan], ['shop', 'Shopping', nShop], ['todo', 'To-do', nTodo]].map(function (t) { return '<button role="tab" aria-selected="' + (SHV === t[0]) + '" class="' + (SHV === t[0] ? 'on' : '') + '" data-act="shTab" data-a="' + t[0] + '">' + t[1] + (t[2] ? '<i class="cnt">' + t[2] + '</i>' : '') + '</button>'; }).join('') + '</div>';
   if (SHV === 'plans') return h + plansPage();
   if (SHV === 'shop') return h + shopPage();
   if (SHV === 'todo') return h + todoPage();
@@ -2871,18 +2887,16 @@ PAGES.together = togetherPage;
 var SHV = 'money';
 function whoName(id) { return id === SH.cfg.me ? 'You' : shPerson(id).name; }
 function agoTxt(iso) { if (!iso) return ''; var d = iso.slice(0, 10), td = today(), n = daysBetween(d, td); return n <= 0 ? 'today' : n === 1 ? 'yesterday' : n < 7 ? DOW[parseD(d).getDay()] : shortDate(d); }
-/* shared calendar: your plans, plus shared bills and dated to-dos, in one list by day */
+/* shared calendar: dates you both add (dinners, trips, appointments), by day */
 function timeTxt(t) { if (!t) return ''; var p = t.split(':'), hh = +p[0], mm = p[1] || '00'; return (hh % 12 || 12) + (mm !== '00' ? ':' + mm : '') + (hh < 12 ? 'am' : 'pm'); }
 function shAgenda(from, to) {
   var out = [];
   shLive('plans').forEach(function (x) { if (x.date >= from && x.date <= to) out.push({ k: 'plan', d: x.date, t: x.time || '', x: x }); });
-  shLive('todo').forEach(function (x) { if (!x.done && x.due && x.due >= from && x.due <= to) out.push({ k: 'todo', d: x.due, t: '', x: x }); });
-  shLive('bills').forEach(function (b) { if (!b.day) return; for (var m = 0; m < 4; m++) { var f = parseD(from), d = ymd(clampDay(f.getFullYear(), f.getMonth() + m, +b.day)); if (d >= from && d <= to) out.push({ k: 'bill', d: d, t: '', x: b }); } });
   return out.sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : (a.t || '99') < (b.t || '99') ? -1 : 1; });
 }
 function plansPage() {
-  var td = today(), list = shAgenda(td, addDays(td, 90)), h = '<button class="tp-btn tp-block tp-rise" data-act="planEdit">+ Add a plan</button>';
-  if (!list.length) h += '<div class="glass mt"><div class="empty">Dinners, trips, appointments, visits. Add one and it shows up for both of you, with your shared bills and dated to-dos.</div></div>';
+  var td = today(), list = shAgenda(td, addDays(td, 90)), h = '<button class="tp-btn tp-block tp-rise" data-act="planEdit">+ Add to the calendar</button>';
+  if (!list.length) h += '<div class="glass mt"><div class="empty">Dinners, trips, appointments, visits: anything you both want to remember. Add one and it shows up on both your phones.</div></div>';
   var byD = {}; list.forEach(function (e) { (byD[e.d] = byD[e.d] || []).push(e); });
   Object.keys(byD).forEach(function (d) {
     var n = daysBetween(td, d), head = n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : dowDate(d);
@@ -2894,12 +2908,12 @@ function plansPage() {
     }).join('') + '</div>';
   });
   var past = shLive('plans').filter(function (x) { return x.date < td; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 10);
-  if (past.length) h += '<details class="glass pad donebox"><summary>Past plans · ' + past.length + '</summary>' + past.map(function (x) { return '<button class="tp-row" data-act="planEdit" data-id="' + x.id + '" style="padding-left:0;padding-right:0">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.title) + '</b><span>' + esc(timeTxt(x.time) || shortDate(x.date)) + '</span></span></button>'; }).join('') + '</details>';
-  return h + '<p class="small muted">Plans also show on your own Calendar (the calendar button on Home).</p>';
+  if (past.length) h += '<details class="glass pad donebox"><summary>Past · ' + past.length + '</summary>' + past.map(function (x) { return '<button class="tp-row" data-act="planEdit" data-id="' + x.id + '" style="padding-left:0;padding-right:0">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.title) + '</b><span>' + esc(timeTxt(x.time) || shortDate(x.date)) + '</span></span></button>'; }).join('') + '</details>';
+  return h + '<p class="small muted">These also show on your own calendar (the calendar button on Tally’s Home).</p>';
 }
 ACT.planEdit = function (d) {
   var x = d.id ? shLive('plans').filter(function (p) { return p.id === d.id; })[0] : { date: today(), who: '' }, me = shMe(), th = shThem(); if (!x) return;
-  sheet(sxHead(d.id ? 'Edit plan' : 'New plan') + textField('pl_title', 'What', x.title || '', 'e.g. Dinner with Sam, flight to Lisbon') + '<div class="fgrid">' + textField('pl_date', 'Date', x.date || today(), '', 'date') + textField('pl_time', 'Time (optional)', x.time || '', '', 'time') + '</div>' +
+  sheet(sxHead(d.id ? 'Edit' : 'Add to the calendar') + textField('pl_title', 'What', x.title || '', 'e.g. Dinner with Sam, flight to Lisbon') + '<div class="fgrid">' + textField('pl_date', 'Date', x.date || today(), '', 'date') + textField('pl_time', 'Time (optional)', x.time || '', '', 'time') + '</div>' +
     '<label class="tp-label">Who</label>' + seg('pl_who', [['', 'Both'], [me.id, me.name], [th.id, th.name]], x.who || '') + textField('pl_note', 'Note', x.note || '', 'Where, what to bring, confirmation #') + '<div id="pl_err"></div>' +
     '<div class="acts">' + (d.id ? '<button class="tp-btn tp-danger" data-act="shDel" data-list="plans" data-id="' + x.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="planSave"' + (d.id ? ' data-id="' + x.id + '"' : '') + '>Save</button></div>');
 };
