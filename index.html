@@ -452,6 +452,32 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 .ckc-f{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .ckc-f>div{min-width:0}
 
+/* quick add */
+.qamt .tp-input{font-family:var(--tp-display);font-size:34px;font-weight:700;min-height:64px;padding-left:34px}
+.qamt::before{font-size:28px!important;top:50%!important;transform:translateY(-50%)}
+.qsrc .chip{display:inline-flex;align-items:center;gap:7px}
+.qsrc .chip i{width:14px;height:10px;border-radius:3px;flex:none}
+.ccstmt.cyc{font-weight:500;font-size:13px;color:var(--tp-ink2)}
+.mvrow{display:grid;grid-template-columns:1fr 120px 44px;gap:8px;align-items:center;padding:10px 12px}
+.mvrow + .mvrow,.tp-row + .mvrow{border-top:1px solid var(--tp-line2)}
+.mvrow>*{min-width:0}
+/* horizontal bars: one hue, magnitude */
+.hbar + .hbar{margin-top:12px}
+.hbar .hl{display:flex;justify-content:space-between;gap:10px;font-size:14px;margin-bottom:5px}
+.hbar .hl b{font-family:var(--tp-display);font-variant-numeric:tabular-nums}
+.hbar .hl em{font-style:normal;font-weight:500;color:var(--tp-ink2);margin-left:8px;font-family:var(--tp-font);font-size:12.5px}
+.hbar .bar i{background:var(--c1)}
+
+/* check-in button, floating above the nav on every main page */
+.ckfab{position:fixed;right:max(16px,calc(50% - 260px + 4px));bottom:calc(92px + env(safe-area-inset-bottom));z-index:41;display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:0 15px 0 12px;border-radius:99px;
+  background:var(--tp-card2);color:var(--tp-ink);border:1px solid var(--tp-line);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);box-shadow:inset 0 1px 0 var(--edge),0 10px 26px rgba(0,0,0,.28);font:700 13.5px var(--tp-font);cursor:pointer}
+.ckfab svg{width:18px;height:18px}
+.ckfab.due{background:var(--hi);color:var(--tp-btn-ink);border-color:transparent}
+:root[data-theme="light"] .ckfab.due{color:#FFFFFF}
+.ckfab.due::after{content:"";position:absolute;top:-3px;right:-3px;width:11px;height:11px;border-radius:50%;background:var(--bad);border:2px solid var(--g2)}
+.tp-wrap{padding-bottom:calc(170px + env(safe-area-inset-bottom))}
+.tp-wrap.ckflow{padding-bottom:40px}
+
 </style>
 </head>
 <body class="tp-page">
@@ -461,7 +487,7 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.17.10';
+var APP_VERSION = '2026.11.17.12';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -514,7 +540,7 @@ var TP = {
     target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
     sliders: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
     trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
-    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+    gear: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
     palette: '<path d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2s-.8-1.6-.8-2.6c0-1 .8-1.9 2-1.9H17a4 4 0 0 0 4-4c0-4.2-4-7.5-9-7.5z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/>',
     plane: '<path d="M21 3L3 10l7 3 3 7z"/><path d="M10 13l5-5"/>',
@@ -575,7 +601,7 @@ if (window.matchMedia) { try { matchMedia('(prefers-color-scheme: dark)').addEve
 
 /* ---------- state ---------- */
 function blankState() {
-  return { v: 2, updatedAt: '', profile: { name: '', weekStart: 1, pay: { amt: '', every: 7, next: '' }, remind: { on: true, day: 0, hour: 9 }, funPct: 10 }, accounts: [], cards: [], bills: [], weeks: [], statements: {}, snaps: [], goals: [], watch: [], topics: [], ideas: [], affirm: [], affirmOn: true };
+  return { v: 2, updatedAt: '', profile: { name: '', weekStart: 1, pay: { amt: '', every: 7, next: '' }, remind: { on: true, day: 0, hour: 9 }, funPct: 10 }, accounts: [], cards: [], bills: [], weeks: [], statements: {}, snaps: [], txns: [], goals: [], watch: [], topics: [], ideas: [], affirm: [], affirmOn: true };
 }
 function normalize(s) {
   var b = blankState(); s = s || {};
@@ -613,11 +639,15 @@ function snapNet(s) { return r2(snapSum(s, ['spend', 'save', 'invest', 'retire']
 function lastSnap() { return S.snaps.length ? S.snaps[S.snaps.length - 1] : null; }
 function snapOnOrBefore(date) { var r = null; for (var i = 0; i < S.snaps.length; i++) { if (S.snaps[i].date <= date) r = S.snaps[i]; else break; } return r; }
 function snapOnOrAfter(date) { for (var i = 0; i < S.snaps.length; i++) if (S.snaps[i].date >= date) return S.snaps[i]; return null; }
-function acctBal(id) { for (var i = S.snaps.length - 1; i >= 0; i--) { var b = S.snaps[i].bal; if (b && b[id] != null) return +b[id] || 0; } return 0; }
+function snapTime(sn) { return sn.at || sn.date + 'T23:59:59'; }
+/* purchases logged after a balance was recorded move that balance until the next check-in */
+function txnsAfter(src, sn) { var t0 = sn ? snapTime(sn) : ''; return (S.txns || []).filter(function (x) { return x.src === src && (x.at || x.date) > t0; }); }
+function sumAmt(l) { return r2(l.reduce(function (t, x) { return t + (+x.amt || 0); }, 0)); }
+function acctBal(id) { for (var i = S.snaps.length - 1; i >= 0; i--) { var b = S.snaps[i].bal; if (b && b[id] != null) return r2((+b[id] || 0) - sumAmt(txnsAfter('a:' + id, S.snaps[i]))); } return r2(-sumAmt(txnsAfter('a:' + id, null))); }
 function weekStartOf(dateStr) { var d = parseD(dateStr), ws = +S.profile.weekStart || 0; var diff = (d.getDay() - ws + 7) % 7; d.setDate(d.getDate() - diff); return ymd(d); }
 function weekSpare(w) { return r2((+w.payroll || 0) + (+w.other || 0) - (+w.out || 0) - (+w.invest || 0)); }
 function realWeeks() { return S.weeks.filter(function (w) { return !w.planned; }); }
-function thisWeek() { var k = weekStartOf(today()); return S.weeks.filter(function (w) { return !w.planned && weekStartOf(w.date) === k; })[0] || null; }
+function thisWeek() { var k = weekStartOf(today()), l = S.weeks.filter(function (w) { return !w.planned && weekStartOf(w.date) === k; }); return l.filter(function (w) { return w.app; })[0] || l[0] || null; }
 function flows(from, to) {
   var f = { payroll: 0, other: 0, transfer: 0, out: 0, invest: 0, n: 0 };
   realWeeks().forEach(function (w) { if (w.date >= from && w.date <= to) { f.payroll += +w.payroll || 0; f.other += +w.other || 0; f.transfer += +w.transfer || 0; f.out += +w.out || 0; f.invest += +w.invest || 0; f.n++; } });
@@ -667,7 +697,7 @@ function eventsBetween(from, to) {
     S.cards.forEach(function (c) {
       if (c.off) return;
       var st = (S.statements[ym] || {})[c.id];
-      if (c.dueDay) out.push({ date: ymd(clampDay(y, m, +c.dueDay)), type: 'due', title: c.name + ' payment due', card: c.id, ym: ym, amt: st ? +st.amt || 0 : null, st: st ? st.st : '' });
+      if (c.dueDay) out.push({ date: ymd(clampDay(y, m, +c.dueDay)), type: 'due', title: c.name + ' payment due', card: c.id, ym: ym, amt: st ? (st.plan != null && st.plan !== '' ? +st.plan : +st.amt || 0) : null, full: st ? +st.amt || 0 : null, st: st ? st.st : '' });
       if (c.stmtDay) out.push({ date: ymd(clampDay(y, m, +c.stmtDay)), type: 'stmt', title: c.name + ' statement closes', card: c.id, ym: ym });
     });
     S.bills.forEach(function (bl) {
@@ -802,7 +832,7 @@ function lineChart(id, series, opts) {
   var g = '';
   for (var v = lo; v <= hi + step / 2; v += step) g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/>';
   var yl = '';
-  for (v = lo; v <= hi + step / 2; v += step) yl += '<text x="' + (L - 7) + '" y="' + (Y(v) + 3.5).toFixed(1) + '" text-anchor="end">' + moneyK(v) + '</text>';
+  for (v = lo; v <= hi + step / 2; v += step) yl += '<text x="' + (L - 7) + '" y="' + (Y(v) + 3.5).toFixed(1) + '" text-anchor="end">' + (opts.num ? String(Math.round(v)) : moneyK(v)) + '</text>';
   /* x ticks: years if span > 18 months, else months */
   var xl = '', d0 = new Date(x0), d1 = new Date(x1), spanM = (d1.getFullYear() - d0.getFullYear()) * 12 + d1.getMonth() - d0.getMonth();
   var every = spanM > 30 ? 12 : spanM > 14 ? 6 : spanM > 7 ? 2 : 1;
@@ -825,7 +855,7 @@ function lineChart(id, series, opts) {
   if (opts.ref) ref = '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(opts.ref.y).toFixed(1) + '" y2="' + Y(opts.ref.y).toFixed(1) + '" style="stroke:var(--tp-ink2);stroke-dasharray:2 4;stroke-width:1"/>' +
     '<text x="' + (L + 4) + '" y="' + (Y(opts.ref.y) - 5).toFixed(1) + '">' + esc(opts.ref.label) + '</text>';
   var legend = series.length > 1 ? '<div class="legend">' + series.map(function (s) { return '<span><i class="' + (s.dash ? 'dash' : '') + '" style="background:' + s.color + ';color:' + s.color + '"></i>' + esc(s.name) + '</span>'; }).join('') + '</div>' : '';
-  CH[id] = { series: series, X: X, Y: Y, W: W, H: H, L: L, R: R, T: T, B: B, x0: x0, x1: x1, fmt: opts.fmt };
+  CH[id] = { series: series, X: X, Y: Y, W: W, H: H, L: L, R: R, T: T, B: B, x0: x0, x1: x1, fmt: opts.fmt, num: opts.num };
   return legend + '<div class="chart" id="' + id + '" data-chart="' + id + '"><svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(opts.label || 'Line chart') + '">' +
     '<g class="grid">' + g + '</g>' + yl + xl + ref + lines + ends + mark +
     '<line class="cross" y1="' + T + '" y2="' + (H - B) + '" x1="' + L + '" x2="' + L + '"/><g class="hov"></g>' +
@@ -846,7 +876,7 @@ function bindCharts(root) {
       c.series.forEach(function (s) {
         var near = null; s.pts.forEach(function (p) { if (!near || Math.abs(p.t - best.t) < Math.abs(near.t - best.t)) near = p; });
         if (!near || Math.abs(near.t - best.t) > 20 * 86400000) return;
-        rows += '<div><i style="background:' + s.color + '"></i>' + esc(s.name) + ': <b>' + money(near.y) + '</b></div>';
+        rows += '<div><i style="background:' + s.color + '"></i>' + esc(s.name) + ': <b>' + (c.num ? Math.round(near.y) : money(near.y)) + '</b></div>';
         dots += '<circle class="dot" r="5" cx="' + c.X(near.t).toFixed(1) + '" cy="' + c.Y(near.y).toFixed(1) + '" style="fill:' + s.color + '"/>';
       });
       var cx = c.X(best.t); cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.classList.add('on'); hov.innerHTML = dots;
@@ -1011,9 +1041,21 @@ function paydaysBetween(from, to) {
   while (d && d <= to && guard++ < 60) { out.push(d); d = nextPayday(addDays(d, 1)); }
   return out;
 }
-function cardBal(c) { for (var i = S.snaps.length - 1; i >= 0; i--) { var cb = S.snaps[i].cards; if (cb && cb[c.id] != null) return +cb[c.id] || 0; } return +c.bal || 0; }
+function cardBal(c) { for (var i = S.snaps.length - 1; i >= 0; i--) { var cb = S.snaps[i].cards; if (cb && cb[c.id] != null) return r2((+cb[c.id] || 0) + sumAmt(txnsAfter('c:' + c.id, S.snaps[i]))); } return r2((+c.bal || 0) + sumAmt(txnsAfter('c:' + c.id, null))); }
+/* card cycle: which statement a charge on `date` lands on, and when that is due */
+function cardCloseOnOrAfter(c, date) { if (!c.stmtDay) return null; var d = parseD(date), x = ymd(clampDay(d.getFullYear(), d.getMonth(), +c.stmtDay)); return x >= date ? x : ymd(clampDay(d.getFullYear(), d.getMonth() + 1, +c.stmtDay)); }
+function cardLastClose(c, date) { if (!c.stmtDay) return null; var d = parseD(date), x = ymd(clampDay(d.getFullYear(), d.getMonth(), +c.stmtDay)); return x <= date ? x : ymd(clampDay(d.getFullYear(), d.getMonth() - 1, +c.stmtDay)); }
+function cardDueAfter(c, close) { if (!c.dueDay || !close) return null; var d = parseD(close), x = ymd(clampDay(d.getFullYear(), d.getMonth(), +c.dueDay)); return x > close ? x : ymd(clampDay(d.getFullYear(), d.getMonth() + 1, +c.dueDay)); }
+function cardCycleFor(c, date) { var close = cardCloseOnOrAfter(c, date); return { close: close, due: cardDueAfter(c, close) }; }
+function chargesSince(c, date) { return (S.txns || []).filter(function (x) { return x.src === 'c:' + c.id && x.date > date; }); }
 function cardsOwed() { var t = 0; S.cards.forEach(function (c) { if (!c.off) t += cardBal(c); }); return r2(t); }
-function cardDueAmt(e) { if (e.amt != null) return e.st === 'paid' ? 0 : +e.amt || 0; var c = S.cards.filter(function (x) { return x.id === e.card; })[0]; return c ? cardBal(c) : 0; }
+function cardDueAmt(e) {
+  if (e.amt != null) return e.st === 'paid' ? 0 : +e.amt || 0;
+  var c = S.cards.filter(function (x) { return x.id === e.card; })[0]; if (!c) return 0;
+  /* no statement entered: if that statement already closed, charges logged after it belong to the next one */
+  var close = cardLastClose(c, addDays(e.date, -1)), td = today();
+  return close && close < td ? r2(Math.max(0, cardBal(c) - sumAmt(chargesSince(c, close)))) : cardBal(c);
+}
 function dueBetween(from, to) {
   var t = 0, list = [];
   eventsBetween(from, to).forEach(function (e) {
@@ -1022,7 +1064,8 @@ function dueBetween(from, to) {
   });
   return { total: r2(t), list: list };
 }
-function spendCash() { var l = lastSnap(); return l ? snapSum(l, ['spend']) : 0; }
+function spendCash() { var t = 0; S.accounts.forEach(function (a) { if (!a.closed && a.kind === 'spend') t += acctBal(a.id); }); return r2(t); }
+function liveNet() { var t = 0; S.accounts.forEach(function (a) { if (!a.closed) t += acctBal(a.id); }); return r2(t - cardsOwed()); }
 function appWeeks() { return realWeeks().filter(function (w) { return w.app; }); }
 function avgWeeklySpend() {
   var aw = appWeeks().slice(-4).filter(function (w) { return w.spendTotal != null; });
@@ -1030,11 +1073,15 @@ function avgWeeklySpend() {
   var t = 0; aw.forEach(function (w) { t += +w.spendTotal || 0; }); return r2(t / aw.length);
 }
 function currentPlan() { var tw = thisWeek(); return tw && tw.plan ? tw.plan : null; }
+/* auto-save: a % of each paycheck your bank moves to a savings account on payday */
+function autoSave() { var a = (S.profile.pay || {}).auto; if (!a || !(+a.pct > 0)) return null; var acct = S.accounts.filter(function (x) { return x.id === a.to; })[0]; if (!acct || acct.closed || acct.kind === 'spend') return null; return { pct: +a.pct, to: acct.id, name: acct.name }; }
+function autoSaveOf(amt) { var a = autoSave(); return a ? r2((+amt || 0) * a.pct / 100) : 0; }
+function netPay(amt) { return r2((+amt || 0) - autoSaveOf(amt)); }
 function safeToSpend() {
   /* Window: today through the day before the first payday at least 7 days out, so bills
      due right after a payday still count. Paychecks inside the window are added. */
   var td = today(), np = nextPayday(td), end, pays = 0, cash = spendCash();
-  if (np) { var p = np, g = 0; while (daysBetween(td, p) < 7 && g++ < 10) { var n2 = nextPayday(addDays(p, 1)); if (!n2 || n2 === p) break; p = n2; } end = addDays(p, -1); pays = r2(paydaysBetween(td, end).length * (+(S.profile.pay || {}).amt || 0)); }
+  if (np) { var p = np, g = 0; while (daysBetween(td, p) < 7 && g++ < 10) { var n2 = nextPayday(addDays(p, 1)); if (!n2 || n2 === p) break; p = n2; } end = addDays(p, -1); pays = r2(paydaysBetween(td, end).length * netPay((S.profile.pay || {}).amt)); }
   else end = addDays(td, 13);
   var due = dueBetween(td, end);
   var room = r2(cash + pays - due.total - floorOf('spend'));
@@ -1048,11 +1095,11 @@ function runway(days) {
   var td = today(), bal = spendCash(), pts = [{ d: td, y: r2(bal) }], low = { d: td, y: bal }, steps = [];
   var aw = appWeeks().slice(-4).filter(function (w) { return w.spendCash != null; }), daily = 0;
   if (aw.length) { var t = 0; aw.forEach(function (w) { t += +w.spendCash || 0; }); daily = t / aw.length / 7; }
-  var pay = +(S.profile.pay || {}).amt || 0, paydays = paydaysBetween(addDays(td, 1), addDays(td, days));
+  var pay = netPay((S.profile.pay || {}).amt), paydays = paydaysBetween(addDays(td, 1), addDays(td, days));
   var evs = eventsBetween(addDays(td, 1), addDays(td, days)), firstDue = {};
   for (var i = 1; i <= days; i++) {
     var d = addDays(td, i), delta = -daily;
-    if (paydays.indexOf(d) >= 0 && pay) { delta += pay; steps.push({ d: d, label: 'Payday', amt: pay }); }
+    if (paydays.indexOf(d) >= 0 && pay) { delta += pay; steps.push({ d: d, label: autoSave() ? 'Payday, after auto-save' : 'Payday', amt: pay }); }
     evs.forEach(function (e) {
       if (e.date !== d) return;
       if (e.type === 'bill' && e.amt) { delta -= e.amt; steps.push({ d: d, label: e.title, amt: -e.amt }); }
@@ -1142,6 +1189,77 @@ function nextYearly(b, td) { if (!b.month) return null; var y = +td.slice(0, 4),
 function nextDueDate(dueDay, from) { if (!dueDay) return null; var f = parseD(from), d = ymd(clampDay(f.getFullYear(), f.getMonth(), +dueDay)); return d < from ? ymd(clampDay(f.getFullYear(), f.getMonth() + 1, +dueDay)) : d; }
 function stmtFor(cardId, due) { if (!due) return null; return (S.statements[due.slice(0, 7)] || {})[cardId] || null; }
 function setStmt(cardId, due, amt) { var ym = due.slice(0, 7); S.statements[ym] = S.statements[ym] || {}; var st = S.statements[ym][cardId] || { st: '' }; st.amt = r2(amt); S.statements[ym][cardId] = st; }
+function setStmtPlanWarn() { var w = document.getElementById('st_warn'); if (!w) return; var a = num(val('st_amt')), pl = val('st_plan').trim(); w.textContent = pl !== '' && num(pl) < a ? 'Paying ' + money(a - num(pl), 1) + ' less than the statement. That part carries over and usually gets charged interest, unless the card has a 0% promo.' : ''; }
+function cycleLine(c) {
+  var td = today(), lc = cardLastClose(c, td); if (!lc) return '';
+  var ch = chargesSince(c, lc); if (!ch.length) return '';
+  var cy = cardCycleFor(c, addDays(lc, 1));
+  return '<button class="ccstmt cyc" data-act="go" data-a="spending"><span>Logged since ' + shortDate(lc) + ' \u00b7 on the statement closing ' + shortDate(cy.close) + ', due ' + shortDate(cy.due) + '</span><b>' + money(sumAmt(ch), 1) + '</b></button>';
+}
+var QA = null;
+function srcList() {
+  var out = [];
+  S.cards.filter(function (c) { return !c.off; }).forEach(function (c) { var k = CARD_COLORS[c.color] || CARD_COLORS.charcoal; out.push({ id: 'c:' + c.id, name: c.name, dot: 'linear-gradient(120deg,' + k[0] + ',' + k[1] + ')' }); });
+  S.accounts.filter(function (a) { return !a.closed && (a.kind === 'spend' || a.kind === 'save'); }).forEach(function (a) { out.push({ id: 'a:' + a.id, name: a.name, dot: 'var(--tp-ink3)' }); });
+  return out;
+}
+function srcName(id) { var x = srcList().filter(function (o) { return o.id === id; })[0]; if (x) return x.name; var k = id.slice(2), c = byId(S.cards, k) || byId(S.accounts, k); return c ? c.name : 'Unknown'; }
+function qaSheet() {
+  var q = QA, srcs = srcList();
+  var h = '<div class="sxhead"><button class="ibtn" data-act="close" aria-label="Close">' + TP.svg('close') + '</button><span class="grow"></span><button class="pillbtn" data-act="checkinStart">Weekly check-in</button></div><h3>' + (q.id ? 'Edit purchase' : 'Log a purchase') + '</h3>' +
+    '<div class="money qamt"><input class="tp-input" id="qa_amt" inputmode="decimal" placeholder="0.00" value="' + esc(q.amt || '') + '" aria-label="Amount"></div>' +
+    '<label class="tp-label">Paid with</label>' + (srcs.length ? '<div class="chips qsrc">' + srcs.map(function (o) { return '<button class="chip' + (q.src === o.id ? ' on' : '') + '" data-act="qaSrc" data-a="' + o.id + '" aria-pressed="' + (q.src === o.id) + '"><i style="background:' + o.dot + '"></i>' + esc(o.name) + '</button>'; }).join('') + '</div>' : '<p class="small muted">Add a card or account first.</p>') +
+    '<label class="tp-label">Category</label><div class="chips">' + CATS.map(function (c) { return '<button class="chip' + (q.cat === c ? ' on' : '') + '" data-act="qaCat" data-a="' + esc(c) + '" aria-pressed="' + (q.cat === c) + '">' + c + '</button>'; }).join('') + '</div>' +
+    '<div class="fgrid">' + textField('qa_note', 'Note (optional)', q.note || '', 'e.g. Market Basket') + textField('qa_date', 'Date', q.date || today(), '', 'date') + '</div><div id="qa_where" class="small muted" style="margin-top:8px"></div><div id="qa_err"></div>' +
+    '<div class="acts">' + (q.id ? '<button class="tp-btn tp-danger" data-act="qaDel" data-id="' + q.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="qaSave">' + (q.id ? 'Save' : 'Log it') + '</button></div>';
+  sheet(h); qaWhere();
+  if (!q.id) setTimeout(function () { var i = document.getElementById('qa_amt'); if (i) i.focus(); }, 60);
+}
+function qaKeep() { if (!QA) return; QA.amt = val('qa_amt'); QA.note = val('qa_note'); QA.date = val('qa_date') || today(); }
+function qaWhere() {
+  var el = document.getElementById('qa_where'); if (!el || !QA || !QA.src) return;
+  var k = QA.src.slice(2), d = val('qa_date') || today();
+  if (QA.src.indexOf('c:') === 0) { var c = byId(S.cards, k), cy = c && cardCycleFor(c, d); el.textContent = cy && cy.close ? 'Lands on the ' + c.name + ' statement closing ' + shortDate(cy.close) + (cy.due ? ', due ' + shortDate(cy.due) : '') + '.' : ''; }
+  else { var a = byId(S.accounts, k); el.textContent = a ? 'Comes out of ' + a.name + ' (' + money(acctBal(a.id)) + ' now).' : ''; }
+}
+function spendIn(from, to) { return (S.txns || []).filter(function (x) { return x.date >= from && x.date <= to; }); }
+var SP_RANGE = 'month';
+function spendingPage() {
+  var td = today(), d = parseD(td), h = topBar('Spending', 'What you logged, by category and source', 'home');
+  var ranges = { week: [weekStartOf(td), td, 'This week'], month: [td.slice(0, 8) + '01', td, MONTHS[d.getMonth()]], last: [ymd(new Date(d.getFullYear(), d.getMonth() - 1, 1)), ymd(new Date(d.getFullYear(), d.getMonth(), 0)), MONTHS[(d.getMonth() + 11) % 12]], d90: [addDays(td, -89), td, 'Last 90 days'] };
+  var r = ranges[SP_RANGE], list = spendIn(r[0], r[1]).slice().sort(function (a, b) { return (b.at || b.date) < (a.at || a.date) ? -1 : 1; }), tot = sumAmt(list);
+  h += '<div class="chips" style="margin-bottom:12px">' + [['week', 'This week'], ['month', 'This month'], ['last', 'Last month'], ['d90', '90 days']].map(function (x) { return '<button class="chip' + (SP_RANGE === x[0] ? ' on' : '') + '" data-act="spRange" data-a="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>';
+  h += '<div class="glass hero tp-rise"><span class="label">' + esc(r[2]) + ' · logged</span><div class="big" style="font-size:52px" data-count="' + tot + '">' + money(tot) + '</div><div class="heroSub">' + list.length + ' purchase' + (list.length === 1 ? '' : 's') + (list.length ? ' · about ' + money(tot / Math.max(1, daysBetween(r[0], r[1] < td ? r[1] : td) + 1) * 7) + ' a week' : '') + '</div></div>';
+  if (!list.length) return h + '<div class="glass"><div class="empty">Tap <b>+</b> at the bottom any time you buy something. Over a few weeks this shows where your money really goes.</div></div>';
+  var bars = function (groups) { var keys = Object.keys(groups).sort(function (a, b) { return groups[b] - groups[a]; }), mx = groups[keys[0]] || 1; return '<div class="glass pad">' + keys.map(function (k) { return '<div class="hbar"><div class="hl"><span>' + esc(k) + '</span><b>' + money(groups[k]) + '<em>' + Math.round(groups[k] / tot * 100) + '%</em></b></div><span class="bar"><i style="width:' + (groups[k] / mx * 100).toFixed(1) + '%"></i></span></div>'; }).join('') + '</div>'; };
+  var byCat = {}, bySrc = {}; list.forEach(function (x) { byCat[x.cat || 'Other'] = (byCat[x.cat || 'Other'] || 0) + (+x.amt || 0); var n = srcName(x.src); bySrc[n] = (bySrc[n] || 0) + (+x.amt || 0); });
+  h += '<div class="tp-sect"><span>By category</span></div>' + bars(byCat) + '<div class="tp-sect"><span>By card or account</span></div>' + bars(bySrc);
+  h += '<div class="tp-sect"><span>Purchases</span></div><div class="glass">' + list.slice(0, 60).map(function (x) { return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc((x.note ? x.cat + ' · ' : '') + srcName(x.src)) + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>'; }).join('') + '</div>';
+  return h;
+};
+/* credit score: entered at check-in as "TransUnion/Equifax" (Credit Karma shows both) */
+function parseScore(v) { var m = String(v || '').match(/\d{3}/g); if (!m) return null; return { tu: +m[0], eq: m[1] ? +m[1] : null }; }
+function scoreSnaps() { return S.snaps.filter(function (s) { return parseScore(s.score); }); }
+function scoreBand(n) { return n >= 800 ? 'Excellent' : n >= 740 ? 'Very good' : n >= 670 ? 'Good' : n >= 580 ? 'Fair' : 'Poor'; }
+function creditPage() {
+  var h = topBar('Credit', 'Your scores and what moves them', 'accounts'), ss = scoreSnaps(), last = ss[ss.length - 1], prev = ss[ss.length - 2];
+  if (!last) h += '<div class="glass hero"><span class="label">Credit score</span><div class="heroSub" style="margin-top:8px">No scores yet. Add yours at the next check-in, or here.</div><button class="tp-btn tp-sm mt" data-act="scoreAdd">Add today’s score</button></div>';
+  else {
+    var a = parseScore(last.score), b = prev ? parseScore(prev.score) : null, d = b ? a.tu - b.tu : null;
+    h += '<div class="glass hero tp-rise"><span class="label">TransUnion · ' + shortDate(last.date) + '</span><div class="flex" style="align-items:baseline"><span class="big" data-count="' + a.tu + '" data-plain="1">' + a.tu + '</span>' + (d != null && d !== 0 ? '<span class="tp-pill light">' + (d > 0 ? '▲ ' : '▼ ') + Math.abs(d) + ' since ' + shortDate(prev.date) + '</span>' : '') + '</div>' +
+      '<div class="heroSub">' + scoreBand(a.tu) + (a.eq ? ' · Equifax ' + a.eq + ' (' + scoreBand(a.eq).toLowerCase() + ')' : '') + '</div>' +
+      (ss.length > 1 ? lineChart('cr', [{ name: 'TransUnion', color: 'var(--c1)', pts: ss.map(function (s) { return { t: +parseD(s.date), y: parseScore(s.score).tu }; }) }].concat(ss.some(function (s) { return parseScore(s.score).eq; }) ? [{ name: 'Equifax', color: 'var(--c2)', pts: ss.filter(function (s) { return parseScore(s.score).eq; }).map(function (s) { return { t: +parseD(s.date), y: parseScore(s.score).eq }; }) }] : []), { h: 170, num: true, label: 'Credit scores over time' }) : '') +
+      '<div class="flex mt"><button class="pillbtn" data-act="scoreAdd">Add today’s score</button><a class="pillbtn" style="text-decoration:none;display:inline-flex;align-items:center" target="_blank" rel="noopener" href="https://www.creditkarma.com">Open Credit Karma</a></div></div>';
+  }
+  /* what moves it */
+  var lu = limitUse(), cards = S.cards.filter(function (c) { return !c.off && +c.limit; });
+  h += '<div class="tp-sect"><span>Card use vs. limits</span><span class="sp"></span><span>' + (lu != null ? lu + '% overall' : '') + '</span></div><div class="glass pad">';
+  h += cards.length ? cards.map(function (c) { var pc = Math.round(cardBal(c) / c.limit * 100); return '<div class="hbar"><div class="hl"><span>' + esc(c.name) + '</span><b>' + pc + '%<em>' + money(cardBal(c)) + ' of ' + moneyK(+c.limit) + '</em></b></div><span class="bar"><i style="width:' + Math.min(100, pc) + '%' + (pc >= 30 ? ';background:var(--warn)' : '') + '"></i></span></div>'; }).join('') + '<p class="small muted mb0" style="margin-top:12px">Under 30% helps, under 10% helps more. What counts is the balance on each statement’s closing date, so paying before it closes lowers what gets reported.</p>' : '<div class="empty">Add credit limits to your cards to see this.</div>';
+  h += '</div><div class="tp-sect"><span>What matters most</span></div><div class="glass">' +
+    [['check', 'Paying on time', 'The biggest factor. Tally reminds you before every due date.'], ['card', 'How much of your limits you use', 'Second biggest. Watch the bars above.'], ['calendar', 'Age of your accounts', 'Keeping old cards open helps, even if you rarely use them.'], ['bell', 'New applications', 'Each hard inquiry dips the score a little for about a year.']].map(function (x) { return '<div class="tp-row static"><span class="tp-tile">' + TP.svg(x[0]) + '</span><span class="tp-t"><b>' + x[1] + '</b><span>' + x[2] + '</span></span></div>'; }).join('') + '</div>';
+  h += '<p class="small muted">Credit Karma doesn’t let other apps read your score, so you type it in. Once a month at check-in is plenty.</p>';
+  return h;
+}
 function payLabel(p) { return { 7: 'every week', 14: 'every 2 weeks', 15: 'twice a month', 30: 'every month' }[+p.every] || ''; }
 
 /* ---------- shell ---------- */
@@ -1159,9 +1277,9 @@ function render() {
   var keep = window.scrollY, inFlow = VIEW === 'checkin';
   app.innerHTML = '<main class="tp-wrap' + (inFlow ? ' ckflow' : '') + '">' + (PAGES[VIEW] || PAGES.home)() + '</main>' +
     (inFlow ? '' : '<nav class="nav" aria-label="Sections">' + NAV.map(function (t) {
-      if (t.plus) return '<button class="plus" data-act="checkinStart" aria-label="Weekly check-in">' + TP.svg('plus') + '</button>';
+      if (t.plus) return '<button class="plus" data-act="quickAdd" aria-label="Log a purchase">' + TP.svg('plus') + '</button>';
       return '<button data-act="go" data-a="' + t.id + '" class="' + (VIEW === t.id ? 'on' : '') + '"' + (VIEW === t.id ? ' aria-current="page"' : '') + '>' + TP.svg(t.icon) + t.name + '</button>';
-    }).join('') + '</nav>');
+    }).join('') + '</nav>' + (VIEW === 'home' || VIEW === 'accounts' || VIEW === 'cards' || VIEW === 'bills' || VIEW === 'spending' || VIEW === 'explore' ? '<button class="ckfab' + (thisWeek() && thisWeek().app ? '' : ' due') + '" data-act="checkinStart" aria-label="Weekly check-in">' + TP.svg('check') + '<span>Check in</span></button>' : ''));
   afterRender(); window.scrollTo(0, render._keep ? keep : 0); render._keep = false;
 }
 function rerender() { render._keep = true; render(); }
@@ -1175,6 +1293,7 @@ function afterRender() {
 }
 function countUp(el) {
   var target = +el.getAttribute('data-count'), neg = target < 0, abs = Math.abs(target), start = Date.now();
+  if (el.getAttribute('data-plain')) { if (render._keep) { el.textContent = target; return; } (function t2() { var t = Math.min(1, (Date.now() - start) / 900); el.textContent = Math.round(target * (0.85 + 0.15 * (1 - Math.pow(1 - t, 3)))); if (t < 1) requestAnimationFrame(t2); else el.textContent = target; })(); return; }
   if (render._keep || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) { el.textContent = money(target); return; }
   (function tick() { var t = Math.min(1, (Date.now() - start) / 900), e = 1 - Math.pow(1 - t, 3); el.textContent = t >= 1 ? money(target) : (neg ? '−$' : '$') + Math.round(abs * e).toLocaleString('en-US'); if (t < 1) requestAnimationFrame(tick); })();
 }
@@ -1192,6 +1311,8 @@ function askConflict(remote) {
 
 /* ---------- home ---------- */
 var PAGES = {};
+PAGES.spending = spendingPage;
+PAGES.credit = creditPage;
 PAGES.home = function () {
   var td = today(), d = new Date(), h = topBar('Hi, ' + S.profile.name, DOW[d.getDay()] + ', ' + MONTHS[d.getMonth()] + ' ' + d.getDate());
   if (S.profile.sample) h += '<div class="tp-banner tp-rise"><span class="tp-bi">' + TP.svg('spark') + '</span><b>Sample data</b>Made-up numbers so you can look around. <a href="#" data-act="go" data-a="settings">Start for real in Settings.</a></div>';
@@ -1207,7 +1328,7 @@ PAGES.home = function () {
   if (!tw || !tw.app) h += '<button class="glass tp-row tp-rise cta" style="--i:1" data-act="checkinStart"><span class="tp-tile">' + TP.svg('pencil') + '</span><span class="tp-t"><b>Check in for the week of ' + shortDate(weekStartOf(td)) + '</b><span>Confirm balances, explain the week, plan the next. About a minute.</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
   /* plan split */
   if (tw && tw.plan) {
-    var p = tw.plan, parts = [['Bills', +p.bills || 0, 'var(--tp-ink)'], ['Cards', +p.cards || 0, 'var(--tp-ink3)'], ['Savings', +p.save || 0, 'var(--hi)'], ['Spending', +p.spend || 0, 'var(--c2)']], tot = parts.reduce(function (a, x) { return a + x[1]; }, 0);
+    var p = tw.plan, parts = [['Bills', +p.bills || 0, 'var(--tp-ink)'], ['Cards', +p.cards || 0, 'var(--tp-ink3)'], ['Savings', (+p.save || 0) + (+p.auto || 0), 'var(--hi)'], ['Spending', +p.spend || 0, 'var(--c2)']], tot = parts.reduce(function (a, x) { return a + x[1]; }, 0);
     if (tot > 0) h += '<div class="glass pad tp-rise" style="--i:2"><div class="flex" style="justify-content:space-between"><b style="font-size:14px">This week’s plan</b><span class="small muted">' + money(tot) + ' with a job</span></div><div class="split" style="margin-top:10px">' +
       parts.filter(function (x) { return x[1] > 0; }).map(function (x, i) { return '<i style="flex:' + x[1] + ';background:' + x[2] + ';animation-delay:' + (i * .1) + 's" title="' + x[0] + ' ' + money(x[1]) + '"></i>'; }).join('') + '</div><div class="legend4">' +
       parts.map(function (x) { return '<span><i style="background:' + x[2] + '"></i>' + x[0] + '<b>' + money(x[1]) + '</b></span>'; }).join('') + '</div></div>';
@@ -1229,6 +1350,11 @@ PAGES.home = function () {
     var inner = dateBox(e.date) + '<span class="tp-t"><b>' + esc(e.title) + '</b><span>' + esc(sub) + '</span></span>' + (e.type === 'due' ? pillDays(daysBetween(td, e.date), e.st === 'paid') : '');
     return e.type === 'due' ? '<button class="tp-row" data-act="stmt" data-card="' + e.card + '" data-ym="' + e.ym + '">' + inner + '</button>' : '<div class="tp-row static">' + inner + '</div>';
   }).join('') + '</div>' : '<div class="glass"><div class="empty">Add cards and bills and their dates show up here.</div></div>';
+  /* spending logged */
+  var ms = spendIn(td.slice(0, 8) + '01', td);
+  if (ms.length) { var bc = {}; ms.forEach(function (x) { bc[x.cat || 'Other'] = (bc[x.cat || 'Other'] || 0) + (+x.amt || 0); }); var top = Object.keys(bc).sort(function (a, b) { return bc[b] - bc[a]; })[0];
+    h += '<button class="glass tp-row cta" data-act="go" data-a="spending"><span class="tp-tile">' + TP.svg('chart') + '</span><span class="tp-t"><b>' + money(sumAmt(ms)) + ' logged in ' + MONTHS[parseD(td).getMonth()] + '</b><span>Most on ' + esc(top.toLowerCase()) + ' (' + money(bc[top]) + ') · ' + ms.length + ' purchases</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }
+  else h += '<div class="deep small" style="text-align:center">Tap <b>+</b> whenever you buy something. Tally adds it to that card or account and builds your real spending picture.</div>';
   /* goals */
   var gs = S.goals.filter(function (g) { return g.kind !== 'trip'; }).slice(0, 5);
   h += '<div class="tp-sect"><span>Goals</span><span class="sp"></span><button data-act="go" data-a="goals">All goals</button></div>';
@@ -1272,7 +1398,7 @@ PAGES.accounts = function () {
   var td = today(), last = lastSnap(), h = topBar('Accounts', 'Everything you have and owe');
   var pts = S.snaps.filter(function (s) { return NW_RANGE === 'all' || s.date >= (NW_RANGE === '3m' ? addDays(td, -92) : addDays(td, -365)); });
   var first = pts[0], dNW = last && first ? snapNet(last) - snapNet(first) : 0;
-  h += '<div class="glass hero tp-rise"><span class="label">Net worth</span><div class="flex" style="align-items:baseline"><span class="big" style="font-size:44px" data-count="' + (last ? snapNet(last) : 0) + '">' + money(last ? snapNet(last) : 0) + '</span>' + (first && first !== last ? '<span class="tp-pill light">' + (dNW >= 0 ? '▲ ' : '▼ ') + money(Math.abs(dNW)) + ' since ' + shortDate(first.date) + '</span>' : '') + '</div>' +
+  h += '<div class="glass hero tp-rise"><span class="label">Net worth</span><div class="flex" style="align-items:baseline"><span class="big" style="font-size:44px" data-count="' + liveNet() + '">' + money(liveNet()) + '</span>' + (first && first !== last ? '<span class="tp-pill light">' + (dNW >= 0 ? '▲ ' : '▼ ') + money(Math.abs(dNW)) + ' since ' + shortDate(first.date) + '</span>' : '') + '</div>' +
     (pts.length > 1 ? lineChart('nw', [{ name: 'Net worth', color: 'var(--c1)', pts: pts.map(function (s) { return { t: +parseD(s.date), y: snapNet(s), note: s.note }; }) }], { h: 150, label: 'Net worth over time' }) : '') +
     '<div class="chips mt">' + [['3m', '3M'], ['year', '1Y'], ['all', 'All']].map(function (r) { return '<button class="chip ' + (NW_RANGE === r[0] ? 'on' : '') + '" data-act="nwRange" data-a="' + r[0] + '">' + r[1] + '</button>'; }).join('') + '</div>' +
     (S.profile.chartNote && NW_RANGE === 'all' ? '<p class="small muted mb0">' + esc(S.profile.chartNote) + '</p>' : '') + '</div>';
@@ -1283,6 +1409,8 @@ PAGES.accounts = function () {
   var lim = S.cards.reduce(function (t, c) { return t + (c.off ? 0 : +c.limit || 0); }, 0), owed = cardsOwed();
   h += '<div class="tp-sect"><span>Owed</span><span class="sp"></span><span>−' + money(owed) + '</span></div>';
   h += '<button class="deep tp-row" style="padding:14px 16px" data-act="go" data-a="cards"><span class="tp-tile">' + TP.svg('card') + '</span><span class="tp-t"><b>' + S.cards.filter(function (c) { return !c.off; }).length + ' credit cards</b><span>' + (limitUse() != null ? limitUse() + '% of your limits used · ' : '') + 'see Cards</span></span><span class="amt">' + money(owed) + '</span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+  var ls = scoreSnaps(), lsc = ls.length ? parseScore(ls[ls.length - 1].score) : null;
+  h += '<div class="tp-sect"><span>Credit</span></div><button class="glass tp-row cta" data-act="go" data-a="credit"><span class="tp-tile">' + TP.svg('trend') + '</span><span class="tp-t"><b>' + (lsc ? 'Credit score ' + lsc.tu + (lsc.eq ? ' / ' + lsc.eq : '') : 'Track your credit score') + '</b><span>' + (lsc ? scoreBand(lsc.tu) + ' \u00b7 as of ' + shortDate(ls[ls.length - 1].date) : 'Add it at check-in') + (limitUse() != null ? ' \u00b7 ' + limitUse() + '% of limits used' : '') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
   h += '<button class="tp-btn tp-ghost tp-block" data-act="acctEdit">+ Add an account</button>';
   var closed = S.accounts.filter(function (a) { return a.closed; });
   if (closed.length) h += '<div class="tp-sect"><span>Closed</span></div><div class="glass">' + closed.map(acctRow).join('') + '</div>';
@@ -1314,7 +1442,7 @@ PAGES.cards = function () {
     h += '<div class="ccard tp-rise" style="--i:' + i + '"><button class="ccmain" data-act="cardEdit" data-id="' + c.id + '"><span class="face' + (f.lt ? ' lt' : '') + '" style="' + f.style + '"><span class="top2"><b>' + esc(c.name) + '</b>' + (nd ? pillDays(daysBetween(td, nd.date), nd.st === 'paid').replace('tp-plain', 'light') : '') + '</span><span>' + esc([c.use ? 'Use for ' + c.use : '', c.perk].filter(Boolean).join(' · ') || 'Tap to add what it’s best for') + '</span></span>' +
       '<span class="body"><span class="flex" style="justify-content:space-between"><span class="small muted">Balance' + (c.limit ? ' · ' + Math.round(pct) + '% of ' + moneyK(c.limit) : '') + '</span><b class="disp" style="font-size:20px">' + money(b) + '</b></span>' + (c.limit ? '<span class="bar thin"><i style="width:' + pct.toFixed(1) + '%;' + (pct >= 30 ? 'background:var(--warn)' : '') + '"></i></span>' : '') +
       '<span class="row2"><span>Statement closes<b>' + (ns ? DOW[parseD(ns.date).getDay()] + ', ' + shortDate(ns.date) : (c.stmtDay ? 'the ' + ordinal(c.stmtDay) : 'Not set')) + '</b></span><span>Payment due<b>' + (nd ? DOW[parseD(nd.date).getDay()] + ', ' + shortDate(nd.date) : (c.dueDay ? 'the ' + ordinal(c.dueDay) : 'Not set')) + '</b></span></span></span></button>' +
-      (due ? '<button class="ccstmt' + (sto ? '' : ' need') + '" data-act="stmt" data-card="' + c.id + '" data-ym="' + due.slice(0, 7) + '"><span>' + (sto ? 'Statement due ' + shortDate(due) + (sto.st === 'paid' ? ' · paid' : '') : 'Add the statement balance due ' + shortDate(due)) + '</span><b>' + (sto ? money(+sto.amt, 1) : '+') + '</b></button>' : '') + '</div>';
+      (due ? '<button class="ccstmt' + (sto ? '' : ' need') + '" data-act="stmt" data-card="' + c.id + '" data-ym="' + due.slice(0, 7) + '"><span>' + (sto ? 'Statement due ' + shortDate(due) + (sto.st === 'paid' ? ' · paid' : sto.plan !== '' && sto.plan != null && +sto.plan !== +sto.amt ? ' · paying ' + money(+sto.plan, 1) : '') : 'Add the statement balance due ' + shortDate(due)) + '</span><b>' + (sto ? money(+sto.amt, 1) : '+') + '</b></button>' : '') + cycleLine(c) + '</div>';
   });
   var off = S.cards.filter(function (c) { return c.off; });
   if (off.length) h += '<div class="tp-sect"><span>Not in use</span></div><div class="glass">' + off.map(function (c) { return '<button class="tp-row" data-act="cardEdit" data-id="' + c.id + '"><span class="tp-tile">' + TP.svg('card') + '</span><span class="tp-t"><b>' + esc(c.name) + '</b><span>Reminders off</span></span></button>'; }).join('') + '</div>';
@@ -1376,7 +1504,7 @@ PAGES.explore = function () {
   h += '<div id="mkt">' + (Sync.on() ? TP.loading('Getting quotes and headlines…') : marketOffline()) + '</div>';
   h += '<p class="small muted">For following along, not advice to buy or sell.</p>';
   h += '<div class="tp-sect"><span>Tools</span></div><div class="glass">' +
-    [['play', 'sliders', 'What if', 'Timelines, borrow vs. savings, card interest'], ['goals', 'target', 'All goals', 'Savings, payoffs, trips'], ['history', 'calendar', 'Past check-ins', 'Every week you logged'], ['settings', 'gear', 'Settings', 'Payday, reminders, sync, look, backup']].map(function (x) { return '<button class="tp-row" data-act="go" data-a="' + x[0] + '"><span class="tp-tile">' + TP.svg(x[1]) + '</span><span class="tp-t"><b>' + x[2] + '</b><span>' + x[3] + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }).join('') + '</div>';
+    [['credit', 'trend', 'Credit score', 'Your scores and card use vs. limits'], ['spending', 'chart', 'Spending', 'Everything you logged, by category and card'], ['checkin', 'pencil', 'Weekly check-in', 'Balances, last week, next week'], ['play', 'sliders', 'What if', 'Timelines, borrow vs. savings, card interest'], ['goals', 'target', 'All goals', 'Savings, payoffs, trips'], ['history', 'calendar', 'Past check-ins', 'Every week you logged'], ['settings', 'gear', 'Settings', 'Payday, reminders, sync, look, backup']].map(function (x) { return '<button class="tp-row" data-act="go" data-a="' + x[0] + '"><span class="tp-tile">' + TP.svg(x[1]) + '</span><span class="tp-t"><b>' + x[2] + '</b><span>' + x[3] + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }).join('') + '</div>';
   h += '<div class="tp-sect"><span>Ideas to try</span><span class="sp"></span><button data-act="ideaAdd">+ Add</button></div><div class="glass">' +
     (S.ideas.length ? S.ideas.map(function (i) { return '<div class="tp-row static"><input type="checkbox" id="idea_' + i.id + '" data-act="ideaToggle" data-id="' + i.id + '" ' + (i.done ? 'checked' : '') + ' class="tick"><label class="tp-t" for="idea_' + i.id + '"><b style="' + (i.done ? 'text-decoration:line-through;opacity:.6' : '') + '">' + esc(i.text) + '</b>' + (i.diff ? '<span>Worth about ' + esc(i.diff) + '</span>' : '') + '</label><button class="chip" data-act="ideaDel" data-id="' + i.id + '" aria-label="Remove idea">×</button></div>'; }).join('') : '<div class="empty">Small moves you want to test.</div>') + '</div>';
   return h;
@@ -1448,7 +1576,7 @@ PAGES.history = function () {
 function ckInit() {
   var last = lastSnap(), td = today();
   var prev = last && last.date === td ? (S.snaps.length > 1 ? S.snaps[S.snaps.length - 2] : null) : last;
-  CK = { step: 0, prev: prev, bal: {}, src: {}, cards: {}, stmt: {}, inc: [], paid: {}, cats: [], invest: '', spend: null, save: null };
+  CK = { step: 0, prev: prev, bal: {}, src: {}, cards: {}, stmt: {}, moves: [], inc: [], paid: {}, cats: [], invest: '', spend: null, save: null };
   S.accounts.filter(function (a) { return !a.closed; }).forEach(function (a) { CK.bal[a.id] = acctBal(a.id); });
   S.cards.filter(function (c) { return !c.off; }).forEach(function (c) { CK.cards[c.id] = cardBal(c); });
   var from = prev ? addDays(prev.date, 1) : addDays(td, -6), p = S.profile.pay || {};
@@ -1499,34 +1627,40 @@ function ckMath() {
   var prev = CK.prev, prevCash = prev ? snapCash(prev) : null, prevCards = prevCardsTotal(prev);
   var inc = CK.inc.reduce(function (t, x) { return t + num(x.amt); }, 0), outBills = 0, outCards = 0;
   CK.known.forEach(function (x) { if (!CK.paid[x.k]) return; if (x.card) outCards += x.amt; else outBills += x.amt; });
-  var invest = num(CK.invest), cash = ckCash(), cards = ckCards();
-  var gap = prevCash == null ? null : r2(inc - outBills - outCards - invest - (cash - prevCash));
+  var invest = 0, moveOut = 0, moveIn = 0;
+  CK.moves.forEach(function (mv) { var a = num(mv.amt), acct = byId(S.accounts, mv.to); if (!a) return; if (!acct) moveOut += a; else if (acct.kind === 'invest' || acct.kind === 'retire') { invest += a; moveOut += a; } else moveIn += a; });
+  var cash = ckCash(), cards = ckCards();
+  var gap = prevCash == null ? null : r2(inc - outBills - outCards - moveOut - (cash - prevCash));
+  var logged = (S.txns || []).filter(function (x) { return x.date >= CK.from && x.date <= CK.to; }), loggedCash = sumAmt(logged.filter(function (x) { return x.src.indexOf('a:') === 0; })), loggedCards = sumAmt(logged.filter(function (x) { return x.src.indexOf('c:') === 0; }));
   var cardSpend = prevCards == null ? null : r2(cards - prevCards + outCards);
-  return { inc: r2(inc), outBills: r2(outBills), outCards: r2(outCards), invest: invest, cash: cash, prevCash: prevCash, cards: cards, prevCards: prevCards, gap: gap, cardSpend: cardSpend,
+  return { inc: r2(inc), outBills: r2(outBills), outCards: r2(outCards), invest: r2(invest), moveOut: r2(moveOut), logged: logged, loggedCash: loggedCash, loggedCards: loggedCards, unlogged: gap == null ? null : r2(gap - loggedCash), cash: cash, prevCash: prevCash, cards: cards, prevCards: prevCards, gap: gap, cardSpend: cardSpend,
     total: r2(Math.max(0, gap || 0) + Math.max(0, cardSpend || 0)) };
 }
 function ckCalc() {
   var el = document.getElementById('ck_gap'); if (!el || !CK) return;
   CK.inc.forEach(function (x, i) { var a = document.getElementById('ci_' + i), l = document.getElementById('cl_' + i); if (a) x.amt = num(a.value); if (l) x.label = l.value; });
-  if (document.getElementById('ck_inv')) CK.invest = val('ck_inv');
+  CK.moves.forEach(function (mv, i) { var a = document.getElementById('mv_a_' + i), t = document.getElementById('mv_t_' + i); if (a) mv.amt = a.value; if (t) mv.to = t.value; });
+  var as = autoSave(); CK.inc.forEach(function (x, i) { var n = document.getElementById('ca_' + i); if (n && as) n.textContent = as.pct + '% auto-saved to ' + as.name + ': ' + money(autoSaveOf(x.amt), 1) + ' \u00b7 ' + money(netPay(x.amt), 1) + ' to spend'; });
   var m = ckMath(), h = '';
   if (m.gap == null) h = '<b>First check-in.</b> Next time, Tally compares against today’s balances and works out where the money went.';
-  else if (m.gap > 25) h = '<b>' + money(m.gap) + ' left your accounts that isn’t listed.</b> Debit, cash, Venmo, transfers. Where did it mostly go? Pick any.';
+  else if (m.gap > 25 && m.loggedCash && m.unlogged <= 25) h = '<b>Everything adds up.</b> You logged ' + money(m.loggedCash) + ' from your accounts, which covers what left them.';
+  else if (m.gap > 25) h = (m.loggedCash ? 'You logged ' + money(m.loggedCash) + ' from your accounts. ' : '') + '<b>' + money(m.loggedCash ? m.unlogged : m.gap) + ' more left your accounts that isn\u2019t logged.</b> Debit, cash, Venmo, transfers. Where did it mostly go? Pick any.';
   else if (m.gap < -25) h = '<b>' + money(-m.gap) + ' more is here than this adds up to.</b> Income not listed, or a payment above that didn\u2019t happen or came from another account. Fix it above, or leave it.';
   else h = '<b>Everything adds up.</b> Your balances moved the way you described.';
   el.innerHTML = h;
   var cs = document.getElementById('ck_cardspend');
   if (cs) cs.innerHTML = m.cardSpend == null ? '' : 'On cards: <b>' + money(Math.max(0, m.cardSpend)) + '</b> spent (balances moved ' + signed(m.cards - m.prevCards) + ', plus ' + money(m.outCards) + ' you paid off).';
   var tot = document.getElementById('ck_total'); if (tot) tot.textContent = m.gap == null ? '' : 'Everyday spending this stretch: ' + money(m.total);
-  var ch = document.getElementById('ck_chips'); if (ch) ch.style.display = m.gap != null && m.gap > 25 ? '' : 'none';
+  var ch = document.getElementById('ck_chips'); if (ch) ch.style.display = m.gap != null && m.gap > 25 && m.unlogged > 25 ? '' : 'none';
+  if (cs && m.cardSpend != null && m.loggedCards) cs.innerHTML += ' You logged ' + money(m.loggedCards) + ' of it.';
 }
 function ckNextWindow() { var td = today(), np = nextPayday(addDays(td, 1)), end = addDays(td, 7); if (np && np > end && daysBetween(td, np) <= 16) end = np; return { from: addDays(td, 1), to: end }; }
 function ckPlanDefaults() {
-  var w = ckNextWindow(), p = S.profile.pay || {}, pays = r2(paydaysBetween(w.from, w.to).length * (+p.amt || 0));
+  var w = ckNextWindow(), p = S.profile.pay || {}, pays = r2(paydaysBetween(w.from, w.to).length * netPay(p.amt)), autoAmt = r2(paydaysBetween(w.from, w.to).length * autoSaveOf(p.amt));
   var due = dueBetween(w.from, w.to), bills = 0, cards = 0; due.list.forEach(function (x) { if (x.e.type === 'due') cards += x.amt; else bills += x.amt; });
   if (CK.spend == null) { var avg = avgWeeklySpend(), m = ckMath(), base = avg != null ? avg : (m.gap != null ? m.total : 300); CK.spend = Math.max(0, Math.round((base || 300) / 10) * 10); }
   if (CK.save == null) CK.save = Math.max(0, Math.round((pays - bills - cards - CK.spend) / 10) * 10);
-  return { w: w, pays: pays, bills: r2(bills), cards: r2(cards), due: due };
+  return { w: w, pays: pays, auto: autoAmt, bills: r2(bills), cards: r2(cards), due: due };
 }
 PAGES.checkin = function () {
   if (!CK) ckInit();
@@ -1539,24 +1673,32 @@ PAGES.checkin = function () {
     var cs = S.cards.filter(function (c) { return !c.off; });
     if (cs.length) h += '<div class="tp-sect"><span>Cards</span></div><p class="small muted" style="margin:-4px 2px 8px">Balance now is everything on the card. Statement is what\u2019s due on the due date.</p><div class="glass">' + cs.map(function (c) { var s = CK.src['c_' + c.id], due = nextDueDate(c.dueDay, today()), sv = CK.stmt[c.id] != null ? CK.stmt[c.id] : (stmtFor(c.id, due) ? stmtFor(c.id, due).amt : ''); return '<div class="ckc"><div class="ckc-h"><b>' + esc(c.name) + '</b><span>' + esc(s && s !== 'typed' ? s : 'Last ' + money(cardBal(c))) + '</span></div><div class="ckc-f"><div><span class="small muted">Balance now</span><div class="money"><input class="tp-input" data-ckcard="' + c.id + '" inputmode="decimal" value="' + esc(r2(CK.cards[c.id])) + '" aria-label="' + esc(c.name) + ' balance now"></div></div>' + (due ? '<div><span class="small muted">Statement due ' + shortDate(due) + '</span><div class="money"><input class="tp-input" data-ckstmt="' + c.id + '" inputmode="decimal" value="' + esc(sv) + '" placeholder="Not out yet" aria-label="' + esc(c.name) + ' statement balance"></div></div>' : '') + '</div></div>'; }).join('') + '</div>';
     if (CK.newStmts) h += '<div class="solid">Found ' + CK.newStmts + ' new card statement' + (CK.newStmts > 1 ? 's' : '') + ' in your email. They’re on the Cards tab and in your plan.</div>';
+    var lsn = scoreSnaps(), lsd = lsn.length ? lsn[lsn.length - 1] : null, sdue = !lsd || daysBetween(lsd.date, today()) >= 28;
+    h += '<div class="tp-sect"><span>Credit score' + (sdue ? '' : ' (optional this week)') + '</span></div><div class="glass pad"><div class="fgrid">' + textField('ck_tu', 'TransUnion', CK.tu != null ? CK.tu : '', lsd ? 'Last ' + parseScore(lsd.score).tu : 'e.g. 724', 'number') + textField('ck_eq', 'Equifax', CK.eq != null ? CK.eq : '', lsd && parseScore(lsd.score).eq ? 'Last ' + parseScore(lsd.score).eq : 'e.g. 766', 'number') + '</div><p class="small muted mb0">' + (sdue ? 'Open Credit Karma and copy both numbers. ' : '') + (lsd ? 'Last entered ' + shortDate(lsd.date) + '.' : 'Leave blank to skip.') + '</p></div>';
     if (CK.prev) h += '<div class="deep small" id="ck_cashline"></div>';
     h += '<button class="tp-btn tp-block mt big1" data-act="ckNext">Looks right</button>';
   } else if (st === 1) {
     h += '<div class="tp-rise"><div class="eyebrow muted">Look back</div><h2 class="flowh">What came in and went out</h2><p class="muted flowp">The known stuff is filled in. Fix amounts, uncheck what didn’t happen, add anything else.</p></div>';
-    h += '<div class="tp-sect"><span>Came in</span><span class="sp"></span><button data-act="ckAddInc">+ Other income</button></div><div class="glass">' + CK.inc.map(function (x, i) { return '<div class="tp-row static"><span class="tp-t">' + (x.kind === 'pay' ? '<b>' + esc(x.label) + '</b><span>From your payday setting</span>' : '<input class="tp-input" id="cl_' + i + '" value="' + esc(x.label) + '" placeholder="Source, e.g. Bonus" aria-label="Income source">') + '</span><div class="money balin"><input class="tp-input" id="ci_' + i + '" inputmode="decimal" value="' + (x.amt ? esc(x.amt) : '') + '" placeholder="0" aria-label="' + esc(x.label || 'Income') + ' amount"></div></div>'; }).join('') + '</div>';
+    h += '<div class="tp-sect"><span>Came in</span><span class="sp"></span><button data-act="ckAddInc">+ Other income</button></div><div class="glass">' + CK.inc.map(function (x, i) { return '<div class="tp-row static"><span class="tp-t">' + (x.kind === 'pay' ? '<b>' + esc(x.label) + '</b><span id="ca_' + i + '">' + (autoSave() ? '' : 'From your payday setting') + '</span>' : '<input class="tp-input" id="cl_' + i + '" value="' + esc(x.label) + '" placeholder="Source, e.g. Bonus" aria-label="Income source">') + '</span><div class="money balin"><input class="tp-input" id="ci_' + i + '" inputmode="decimal" value="' + (x.amt ? esc(x.amt) : '') + '" placeholder="0" aria-label="' + esc(x.label || 'Income') + ' amount"></div></div>'; }).join('') + '</div>';
     h += '<div class="tp-sect"><span>Went out · bills and card payments</span></div><div class="glass">' + (CK.known.length ? CK.known.map(function (x) { return '<div class="tp-row static"><input type="checkbox" class="tick" id="kp_' + esc(x.k).replace(/[^a-zA-Z0-9]/g, '') + '" data-ckpaid="' + esc(x.k) + '" ' + (CK.paid[x.k] ? 'checked' : '') + '><label class="tp-t" for="kp_' + esc(x.k).replace(/[^a-zA-Z0-9]/g, '') + '"><b>' + esc(x.label) + '</b><span>' + shortDate(x.date) + (x.card ? ' · card payment' : ' · bill') + '</span></label><span class="amt">−' + money(x.amt) + '</span></div>'; }).join('') : '<div class="empty">No bills or card payments were due in this stretch.</div>') + '</div>';
-    h += '<div class="fgrid">' + moneyField('ck_inv', 'Moved to investing (optional)', CK.invest) + '</div>';
+    var dests = S.accounts.filter(function (a) { return !a.closed && a.kind !== 'spend'; }), as = autoSave();
+    h += '<div class="tp-sect"><span>Moved between accounts</span><span class="sp"></span><button data-act="ckAddMove">+ Add a transfer</button></div><div class="glass">' +
+      (as ? '<div class="tp-row static"><span class="tp-t"><b>Auto-save to ' + esc(as.name) + '</b><span>' + as.pct + '% of each paycheck, automatic</span></span><span class="amt">' + money(r2(CK.inc.reduce(function (t, x) { return t + (x.kind === 'pay' ? autoSaveOf(num(x.amt)) : 0); }, 0))) + '</span></div>' : '') +
+      CK.moves.map(function (mv, i) { return '<div class="mvrow"><select class="tp-input" id="mv_t_' + i + '" aria-label="Moved to">' + dests.map(function (a) { return '<option value="' + a.id + '"' + (mv.to === a.id ? ' selected' : '') + '>To ' + esc(a.name) + '</option>'; }).join('') + '<option value="out"' + (mv.to === 'out' ? ' selected' : '') + '>Somewhere else</option></select><div class="money"><input class="tp-input" id="mv_a_' + i + '" inputmode="decimal" value="' + esc(mv.amt || '') + '" placeholder="0" aria-label="Amount moved"></div><button class="ibtn" data-act="ckDelMove" data-v="' + i + '" aria-label="Remove transfer">' + TP.svg('close') + '</button></div>'; }).join('') +
+      (!as && !CK.moves.length ? '<div class="empty small">Savings, investing, or anywhere else you moved money. Moves between your own cash accounts don\u2019t count as spending.</div>' : '') + '</div>';
+    var lg = (S.txns || []).filter(function (x) { return x.date >= CK.from && x.date <= CK.to; });
+    if (lg.length) h += '<div class="deep small">You logged ' + lg.length + ' purchase' + (lg.length > 1 ? 's' : '') + ' this stretch: ' + money(sumAmt(lg)) + '. They count toward where the money went.</div>';
     h += '<div class="solid mt"><div id="ck_gap"></div>' + (CK.prev ? '<div class="chips" id="ck_chips" style="margin-top:10px">' + CATS.map(function (c) { return '<button class="chip' + (CK.cats.indexOf(c) >= 0 ? ' on' : '') + '" data-act="ckCat" data-a="' + esc(c) + '" aria-pressed="' + (CK.cats.indexOf(c) >= 0) + '">' + c + '</button>'; }).join('') + '</div>' : '') + '<div class="small muted" id="ck_cardspend" style="margin-top:10px"></div><div class="small" id="ck_total" style="margin-top:4px;font-weight:700"></div></div>';
     h += '<button class="tp-btn tp-block mt big1" data-act="ckNext">Next: plan ahead</button>';
   } else if (st === 2) {
     var d = ckPlanDefaults(), w = d.w, pa = +(S.profile.pay || {}).amt || 0;
     h += '<div class="tp-rise"><div class="eyebrow muted">Plan ahead · ' + shortDate(w.from) + ' to ' + shortDate(w.to) + '</div><h2 class="flowh">Here’s what’s coming</h2><p class="muted flowp">Paydays, card payments, and bills you set up.</p></div><div class="glass">';
-    var rows = paydaysBetween(w.from, w.to).map(function (pd) { return { d: pd, l: 'Paycheck', a: pa }; }).concat(d.due.list.map(function (x) { return { d: x.e.date, l: x.e.title, a: -x.amt }; })).sort(function (a, b) { return a.d < b.d ? -1 : 1; });
+    var as = autoSave(), rows = paydaysBetween(w.from, w.to).map(function (pd) { return { d: pd, l: as ? 'Paycheck, after ' + as.pct + '% to ' + as.name : 'Paycheck', a: netPay(pa) }; }).concat(d.due.list.map(function (x) { return { d: x.e.date, l: x.e.title, a: -x.amt }; })).sort(function (a, b) { return a.d < b.d ? -1 : 1; });
     h += rows.length ? rows.map(function (r) { return '<div class="tp-row static">' + dateBox(r.d) + '<span class="tp-t"><b>' + esc(r.l) + '</b></span><span class="amt ' + (r.a > 0 ? 'up' : '') + '">' + signed(r.a) + '</span></div>'; }).join('') : '<div class="empty">Nothing scheduled. Add cards, bills, and your payday for a real plan.</div>';
     var avg = avgWeeklySpend();
     h += '</div><div class="tp-sect"><span>Your plan for the week</span></div><div class="glass pad">' +
       '<div class="flex" style="justify-content:space-between;flex-wrap:nowrap"><span><b>Everyday spending</b><span class="small muted" style="display:block">' + (avg != null ? 'Your recent average: ' + money(avg) : 'Your first weeks set the average') + '</span></span><span class="stepper"><button data-act="ckStep" data-a="spend" data-v="-10" aria-label="Spend 10 dollars less">−</button><span class="v" id="ck_spend" aria-live="polite">' + money(CK.spend) + '</span><button data-act="ckStep" data-a="spend" data-v="10" aria-label="Spend 10 dollars more">+</button></span></div>' +
-      '<div class="flex mt" style="justify-content:space-between;flex-wrap:nowrap"><span><b>Move to savings</b><span class="small muted" style="display:block">' + esc(firstGoal() ? 'Toward ' + firstGoal().name : 'Toward your goals') + '</span></span><span class="stepper"><button data-act="ckStep" data-a="save" data-v="-10" aria-label="Save 10 dollars less">−</button><span class="v" id="ck_save" aria-live="polite">' + money(CK.save) + '</span><button data-act="ckStep" data-a="save" data-v="10" aria-label="Save 10 dollars more">+</button></span></div>' +
+      '<div class="flex mt" style="justify-content:space-between;flex-wrap:nowrap"><span><b>' + (d.auto ? 'Extra to savings' : 'Move to savings') + '</b><span class="small muted" style="display:block">' + esc(d.auto ? 'On top of ' + money(d.auto) + ' auto-saved' : firstGoal() ? 'Toward ' + firstGoal().name : 'Toward your goals') + '</span></span><span class="stepper"><button data-act="ckStep" data-a="save" data-v="-10" aria-label="Save 10 dollars less">−</button><span class="v" id="ck_save" aria-live="polite">' + money(CK.save) + '</span><button data-act="ckStep" data-a="save" data-v="10" aria-label="Save 10 dollars more">+</button></span></div>' +
       '<div id="ck_left" class="small" style="margin-top:12px"></div></div>';
     h += '<button class="tp-btn tp-block mt big1" data-act="ckSave">Use this plan</button>';
   } else {
@@ -1581,6 +1723,7 @@ function ckKeep(quiet) {
   $all('[data-ckbal]').forEach(function (i) { var k = i.getAttribute('data-ckbal'), v = r2(num(i.value)); if (v !== r2(num(CK.bal[k]))) CK.src[k] = 'typed'; CK.bal[k] = v; });
   $all('[data-ckcard]').forEach(function (i) { var k = i.getAttribute('data-ckcard'), v = r2(num(i.value)); if (v !== r2(num(CK.cards[k]))) CK.src['c_' + k] = 'typed'; CK.cards[k] = v; });
   $all('[data-ckpaid]').forEach(function (i) { CK.paid[i.getAttribute('data-ckpaid')] = i.checked; });
+  if (document.getElementById('ck_tu')) { CK.tu = val('ck_tu'); CK.eq = val('ck_eq'); }
   $all('[data-ckstmt]').forEach(function (i) { CK.stmt[i.getAttribute('data-ckstmt')] = i.value.trim(); });
   if (!quiet && document.getElementById('ck_gap')) ckCalc();
 }
@@ -1695,6 +1838,9 @@ function cwKeep() {
 function setTodayBal(kind, id, amount, src) {
   var td = today(), sn = S.snaps.filter(function (s) { return s.date === td; })[0];
   if (!sn) { var l = lastSnap(); sn = { date: td, bal: l ? JSON.parse(JSON.stringify(l.bal || {})) : {}, cards: l && l.cards ? JSON.parse(JSON.stringify(l.cards)) : {}, cc: l ? l.cc : null, score: '', note: '' }; S.snaps.push(sn); }
+  /* fold purchases logged so far into this snapshot, then stamp it */
+  Object.keys(sn.bal).forEach(function (k) { sn.bal[k] = acctBal(k); }); S.cards.forEach(function (c) { if (sn.cards && sn.cards[c.id] != null) sn.cards[c.id] = cardBal(c); }); sn.at = new Date().toISOString();
+  if (kind === 'none') { S = normalize(S); return; }
   if (kind === 'card') { sn.cards = sn.cards || {}; sn.cards[id] = amount; sn.cc = r2(Object.keys(sn.cards).reduce(function (t, k) { var c = byId(S.cards, k); return t + (c && !c.off ? +sn.cards[k] || 0 : 0); }, 0)); }
   else { sn.bal[id] = amount; if (src) { sn.src = sn.src || {}; sn.src[id] = src; } }
   S = normalize(S);
@@ -1724,8 +1870,29 @@ var ACT = {
   setupShow: function () { S.profile.setupDone = false; VIEW = 'home'; save(); },
   /* check-in */
   checkinStart: function () { ckStart(); },
+  quickAdd: function () { var l = (S.profile.last || {}); QA = { amt: '', src: l.src && srcList().some(function (o) { return o.id === l.src; }) ? l.src : (srcList()[0] || {}).id, cat: l.cat || '', note: '', date: today() }; qaSheet(); },
+  qaEdit: function (d) { var x = (S.txns || []).filter(function (t) { return t.id === d.id; })[0]; if (!x) return; QA = JSON.parse(JSON.stringify(x)); qaSheet(); },
+  qaSrc: function (d) { qaKeep(); QA.src = d.a; qaSheet(); },
+  qaCat: function (d) { qaKeep(); QA.cat = d.a; qaSheet(); },
+  qaSave: function () {
+    qaKeep(); var a = r2(num(QA.amt)); if (!(a > 0)) { document.getElementById('qa_err').innerHTML = '<div class="tp-err">Type the amount.</div>'; return; }
+    if (!QA.src) { document.getElementById('qa_err').innerHTML = '<div class="tp-err">Pick what you paid with.</div>'; return; }
+    S.txns = S.txns || []; var x = QA.id ? S.txns.filter(function (t) { return t.id === QA.id; })[0] : null;
+    if (!x) { x = { id: 't' + uid(), at: new Date().toISOString() }; S.txns.push(x); }
+    x.amt = a; x.src = QA.src; x.cat = QA.cat || 'Other'; x.note = (QA.note || '').trim(); x.date = QA.date || today();
+    if (!QA.id) { var d0 = x.date; x.at = d0 === today() ? x.at : d0 + 'T12:00:00'; }
+    S.profile.last = { src: x.src, cat: x.cat };
+    var where = ''; if (x.src.indexOf('c:') === 0) { var c = byId(S.cards, x.src.slice(2)), cy = c && cardCycleFor(c, x.date); where = c ? 'Added to ' + c.name + (cy && cy.due ? '. Due ' + shortDate(cy.due) + '.' : '.') : ''; } else { var ac = byId(S.accounts, x.src.slice(2)); where = ac ? 'Out of ' + ac.name + '. ' + money(acctBal(ac.id) - (QA.id ? 0 : 0)) + ' left.' : ''; }
+    QA = null; closeSheet(); render._keep = true; save(); toast(money(a, 1) + ' logged. ' + where);
+  },
+  qaDel: function (d, el) { armDelete(el, function () { S.txns = (S.txns || []).filter(function (t) { return t.id !== d.id; }); QA = null; closeSheet(); render._keep = true; save(); }); },
+  scoreAdd: function () { sheet(sxHead('Today\u2019s credit score') + '<p class="muted small">From Credit Karma or your card\u2019s app.</p><div class="fgrid">' + textField('sc_tu', 'TransUnion', '', 'e.g. 724', 'number') + textField('sc_eq', 'Equifax (optional)', '', 'e.g. 766', 'number') + '</div><div id="sc_err"></div><div class="acts"><button class="tp-btn" data-act="scoreSave">Save</button></div>'); },
+  scoreSave: function () { var a = Math.round(num(val('sc_tu'))), b = Math.round(num(val('sc_eq'))); if (a < 300 || a > 900) { document.getElementById('sc_err').innerHTML = '<div class="tp-err">Scores run from 300 to 850.</div>'; return; } setTodayBal('none'); var td = today(), sn = S.snaps.filter(function (s) { return s.date === td; })[0]; sn.score = a + (b >= 300 ? '/' + b : ''); closeSheet(); render._keep = true; save(); },
+  spRange: function (d) { SP_RANGE = d.a; rerender(); },
   ckBack: function () { if (!CK || CK.step === 0 || CK.step === 3) { CK = null; VIEW = 'home'; render(); return; } ckKeep(); CK.step--; render(); },
   ckNext: function () { ckKeep(); CK.step++; render(); },
+  ckAddMove: function () { ckKeep(); var d = S.accounts.filter(function (a) { return !a.closed && a.kind !== 'spend'; })[0]; CK.moves.push({ to: d ? d.id : 'out', amt: '' }); rerender(); var i = document.getElementById('mv_a_' + (CK.moves.length - 1)); if (i) i.focus(); },
+  ckDelMove: function (d) { ckKeep(); CK.moves.splice(+d.v, 1); rerender(); },
   ckAddInc: function () { ckKeep(); CK.inc.push({ label: '', amt: 0, kind: 'other' }); rerender(); var i = document.getElementById('cl_' + (CK.inc.length - 1)); if (i) i.focus(); },
   ckCat: function (d, el) { var i = CK.cats.indexOf(d.a); if (i >= 0) CK.cats.splice(i, 1); else CK.cats.push(d.a); el.classList.toggle('on', i < 0); el.setAttribute('aria-pressed', String(i < 0)); },
   ckStep: function (d, el, e) { CK[d.a] = Math.max(0, (CK[d.a] || 0) + +d.v * (e && e.shiftKey ? 10 : 1)); ckPlanLine(); },
@@ -1733,19 +1900,21 @@ var ACT = {
     var m = ckMath(), td = today(), plan = ckPlanDefaults(), ws = weekStartOf(td);
     var w = S.weeks.filter(function (x) { return !x.planned && x.app && weekStartOf(x.date) === ws; })[0]; if (!w) { w = { id: uid() }; S.weeks.push(w); }
     var pay = 0, other = 0; CK.inc.forEach(function (x) { if (x.kind === 'pay') pay += num(x.amt); else other += num(x.amt); });
-    var cats = {}; if (CK.cats.length && m.gap > 0) { var each = r2(m.gap / CK.cats.length); CK.cats.forEach(function (c) { cats[c] = each; }); }
-    w.date = ws; w.app = true; w.payroll = r2(pay); w.other = r2(other); w.transfer = 0; w.out = r2(m.outBills + m.outCards); w.invest = r2(m.invest);
+    var cats = {}; m.logged.forEach(function (x) { cats[x.cat || 'Other'] = r2((cats[x.cat || 'Other'] || 0) + (+x.amt || 0)); });
+    var rest = m.unlogged != null ? m.unlogged : 0; if (CK.cats.length && rest > 0) { var each = r2(rest / CK.cats.length); CK.cats.forEach(function (c) { cats[c] = r2((cats[c] || 0) + each); }); }
+    w.date = ws; w.app = true; w.payroll = r2(pay); w.other = r2(other); w.transfer = 0; w.out = r2(m.outBills + m.outCards); w.invest = r2(m.invest); w.moves = CK.moves.filter(function (mv) { return num(mv.amt); }).map(function (mv) { return { to: mv.to, amt: r2(num(mv.amt)) }; });
     w.spendCash = m.gap == null ? null : r2(Math.max(0, m.gap)); w.spendCards = m.cardSpend == null ? null : r2(Math.max(0, m.cardSpend)); w.spendTotal = m.gap == null ? null : m.total; w.cats = cats;
-    w.gap = m.gap == null || CK.cats.length ? null : -m.gap; /* coach convention: negative = spent but not explained */
-    w.plan = { spend: CK.spend, save: CK.save, bills: plan.bills, cards: plan.cards }; w.period = { from: CK.from, to: CK.to }; delete w.planned;
+    w.gap = m.gap == null || CK.cats.length || m.unlogged <= 25 ? null : -m.unlogged; /* coach convention: negative = spent but not explained */
+    w.plan = { spend: CK.spend, save: CK.save, auto: plan.auto, bills: plan.bills, cards: plan.cards }; w.autoSave = r2(CK.inc.reduce(function (t, x) { return t + (x.kind === 'pay' ? autoSaveOf(num(x.amt)) : 0); }, 0)); w.period = { from: CK.from, to: CK.to }; delete w.planned;
     CK.known.forEach(function (x) { if (x.card && CK.paid[x.k]) { var ym = x.date.slice(0, 7); S.statements[ym] = S.statements[ym] || {}; var st = S.statements[ym][x.card] || { amt: x.amt }; st.st = 'paid'; S.statements[ym][x.card] = st; } });
     var sn = S.snaps.filter(function (s) { return s.date === td; })[0]; if (!sn) { sn = { date: td, bal: {}, cards: {}, cc: null, score: '', note: '' }; S.snaps.push(sn); }
-    Object.keys(CK.bal).forEach(function (k) { sn.bal[k] = r2(num(CK.bal[k])); }); sn.cards = {}; Object.keys(CK.cards).forEach(function (k) { sn.cards[k] = r2(num(CK.cards[k])); }); sn.cc = ckCards();
+    sn.at = new Date().toISOString(); Object.keys(CK.bal).forEach(function (k) { sn.bal[k] = r2(num(CK.bal[k])); }); sn.cards = {}; Object.keys(CK.cards).forEach(function (k) { sn.cards[k] = r2(num(CK.cards[k])); }); sn.cc = ckCards();
     Object.keys(CK.stmt).forEach(function (k) { var c = byId(S.cards, k), due = c && nextDueDate(c.dueDay, td); if (due && CK.stmt[k] !== '') setStmt(k, due, num(CK.stmt[k])); });
     sn.src = {}; Object.keys(CK.src).forEach(function (k) { if (k.indexOf('c_') !== 0 && CK.src[k] !== 'typed') sn.src[k] = 'email'; });
     if (!sn.note) sn.note = 'Weekly check-in';
+    if (CK.tu && +CK.tu >= 300) sn.score = Math.round(+CK.tu) + (CK.eq && +CK.eq >= 300 ? '/' + Math.round(+CK.eq) : '');
     S = normalize(S);
-    CK.doneLine = (m.gap != null ? 'You spent about ' + money(m.total) + ' last stretch' + (CK.cats.length ? ', mostly ' + CK.cats.slice(0, 2).join(' and ').toLowerCase() : '') + '. ' : '') + 'Plan: ' + money(CK.spend) + ' to spend, ' + money(CK.save) + ' to savings.';
+    CK.doneLine = (m.gap != null ? 'You spent about ' + money(m.total) + ' last stretch' + (CK.cats.length ? ', mostly ' + CK.cats.slice(0, 2).join(' and ').toLowerCase() : '') + '. ' : '') + 'Plan: ' + money(CK.spend) + ' to spend, ' + money(CK.save + (plan.auto || 0)) + ' to savings' + (plan.auto ? ' (' + money(plan.auto) + ' automatic)' : '') + '.';
     CK.step = 3; save(true); render();
   },
   ckFinish: function () { CK = null; VIEW = 'home'; render(); },
@@ -1753,10 +1922,10 @@ var ACT = {
   stmt: function (d) {
     var c = byId(S.cards, d.card), st = (S.statements[d.ym] || {})[d.card] || { amt: '', st: '' };
     var dd = c && c.dueDay ? ymd(clampDay(+d.ym.slice(0, 4), +d.ym.slice(5) - 1, +c.dueDay)) : null;
-    sheet(sxHead((c ? c.name : 'Card') + ' · ' + (dd ? 'due ' + shortDate(dd) + ', ' + d.ym.slice(0, 4) : MONTHS[+d.ym.slice(5) - 1] + ' ' + d.ym.slice(0, 4))) + '<p class="muted small">The statement balance: what you need to pay by the due date. It\u2019s on the statement or in the card\u2019s app, often labeled \u201cstatement balance\u201d or \u201cnew balance.\u201d</p>' + moneyField('st_amt', 'Statement balance', st.amt) + '<label class="tp-label">Status</label>' + seg('st_st', [['', 'Not paid'], ['paid', 'Paid'], ['partial', 'Partial'], ['planned', 'Planned']], st.st || '') +
+    sheet(sxHead((c ? c.name : 'Card') + ' · ' + (dd ? 'due ' + shortDate(dd) + ', ' + d.ym.slice(0, 4) : MONTHS[+d.ym.slice(5) - 1] + ' ' + d.ym.slice(0, 4))) + '<p class="muted small">The statement balance: what you need to pay by the due date. It\u2019s on the statement or in the card\u2019s app, often labeled \u201cstatement balance\u201d or \u201cnew balance.\u201d</p>' + '<div class="fgrid">' + moneyField('st_amt', 'Statement balance', st.amt) + moneyField('st_plan', 'You plan to pay', st.plan, 'Blank = the full statement') + '</div><p class="small muted" id="st_warn"></p><label class="tp-label">Status</label>' + seg('st_st', [['', 'Not paid yet'], ['partial', 'Partly paid'], ['paid', 'Paid']], st.st === 'planned' ? '' : st.st || '') +
       '<div class="acts"><button class="tp-btn tp-ghost" data-act="stmtClear" data-card="' + d.card + '" data-ym="' + d.ym + '">Clear</button><button class="tp-btn" data-act="stmtSave" data-card="' + d.card + '" data-ym="' + d.ym + '">Save</button></div>');
   },
-  stmtSave: function (d) { S.statements[d.ym] = S.statements[d.ym] || {}; S.statements[d.ym][d.card] = { amt: r2(num(val('st_amt'))), st: val('st_st') }; closeSheet(); render._keep = true; save(); },
+  stmtSave: function (d) { S.statements[d.ym] = S.statements[d.ym] || {}; var pl = val('st_plan').trim(); S.statements[d.ym][d.card] = { amt: r2(num(val('st_amt'))), plan: pl === '' ? '' : r2(num(pl)), st: val('st_st') }; closeSheet(); render._keep = true; save(); },
   stmtClear: function (d) { if (S.statements[d.ym]) delete S.statements[d.ym][d.card]; closeSheet(); render._keep = true; save(); },
   /* cards */
   cardEdit: function (d) { var c = d.id ? byId(S.cards, d.id) : null; CW = c ? JSON.parse(JSON.stringify(c)) : { id: '', name: '', perk: '', use: '', color: 'navy', stmtDay: '', dueDay: '', limit: '', match: '' }; if (c) CW.bal = cardBal(c); CW.step = 1; CW.tab = 'stmt'; cardSheet(); },
@@ -1809,9 +1978,12 @@ var ACT = {
   /* payday, reminder */
   payEdit: function () {
     var p = S.profile.pay || {};
-    sheet(sxHead('Your payday') + '<p class="muted small">Take-home, after taxes and deductions. Tally uses it to plan each week and find your next payday.</p>' + moneyField('p_amt', 'Take-home per paycheck', p.amt) + '<label class="tp-label">How often</label>' + seg('p_every', [[7, 'Weekly'], [14, 'Every 2 weeks'], [15, 'Twice a month'], [30, 'Monthly']], p.every || 7) + textField('p_next', 'Next payday', p.next || '', '', 'date') + '<div id="p_err"></div><div class="acts"><button class="tp-btn" data-act="paySave">Save</button></div>');
+    sheet(sxHead('Your payday') + '<p class="muted small">Take-home, after taxes and deductions. Tally uses it to plan each week and find your next payday.</p>' + moneyField('p_amt', 'Take-home per paycheck', p.amt) + '<label class="tp-label">How often</label>' + seg('p_every', [[7, 'Weekly'], [14, 'Every 2 weeks'], [15, 'Twice a month'], [30, 'Monthly']], p.every || 7) + textField('p_next', 'Next payday', p.next || '', '', 'date') +
+      '<div class="tp-sect"><span>Auto-save on payday</span></div><p class="muted small" style="margin-top:-4px">If your bank moves part of each paycheck to savings (like Chime\u2019s Save When I Get Paid), Tally counts it automatically.</p><div class="fgrid">' + textField('p_apct', 'Percent of each paycheck', (p.auto || {}).pct || '', 'e.g. 10', 'number') +
+      '<div><label class="tp-label" for="p_ato">Goes to</label><select class="tp-input" id="p_ato"><option value="">No auto-save</option>' + S.accounts.filter(function (a) { return !a.closed && a.kind !== 'spend'; }).map(function (a) { return '<option value="' + a.id + '"' + ((p.auto || {}).to === a.id ? ' selected' : '') + '>' + esc(a.name) + '</option>'; }).join('') + '</select></div></div>' +
+      '<div id="p_err"></div><div class="acts"><button class="tp-btn" data-act="paySave">Save</button></div>');
   },
-  paySave: function () { if (!val('p_next')) { document.getElementById('p_err').innerHTML = '<div class="tp-err">Pick the next payday.</div>'; return; } S.profile.pay = { amt: r2(num(val('p_amt'))), every: +val('p_every') || 7, next: val('p_next') }; closeSheet(); render._keep = true; save(); },
+  paySave: function () { if (!val('p_next')) { document.getElementById('p_err').innerHTML = '<div class="tp-err">Pick the next payday.</div>'; return; } var apct = Math.max(0, Math.min(100, num(val('p_apct')))); S.profile.pay = { amt: r2(num(val('p_amt'))), every: +val('p_every') || 7, next: val('p_next'), auto: apct && val('p_ato') ? { pct: apct, to: val('p_ato') } : null }; closeSheet(); render._keep = true; save(); },
   remindSave: function () { S.profile.remind = { on: checked('r_on'), day: +val('r_day'), hour: +val('r_hour') }; render._keep = true; save(); toast(!S.profile.remind.on ? 'Reminder off' : Sync.on() ? 'Saved. The email goes out ' + DOW[S.profile.remind.day] + 's.' : 'Saved. Turn on sync for the email to send.'); },
   /* goals */
   goalEdit: function (d) {
@@ -1908,10 +2080,13 @@ document.addEventListener('change', function (e) {
   if (el.getAttribute('data-act') === 'ideaToggle') ACT.ideaToggle(el.dataset, el);
   if (el.getAttribute('data-ckpaid') && CK) { CK.paid[el.getAttribute('data-ckpaid')] = el.checked; ckCalc(); }
   if (el.getAttribute('data-play')) updatePlay();
+  if (el.id === 'qa_date') qaWhere();
+  if (el.id && el.id.indexOf('mv_t_') === 0 && CK) ckCalc();
 });
 document.addEventListener('input', function (e) {
   var id = e.target.id || '';
-  if (VIEW === 'checkin' && CK) { if (CK.step === 0) ckCashLine(); if (CK.step === 1 && (id.indexOf('ci_') === 0 || id.indexOf('cl_') === 0 || id === 'ck_inv')) ckCalc(); }
+  if (VIEW === 'checkin' && CK) { if (CK.step === 0) ckCashLine(); if (CK.step === 1 && (id.indexOf('ci_') === 0 || id.indexOf('cl_') === 0 || id.indexOf('mv_') === 0)) ckCalc(); }
+  if (id === 'st_plan' || id === 'st_amt') setStmtPlanWarn();
   if (VIEW === 'play' && (e.target.getAttribute('data-play') || id.indexOf('pb_') === 0 || id.indexOf('pc_') === 0)) updatePlay();
 });
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
