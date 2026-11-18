@@ -691,6 +691,10 @@ details.cashchk .tp-t b{font-size:15px}
 details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .nav .plus{margin-left:4px}
 @media(max-width:400px){ .nav .plus{width:44px;min-width:44px;height:44px;border-radius:15px} }
+.shtabs{gap:2px}
+.shtabs button{white-space:nowrap;padding:9px 2px;font-size:12.5px;letter-spacing:-.1px}
+.shtabs .cnt{min-width:15px;height:15px;font-size:9.5px;margin-left:3px;padding:0 3px}
+@media(max-width:400px){ .shtabs button{font-size:11.5px} .shtabs .cnt{margin-left:2px} }
 
 </style>
 </head>
@@ -701,7 +705,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.14';
+var APP_VERSION = '2026.11.18.15';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
