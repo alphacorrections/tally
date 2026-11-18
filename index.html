@@ -568,6 +568,26 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 :root[data-theme="light"] .glass,:root[data-theme="light"] .tp-card,:root[data-theme="light"] .ccard,:root[data-theme="light"] .tp-stat{border-color:rgba(19,32,26,.12);box-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 2px 6px rgba(20,30,25,.06),0 14px 30px rgba(20,30,25,.10)}
 :root[data-theme="light"] .tp-page{background:linear-gradient(160deg,color-mix(in srgb,var(--g1) 85%,var(--hi)) 0%,var(--g2) 50%,var(--g3) 100%) fixed}
 
+/* rewards helper in quick add */
+.pillbtn.sm{min-height:34px;padding:5px 12px;font-size:12.5px}
+.chip .rt{font-style:normal;font-weight:800;font-size:11px;margin-left:6px;padding:1px 6px;border-radius:99px;background:var(--hi);color:var(--tp-btn-ink)}
+:root[data-theme="light"] .chip .rt{color:#FFFFFF}
+.chip.on .rt{background:var(--tp-btn-ink);color:var(--tp-btn)}
+.rwpanel{margin-top:8px;padding:12px;border-radius:14px;background:var(--well);border:1px dashed var(--tp-line);animation:tp-rise .25s both}
+.rwrow{display:flex;align-items:center;gap:10px;width:100%;min-height:42px;padding:8px 10px;border-radius:10px;border:0;background:none;color:var(--tp-ink);font:600 14px var(--tp-font);cursor:pointer;text-align:left}
+.rwrow i{width:22px;height:15px;border-radius:4px;flex:none}
+.rwrow span{flex:1}
+.rwrow b{font-family:var(--tp-display);font-size:16px}
+.rwrow.best{background:color-mix(in srgb,var(--hi) 20%,transparent);box-shadow:inset 0 0 0 1px var(--hi)}
+.rwall{display:grid;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--tp-line2);font-size:12.5px}
+.rwall b{display:block;font-size:13px}
+.rwall span{color:var(--tp-ink2)}
+details.rwedit{margin-top:12px;padding:10px 12px;border-radius:14px;background:var(--well);border:1px solid var(--tp-line2)}
+details.rwedit summary{cursor:pointer;font-weight:650;font-size:14px;min-height:32px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rwgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.rwgrid label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--tp-ink2)}
+.rwgrid .tp-input{min-height:42px;padding:8px 10px}
+
 </style>
 </head>
 <body class="tp-page">
@@ -577,7 +597,7 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.3';
+var APP_VERSION = '2026.11.18.4';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1274,7 +1294,17 @@ TP.icons.bank = '<path d="M3 9l9-5 9 5M5 9v9M10 9v9M14 9v9M19 9v9M3 20h18"/>';
 TP.icons.compass = '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>';
 TP.icons.close = '<path d="M6 6l12 12M18 6L6 18"/>';
 var CARD_COLORS = { navy: ['#1B3A8A', '#2F6FD6'], gold: ['#B8913A', '#E7CD7C', 1], charcoal: ['#2E3238', '#7D8594'], red: ['#7A1F1F', '#C2453D'], blue: ['#0F3F7A', '#3C7DC4'], green: ['#14513A', '#3FA06E'], purple: ['#3D1E6D', '#8E5BE0'], silver: ['#9AA3AE', '#DCE1E6', 1] };
-var CATS = ['Groceries', 'Eating out', 'Gas', 'Pets', 'Fun', 'Shopping', 'Venmo / split', 'Health', 'Other'];
+var CATS = ['Groceries', 'Eating out', 'Gas', 'Travel', 'Shopping', 'Fun', 'Pets', 'Health', 'Venmo / split', 'Other'];
+var RWD_CATS = ['Groceries', 'Eating out', 'Gas', 'Travel', 'Shopping', 'Fun'];
+/* rewards per category: what you typed on the card, or read from its "what it earns" text */
+function parseRewards(t) {
+  var r = {}, map = [[/grocer|supermarket|whole foods|market/i, ['Groceries']], [/food|dining|restaurant/i, ['Eating out']], [/\bfood\b/i, ['Groceries']], [/gas|fuel/i, ['Gas']], [/travel|flight|airline|hotel|jetblue|delta|united/i, ['Travel']], [/amazon|online|shopping|retail/i, ['Shopping']], [/entertain|stream|concert|ticket/i, ['Fun']], [/everything|all purchases|other/i, ['*']]];
+  String(t || '').split(/[,;\u00b7]/).forEach(function (part) { var m = part.match(/(\d+(?:\.\d+)?)\s*(%|x)/i); if (!m) return; var v = +m[1]; map.forEach(function (k) { if (k[0].test(part)) k[1].forEach(function (c) { if (!(r[c] >= v)) r[c] = v; }); }); });
+  return r;
+}
+function cardRewards(c) { return c.rewards && Object.keys(c.rewards).length ? c.rewards : parseRewards(c.perk); }
+function rateFor(c, cat) { var r = cardRewards(c); return r[cat] != null && r[cat] !== '' ? +r[cat] : (r['*'] != null && r['*'] !== '' ? +r['*'] : 0); }
+function rewardUnit(c) { return c.runit === 'x' ? 'x' : '%'; }
 var GOAL_LBL = { save: ['Target', 'Saved so far'], payoff: ['Balance when you started', 'Still owed'], trip: ['Trip budget', 'Saved so far'] };
 var KIND_NAME = { spend: 'Spending', save: 'Savings', invest: 'Investing', retire: 'Retirement' };
 
@@ -1358,14 +1388,27 @@ function qaSheet() {
   var q = QA, srcs = srcList();
   var h = '<div class="sxhead"><button class="ibtn" data-act="close" aria-label="Close">' + TP.svg('close') + '</button><span class="grow"></span><button class="pillbtn" data-act="checkinStart">Weekly check-in</button></div><h3>' + (q.id ? 'Edit purchase' : 'Log a purchase') + '</h3>' +
     '<div class="money qamt"><input class="tp-input" id="qa_amt" inputmode="decimal" placeholder="0.00" value="' + esc(q.amt || '') + '" aria-label="Amount"></div>' +
-    '<label class="tp-label">Paid with</label>' + (srcs.length ? '<div class="chips qsrc">' + srcs.map(function (o) { return '<button class="chip' + (q.src === o.id ? ' on' : '') + '" data-act="qaSrc" data-a="' + o.id + '" aria-pressed="' + (q.src === o.id) + '"><i style="background:' + o.dot + '"></i>' + esc(o.name) + '</button>'; }).join('') + '</div>' : '<p class="small muted">Add a card or account first.</p>') +
     '<label class="tp-label">Category</label><div class="chips">' + CATS.map(function (c) { return '<button class="chip' + (q.cat === c ? ' on' : '') + '" data-act="qaCat" data-a="' + esc(c) + '" aria-pressed="' + (q.cat === c) + '">' + c + '</button>'; }).join('') + '</div>' +
+    '<div class="flex" style="justify-content:space-between;align-items:center;margin-top:14px"><label class="tp-label" style="margin:0">Paid with</label><button class="pillbtn sm" data-act="qaRw" aria-expanded="' + !!q.showR + '">' + (q.showR ? 'Hide rewards' : 'Best card' + (q.cat ? ' for ' + q.cat.toLowerCase() : '') + ' \u2191') + '</button></div>' + (q.showR ? rewardsPanel(q) : '') +
+    (srcs.length ? '<div class="chips qsrc" style="margin-top:6px">' + srcs.map(function (o) { var c = o.id.indexOf('c:') === 0 ? byId(S.cards, o.id.slice(2)) : null, rt = c && q.cat ? rateFor(c, q.cat) : 0; return '<button class="chip' + (q.src === o.id ? ' on' : '') + '" data-act="qaSrc" data-a="' + o.id + '" aria-pressed="' + (q.src === o.id) + '"><i style="background:' + o.dot + '"></i>' + esc(o.name) + (rt ? '<em class="rt">' + rt + rewardUnit(c) + '</em>' : '') + '</button>'; }).join('') + '</div>' : '<p class="small muted">Add a card or account first.</p>') +
+    (typeof SH !== 'undefined' && SH.on() && SH.doc && shLive('people').length ? '<label class="tp-opt mt"><input type="checkbox" id="qa_tog" ' + (q.together ? 'checked' : '') + ' data-act="qaTog"><span><b>Together expense</b><span>Split it with ' + esc(shThem().name) + ' so it shows up in Together to be paid back.</span></span></label>' +
+      '<div id="qa_togbox"' + (q.together ? '' : ' hidden') + '>' + seg('qs_split', [['half', '50/50'], ['pct', 'Custom'], ['other', 'All theirs']], q.split || 'half') + '<div id="qs_pctbox"' + (q.split === 'pct' ? '' : ' hidden') + '>' + textField('qs_pct', 'Your share, %', q.pct || 50, '50', 'number') + '</div></div>' : '') +
     '<div class="fgrid">' + textField('qa_note', 'Note (optional)', q.note || '', 'e.g. Market Basket') + textField('qa_date', 'Date', q.date || today(), '', 'date') + '</div><div id="qa_where" class="small muted" style="margin-top:8px"></div><div id="qa_err"></div>' +
     '<div class="acts">' + (q.id ? '<button class="tp-btn tp-danger" data-act="qaDel" data-id="' + q.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="qaSave">' + (q.id ? 'Save' : 'Log it') + '</button></div>';
   sheet(h); qaWhere();
   if (!q.id) setTimeout(function () { var i = document.getElementById('qa_amt'); if (i) i.focus(); }, 60);
 }
-function qaKeep() { if (!QA) return; QA.amt = val('qa_amt'); QA.note = val('qa_note'); QA.date = val('qa_date') || today(); }
+function qaKeep() { if (!QA) return; QA.amt = val('qa_amt'); QA.note = val('qa_note'); QA.date = val('qa_date') || today(); if (document.getElementById('qa_tog')) { QA.together = checked('qa_tog'); QA.split = val('qs_split') || 'half'; QA.pct = val('qs_pct'); } }
+function rewardsPanel(q) {
+  var cards = S.cards.filter(function (c) { return !c.off; }); if (!cards.length) return '';
+  var h = '<div class="rwpanel">';
+  if (q.cat && RWD_CATS.concat(['Pets', 'Health', 'Venmo / split', 'Other']).indexOf(q.cat) >= 0) {
+    var list = cards.map(function (c) { return { c: c, r: rateFor(c, q.cat) }; }).sort(function (a, b) { return b.r - a.r; }), best = list[0] ? list[0].r : 0;
+    h += '<div class="small muted" style="margin-bottom:6px">Best for ' + esc(q.cat.toLowerCase()) + '</div>' + list.map(function (x) { return '<button class="rwrow' + (x.r === best && best > 0 ? ' best' : '') + '" data-act="qaSrc" data-a="c:' + x.c.id + '"><i style="background:linear-gradient(120deg,' + (CARD_COLORS[x.c.color] || CARD_COLORS.charcoal)[0] + ',' + (CARD_COLORS[x.c.color] || CARD_COLORS.charcoal)[1] + ')"></i><span>' + esc(x.c.name) + '</span><b>' + (x.r ? x.r + rewardUnit(x.c) : '\u2014') + '</b></button>'; }).join('');
+  } else h += '<div class="small muted" style="margin-bottom:6px">Pick a category to rank your cards. What each one earns:</div>';
+  h += '<div class="rwall">' + cards.map(function (c) { var r = cardRewards(c), top = Object.keys(r).filter(function (k) { return k !== '*'; }).sort(function (a, b) { return r[b] - r[a]; }).slice(0, 3); return '<div><b>' + esc(c.name) + '</b><span>' + esc(top.map(function (k) { return r[k] + rewardUnit(c) + ' ' + k.toLowerCase(); }).concat(r['*'] ? [r['*'] + rewardUnit(c) + ' everything else'] : []).join(' \u00b7 ') || c.perk || 'Add rewards on the card') + '</span></div>'; }).join('') + '</div>';
+  return h + '</div>';
+}
 function qaWhere() {
   var el = document.getElementById('qa_where'); if (!el || !QA || !QA.src) return;
   var k = QA.src.slice(2), d = val('qa_date') || today();
@@ -1976,7 +2019,9 @@ function cardSheet() {
   var c = CW, st = c.step, h = sxHead(c.id ? 'Edit ' + (c.name || 'card') : 'Add a card', st, 3);
   if (st > 1 && c.name) { var f = cardFace(c); h += '<div class="minicard' + (f.lt ? ' lt' : '') + '" style="' + f.style + '"><b>' + esc(c.name) + '</b><span>' + esc(c.perk || '') + '</span></div>'; }
   if (st === 1) {
-    h += textField('c_name', 'Card name', c.name, 'e.g. Amex Gold') + textField('c_perk', 'What it earns', c.perk, 'e.g. 4% food, 3% travel') + textField('c_use', 'Use it for', c.use, 'e.g. Groceries, restaurants') +
+    var rw = c.rewards && Object.keys(c.rewards).length ? c.rewards : parseRewards(c.perk);
+    var rwHtml = '<details class="rwedit"' + (c.rewards ? ' open' : '') + '><summary>Rewards by category <span class="small muted">(for the \u201cbest card\u201d tip)</span></summary><div class="flex" style="margin:8px 0">' + seg('c_runit', [['%', '% cash back'], ['x', 'x points']], c.runit || '%') + '</div><div class="rwgrid">' + RWD_CATS.concat(['*']).map(function (k) { return '<label><span>' + (k === '*' ? 'Everything else' : k) + '</span><input class="tp-input" inputmode="decimal" data-rw="' + esc(k) + '" value="' + esc(rw[k] != null ? rw[k] : '') + '" placeholder="0"></label>'; }).join('') + '</div></details>';
+    h += textField('c_name', 'Card name', c.name, 'e.g. Amex Gold') + textField('c_perk', 'What it earns', c.perk, 'e.g. 4% food, 3% travel') + textField('c_use', 'Use it for', c.use, 'e.g. Groceries, restaurants') + rwHtml +
       '<label class="tp-label">Card color</label><div class="chips">' + Object.keys(CARD_COLORS).map(function (k) { var x = CARD_COLORS[k]; return '<button class="swatch' + (c.color === k ? ' on' : '') + '" data-act="cwColor" data-a="' + k + '" aria-label="' + k + '" aria-pressed="' + (c.color === k) + '" style="background:linear-gradient(120deg,' + x[0] + ',' + x[1] + ')"></button>'; }).join('') + '</div><div id="c_err"></div>' +
       '<div class="acts">' + (c.id ? '<button class="tp-btn tp-danger" data-act="cardDel" data-id="' + c.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="cwNext">Next: dates</button></div>';
   } else if (st === 2) {
@@ -1996,7 +2041,7 @@ function cardSheet() {
 }
 function cwKeep() {
   if (!CW) return;
-  if (document.getElementById('c_name')) { CW.name = val('c_name').trim(); CW.perk = val('c_perk').trim(); CW.use = val('c_use').trim(); }
+  if (document.getElementById('c_name')) { CW.name = val('c_name').trim(); CW.perk = val('c_perk').trim(); CW.use = val('c_use').trim(); var rw = {}, any = false; $all('[data-rw]').forEach(function (i) { if (i.value.trim() !== '') { rw[i.getAttribute('data-rw')] = num(i.value); any = true; } }); var ed = document.querySelector('details.rwedit'); if (ed && ed.open && any) CW.rewards = rw; CW.runit = val('c_runit') || '%'; }
   if (document.getElementById('c_bal')) { CW.bal = r2(num(val('c_bal'))); CW.limit = r2(num(val('c_limit'))) || ''; CW.match = val('c_match').trim(); CW.off = checked('c_off'); CW.stmt = val('c_stmt'); CW.fixedPay = r2(num(val('c_fixed'))) || ''; }
 }
 function setTodayBal(kind, id, amount, src) {
@@ -2019,6 +2064,7 @@ var ACT = {
   mode: function (d) { setLook(null, d.a); rerender(); },
   seg: function (d, el) {
     $all('button', el.parentNode).forEach(function (b) { b.classList.toggle('on', b === el); }); document.getElementById(d.id).value = d.v;
+    if (d.id === 'qs_split') { var pb = document.getElementById('qs_pctbox'); if (pb) pb.hidden = d.v !== 'pct'; }
     if (d.id === 'g_kind') { document.getElementById('g_trip').hidden = d.v !== 'trip'; var l1 = document.querySelector('label[for=g_target]'), l2 = document.querySelector('label[for=g_manual]'); if (l1) l1.textContent = GOAL_LBL[d.v][0]; if (l2) l2.textContent = GOAL_LBL[d.v][1]; }
     if (d.id === 'bl_freq') { document.getElementById('bl_fixed').hidden = d.v === 'c'; document.getElementById('bl_custom').hidden = d.v !== 'c'; document.getElementById('bl_yr').hidden = d.v !== 'y'; }
   },
@@ -2035,8 +2081,10 @@ var ACT = {
   /* check-in */
   checkinStart: function () { ckStart(); },
   quickAdd: function () { var l = (S.profile.last || {}); QA = { amt: '', src: l.src && srcList().some(function (o) { return o.id === l.src; }) ? l.src : (srcList()[0] || {}).id, cat: l.cat || '', note: '', date: today() }; qaSheet(); },
-  qaEdit: function (d) { var x = (S.txns || []).filter(function (t) { return t.id === d.id; })[0]; if (!x) return; QA = JSON.parse(JSON.stringify(x)); qaSheet(); },
+  qaEdit: function (d) { var x = (S.txns || []).filter(function (t) { return t.id === d.id; })[0]; if (!x) return; QA = JSON.parse(JSON.stringify(x)); if (x.shared && typeof SH !== 'undefined' && SH.doc) { var ex = (SH.doc.exp || []).filter(function (e) { return e.id === x.shared && !e.del; })[0]; if (ex) { QA.together = true; QA.split = ex.split; QA.pct = ex.pct; } } qaSheet(); },
   qaSrc: function (d) { qaKeep(); QA.src = d.a; qaSheet(); },
+  qaRw: function () { qaKeep(); QA.showR = !QA.showR; qaSheet(); },
+  qaTog: function () {},
   qaCat: function (d) { qaKeep(); QA.cat = d.a; qaSheet(); },
   qaSave: function () {
     qaKeep(); var a = r2(num(QA.amt)); if (!(a > 0)) { document.getElementById('qa_err').innerHTML = '<div class="tp-err">Type the amount.</div>'; return; }
@@ -2046,10 +2094,15 @@ var ACT = {
     x.amt = a; x.src = QA.src; x.cat = QA.cat || 'Other'; x.note = (QA.note || '').trim(); x.date = QA.date || today();
     if (!QA.id) { var d0 = x.date; x.at = d0 === today() ? x.at : d0 + 'T12:00:00'; }
     S.profile.last = { src: x.src, cat: x.cat };
+    if (typeof SH !== 'undefined' && SH.on() && SH.doc && (QA.together || x.shared)) {
+      var ex = x.shared ? (SH.doc.exp || []).filter(function (e) { return e.id === x.shared; })[0] : null;
+      if (QA.together) { var se = ex ? JSON.parse(JSON.stringify(ex)) : { id: 'e' + uid(), payer: SH.cfg.me, by: SH.cfg.me }; delete se.del; se.amt = a; se.note = x.note || x.cat; se.cat = x.cat; se.date = x.date; se.split = QA.split || 'half'; se.pct = se.split === 'pct' ? Math.max(0, Math.min(100, num(QA.pct))) : ''; shTouch('exp', se); x.shared = se.id; }
+      else if (ex) { ex.del = true; shTouch('exp', ex); x.shared = ''; }
+    }
     var where = ''; if (x.src.indexOf('c:') === 0) { var c = byId(S.cards, x.src.slice(2)), cy = c && cardCycleFor(c, x.date); where = c ? 'Added to ' + c.name + (cy && cy.due ? '. Due ' + shortDate(cy.due) + '.' : '.') : ''; } else { var ac = byId(S.accounts, x.src.slice(2)); where = ac ? 'Out of ' + ac.name + '. ' + money(acctBal(ac.id) - (QA.id ? 0 : 0)) + ' left.' : ''; }
     QA = null; closeSheet(); render._keep = true; save(); toast(money(a, 1) + ' logged. ' + where);
   },
-  qaDel: function (d, el) { armDelete(el, function () { S.txns = (S.txns || []).filter(function (t) { return t.id !== d.id; }); QA = null; closeSheet(); render._keep = true; save(); }); },
+  qaDel: function (d, el) { armDelete(el, function () { var tx = (S.txns || []).filter(function (t) { return t.id === d.id; })[0]; if (tx && tx.shared && typeof SH !== 'undefined' && SH.on() && SH.doc) { var ex = (SH.doc.exp || []).filter(function (e) { return e.id === tx.shared; })[0]; if (ex) { ex.del = true; shTouch('exp', ex); } } S.txns = (S.txns || []).filter(function (t) { return t.id !== d.id; }); QA = null; closeSheet(); render._keep = true; save(); }); },
   scoreAdd: function () { sheet(sxHead('Today\u2019s credit score') + '<p class="muted small">From Credit Karma or your card\u2019s app.</p><div class="fgrid">' + textField('sc_tu', 'TransUnion', '', 'e.g. 724', 'number') + textField('sc_eq', 'Equifax (optional)', '', 'e.g. 766', 'number') + '</div><div id="sc_err"></div><div class="acts"><button class="tp-btn" data-act="scoreSave">Save</button></div>'); },
   scoreSave: function () { var a = Math.round(num(val('sc_tu'))), b = Math.round(num(val('sc_eq'))); if (a < 300 || a > 900) { document.getElementById('sc_err').innerHTML = '<div class="tp-err">Scores run from 300 to 850.</div>'; return; } setTodayBal('none'); var td = today(), sn = S.snaps.filter(function (s) { return s.date === td; })[0]; sn.score = a + (b >= 300 ? '/' + b : ''); closeSheet(); render._keep = true; save(); },
   spRange: function (d) { SP_RANGE = d.a; rerender(); },
@@ -2099,7 +2152,7 @@ var ACT = {
   cwNext: function () { cwKeep(); if (CW.step === 1 && !CW.name) { document.getElementById('c_err').innerHTML = '<div class="tp-err">Give the card a name.</div>'; return; } if (CW.step === 2 && !(CW.stmtDay && CW.dueDay)) return; CW.step++; cardSheet(); },
   cardSave: function () {
     cwKeep(); var isNew = !byId(S.cards, CW.id), c = byId(S.cards, CW.id); if (!c) { c = { id: 'k' + uid() }; S.cards.push(c); }
-    ['name', 'perk', 'use', 'color', 'stmtDay', 'dueDay', 'limit', 'match', 'off', 'fixedPay'].forEach(function (k) { c[k] = CW[k]; });
+    ['name', 'perk', 'use', 'color', 'stmtDay', 'dueDay', 'limit', 'match', 'off', 'fixedPay', 'rewards', 'runit'].forEach(function (k) { c[k] = CW[k]; });
     setTodayBal('card', c.id, CW.bal || 0); if (CW.stmt !== '' && CW.stmt != null && c.dueDay) setStmt(c.id, nextDueDate(c.dueDay, today()), num(CW.stmt)); CW = null; closeSheet(); render._keep = true; save(); toast(isNew ? 'Card added. Its dates now show on Home and in the weekly email.' : 'Card saved');
   },
   cardDel: function (d, el) { armDelete(el, function () { S.cards = S.cards.filter(function (c) { return c.id !== d.id; }); CW = null; closeSheet(); save(); }); },
