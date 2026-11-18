@@ -403,7 +403,7 @@ details.hist summary .small{margin-left:auto}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.17.4';
+var APP_VERSION = '2026.11.17.5';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1055,6 +1055,16 @@ function goalLine(g) {
   return rp != null ? 'Lately ' + money(rp) + ' a month.' : '';
 }
 function syncLine() { var l = lastSnap(); return (l ? 'Balances as of ' + shortDate(l.date) : 'No balances yet') + (Sync.on() ? '' : ' · this device only'); }
+function paidFromField(id, cur) {
+  var accts = S.accounts.filter(function (a) { return !a.closed && (a.kind === 'spend' || a.kind === 'save'); }).map(function (a) { return a.name; });
+  var cards = S.cards.filter(function (c) { return !c.off; }).map(function (c) { return c.name; });
+  var known = accts.concat(cards).some(function (n) { return n === cur; });
+  var opt = function (n) { return '<option value="' + esc(n) + '"' + (n === cur ? ' selected' : '') + '>' + esc(n) + '</option>'; };
+  return '<div><label class="tp-label" for="' + id + '">Paid from</label><select class="tp-input" id="' + id + '"><option value="">Not set</option>' +
+    (accts.length ? '<optgroup label="Accounts">' + accts.map(opt).join('') + '</optgroup>' : '') +
+    (cards.length ? '<optgroup label="Cards">' + cards.map(opt).join('') + '</optgroup>' : '') +
+    (cur && !known ? '<optgroup label="Saved before">' + opt(cur) + '</optgroup>' : '') + '</select></div>';
+}
 function payLabel(p) { return { 7: 'every week', 14: 'every 2 weeks', 15: 'twice a month', 30: 'every month' }[+p.every] || ''; }
 
 /* ---------- shell ---------- */
@@ -1677,14 +1687,14 @@ var ACT = {
   billEdit: function (d) {
     var b = d.id ? byId(S.bills, d.id) : { id: '', name: '', amount: '', day: '', month: '', account: '', freq: 'm' };
     sheet(sxHead(b.id ? 'Edit bill' : 'Add a bill') + '<input type="hidden" id="bl_id" value="' + esc(b.id) + '">' + '<div class="fgrid">' + textField('bl_name', 'Name', b.name, 'e.g. Rent') + moneyField('bl_amt', 'Amount', b.amount) + '</div><label class="tp-label">How often</label>' + seg('bl_freq', [['m', 'Every month'], ['y', 'Once a year']], b.freq || 'm') +
-      '<label class="tp-label">Due on day</label>' + dayGrid('bl_day', b.day) + '<div class="fgrid"><div><label class="tp-label" for="bl_month">Month (yearly bills)</label><select class="tp-input" id="bl_month"><option value="">—</option>' + MONTHS.map(function (m, i) { return '<option value="' + (i + 1) + '"' + (+b.month === i + 1 ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div>' + textField('bl_acct', 'Paid from', b.account, 'Checking, or a card') + '</div>' +
+      '<label class="tp-label">Due on day</label>' + dayGrid('bl_day', b.day) + '<div class="fgrid"><div><label class="tp-label" for="bl_month">Month (yearly bills)</label><select class="tp-input" id="bl_month"><option value="">—</option>' + MONTHS.map(function (m, i) { return '<option value="' + (i + 1) + '"' + (+b.month === i + 1 ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div>' + paidFromField('bl_acct', b.account) + '</div>' +
       '<label class="tp-opt mt"><input type="checkbox" id="bl_off" ' + (b.off ? 'checked' : '') + '><span><b>Paused</b><span>Keeps it on the list but out of totals and plans.</span></span></label><div id="bl_err"></div>' +
       '<div class="acts">' + (b.id ? '<button class="tp-btn tp-danger" data-act="billDel" data-id="' + b.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="billSave">Save</button></div>');
   },
   billSave: function () {
     var name = val('bl_name').trim(); if (!name) { document.getElementById('bl_err').innerHTML = '<div class="tp-err">Give the bill a name.</div>'; return; }
     var b = byId(S.bills, val('bl_id')); if (!b) { b = { id: uid() }; S.bills.push(b); }
-    b.name = name; b.amount = r2(num(val('bl_amt'))); b.freq = val('bl_freq') || 'm'; b.day = +val('bl_day') || ''; b.month = +val('bl_month') || ''; b.account = val('bl_acct').trim(); b.off = checked('bl_off');
+    b.name = name; b.amount = r2(num(val('bl_amt'))); b.freq = val('bl_freq') || 'm'; b.day = +val('bl_day') || ''; b.month = +val('bl_month') || ''; b.account = val('bl_acct'); b.off = checked('bl_off');
     closeSheet(); render._keep = true; save();
   },
   billDel: function (d, el) { armDelete(el, function () { S.bills = S.bills.filter(function (b) { return b.id !== d.id; }); closeSheet(); save(); }); },
