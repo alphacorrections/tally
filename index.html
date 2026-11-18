@@ -529,7 +529,7 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.17.18';
+var APP_VERSION = '2026.11.17.19';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1110,7 +1110,9 @@ function cardDueInfo(e) {
   var td = today(), left = cardBal(c), res = { amt: 0, est: true, why: 'none' };
   eventsBetween(td, e.date).filter(function (x) { return x.type === 'due' && x.card === c.id; }).forEach(function (x) {
     var r;
-    if (x.amt != null) { r = { amt: x.st === 'paid' ? 0 : +x.amt || 0, est: false }; left = r2(Math.max(0, left - r.amt)); }
+    var fixed = +c.fixedPay || 0, hasPlan = x.full != null && x.amt !== x.full;
+    if (fixed > 0 && !hasPlan) { r = { amt: x.st === 'paid' ? 0 : r2(Math.min(fixed, Math.max(0, left))), est: x.amt == null, why: 'fixed' }; left = r2(Math.max(0, left - r.amt)); }
+    else if (x.amt != null) { r = { amt: x.st === 'paid' ? 0 : +x.amt || 0, est: false }; left = r2(Math.max(0, left - r.amt)); }
     else {
       var close = cardLastClose(c, addDays(x.date, -1));
       if (close && close < td) { r = { amt: r2(Math.max(0, left - sumAmt(chargesSince(c, close)))), est: true, why: 'closed' }; left = r2(left - r.amt); }
@@ -1120,6 +1122,8 @@ function cardDueInfo(e) {
   });
   return res;
 }
+/* month the balance hits zero when paying a set amount each month (no new charges) */
+function payoffMonth(c) { var f = +c.fixedPay || 0, b = cardBal(c); if (!f || !b) return null; var n = Math.ceil(b / f); var nd = c.dueDay ? (function () { var t = parseD(today()), x = ymd(clampDay(t.getFullYear(), t.getMonth(), +c.dueDay)); return x < today() ? ymd(clampDay(t.getFullYear(), t.getMonth() + 1, +c.dueDay)) : x; })() : today(); var z = parseD(nd); z = new Date(z.getFullYear(), z.getMonth() + n - 1, 1); return { months: n, label: MON[z.getMonth()] + ' ' + z.getFullYear() }; }
 function cardDueAmt(e) { return cardDueInfo(e).amt; }
 function dueBetween(from, to) {
   var t = 0, list = [];
@@ -1521,7 +1525,7 @@ PAGES.cards = function () {
     h += '<div class="ccard tp-rise" style="--i:' + i + '"><button class="ccmain" data-act="cardEdit" data-id="' + c.id + '"><span class="face' + (f.lt ? ' lt' : '') + '" style="' + f.style + '"><span class="top2"><b>' + esc(c.name) + '</b>' + (nd ? pillDays(daysBetween(td, nd.date), nd.st === 'paid').replace('tp-plain', 'light') : '') + '</span><span>' + esc([c.use ? 'Use for ' + c.use : '', c.perk].filter(Boolean).join(' · ') || 'Tap to add what it’s best for') + '</span></span>' +
       '<span class="body"><span class="flex" style="justify-content:space-between"><span class="small muted">Balance' + (c.limit ? ' · ' + Math.round(pct) + '% of ' + moneyK(c.limit) : '') + '</span><b class="disp" style="font-size:20px">' + money(b) + '</b></span>' + (c.limit ? '<span class="bar thin"><i style="width:' + pct.toFixed(1) + '%;' + (pct >= 30 ? 'background:var(--warn)' : '') + '"></i></span>' : '') +
       '<span class="row2"><span>Statement closes<b>' + (ns ? DOW[parseD(ns.date).getDay()] + ', ' + shortDate(ns.date) : (c.stmtDay ? 'the ' + ordinal(c.stmtDay) : 'Not set')) + '</b></span><span>Payment due<b>' + (nd ? DOW[parseD(nd.date).getDay()] + ', ' + shortDate(nd.date) : (c.dueDay ? 'the ' + ordinal(c.dueDay) : 'Not set')) + '</b></span></span></span></button>' +
-      (due ? '<button class="ccstmt' + (sto ? '' : ' need') + '" data-act="stmt" data-card="' + c.id + '" data-ym="' + due.slice(0, 7) + '"><span>' + (sto ? 'Statement due ' + shortDate(due) + (sto.st === 'paid' ? ' · paid' : sto.plan !== '' && sto.plan != null && +sto.plan !== +sto.amt ? ' · paying ' + money(+sto.plan, 1) : '') : 'Add the statement balance due ' + shortDate(due)) + '</span><b>' + (sto ? money(+sto.amt, 1) : '+') + '</b></button>' : '') + cycleLine(c) + '</div>';
+      (due ? '<button class="ccstmt' + (sto ? '' : ' need') + '" data-act="stmt" data-card="' + c.id + '" data-ym="' + due.slice(0, 7) + '"><span>' + (sto ? 'Statement due ' + shortDate(due) + (sto.st === 'paid' ? ' · paid' : sto.plan !== '' && sto.plan != null && +sto.plan !== +sto.amt ? ' · paying ' + money(+sto.plan, 1) : +c.fixedPay ? ' · paying ' + money(Math.min(+c.fixedPay, +sto.amt), 1) : '') : 'Add the statement balance due ' + shortDate(due)) + '</span><b>' + (sto ? money(+sto.amt, 1) : '+') + '</b></button>' : '') + cycleLine(c) + (+c.fixedPay ? (function () { var po = payoffMonth(c); return '<button class="ccstmt cyc" data-act="cardEdit" data-id="' + c.id + '"><span>Paying ' + money(+c.fixedPay) + ' a month' + (po ? ' \u00b7 paid off around ' + po.label + ' (' + po.months + ' payments)' : '') + '</span><b>' + TP.svg('pencil') + '</b></button>'; })() : '') + '</div>';
   });
   var off = S.cards.filter(function (c) { return c.off; });
   if (off.length) h += '<div class="tp-sect"><span>Not in use</span></div><div class="glass">' + off.map(function (c) { return '<button class="tp-row" data-act="cardEdit" data-id="' + c.id + '"><span class="tp-tile">' + TP.svg('card') + '</span><span class="tp-t"><b>' + esc(c.name) + '</b><span>Reminders off</span></span></button>'; }).join('') + '</div>';
@@ -1902,6 +1906,7 @@ function cardSheet() {
       '<div class="acts"><button class="tp-btn tp-ghost" data-act="cwBack">Back</button><button class="tp-btn" data-act="cwNext"' + (c.stmtDay && c.dueDay ? '' : ' disabled') + '>Next: balance</button></div>';
   } else {
     h += '<div class="fgrid">' + moneyField('c_bal', 'Balance right now', c.bal != null && c.bal !== '' ? c.bal : (c.id ? cardBal(byId(S.cards, c.id) || c) : '')) + moneyField('c_limit', 'Credit limit', c.limit, 'Leave blank if it has no preset limit') + '</div>' +
+      moneyField('c_fixed', 'Pay a set amount each month (optional)', c.fixedPay, 'For a 0% promo or paying a balance down. Blank = pay each statement in full.') +
       (c.dueDay ? moneyField('c_stmt', 'Statement balance due ' + shortDate(nextDueDate(c.dueDay, today())), c.stmt != null ? c.stmt : (c.id && stmtFor(c.id, nextDueDate(c.dueDay, today())) ? stmtFor(c.id, nextDueDate(c.dueDay, today())).amt : ''), 'What you need to pay by the due date. Blank if no statement yet.') : '') +
       textField('c_match', 'Words in its alert emails (optional)', c.match, 'e.g. american express, 1004') + '<div class="small muted" style="margin-top:3px">Comma-separated. All of them must appear in an email for Tally to use it for this card. Settings › Test email reading shows what’s there.</div>' +
       '<label class="tp-opt mt"><input type="checkbox" id="c_off" ' + (c.off ? 'checked' : '') + '><span><b>Not using this card right now</b><span>Hides its reminders. Keeps its history.</span></span></label>' +
@@ -1912,7 +1917,7 @@ function cardSheet() {
 function cwKeep() {
   if (!CW) return;
   if (document.getElementById('c_name')) { CW.name = val('c_name').trim(); CW.perk = val('c_perk').trim(); CW.use = val('c_use').trim(); }
-  if (document.getElementById('c_bal')) { CW.bal = r2(num(val('c_bal'))); CW.limit = r2(num(val('c_limit'))) || ''; CW.match = val('c_match').trim(); CW.off = checked('c_off'); CW.stmt = val('c_stmt'); }
+  if (document.getElementById('c_bal')) { CW.bal = r2(num(val('c_bal'))); CW.limit = r2(num(val('c_limit'))) || ''; CW.match = val('c_match').trim(); CW.off = checked('c_off'); CW.stmt = val('c_stmt'); CW.fixedPay = r2(num(val('c_fixed'))) || ''; }
 }
 function setTodayBal(kind, id, amount, src) {
   var td = today(), sn = S.snaps.filter(function (s) { return s.date === td; })[0];
@@ -2014,7 +2019,7 @@ var ACT = {
   cwNext: function () { cwKeep(); if (CW.step === 1 && !CW.name) { document.getElementById('c_err').innerHTML = '<div class="tp-err">Give the card a name.</div>'; return; } if (CW.step === 2 && !(CW.stmtDay && CW.dueDay)) return; CW.step++; cardSheet(); },
   cardSave: function () {
     cwKeep(); var isNew = !byId(S.cards, CW.id), c = byId(S.cards, CW.id); if (!c) { c = { id: 'k' + uid() }; S.cards.push(c); }
-    ['name', 'perk', 'use', 'color', 'stmtDay', 'dueDay', 'limit', 'match', 'off'].forEach(function (k) { c[k] = CW[k]; });
+    ['name', 'perk', 'use', 'color', 'stmtDay', 'dueDay', 'limit', 'match', 'off', 'fixedPay'].forEach(function (k) { c[k] = CW[k]; });
     setTodayBal('card', c.id, CW.bal || 0); if (CW.stmt !== '' && CW.stmt != null && c.dueDay) setStmt(c.id, nextDueDate(c.dueDay, today()), num(CW.stmt)); CW = null; closeSheet(); render._keep = true; save(); toast(isNew ? 'Card added. Its dates now show on Home and in the weekly email.' : 'Card saved');
   },
   cardDel: function (d, el) { armDelete(el, function () { S.cards = S.cards.filter(function (c) { return c.id !== d.id; }); CW = null; closeSheet(); save(); }); },
