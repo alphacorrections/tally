@@ -312,7 +312,7 @@ function sendReminder_(s) {
 function bankClaim_(token) {
   var claim = Utilities.newBlob(Utilities.base64Decode(token.trim())).getDataAsString().trim();
   if (!/^https:\/\//.test(claim)) return { ok: false, error: 'That doesn’t look like a SimpleFIN setup token.' };
-  var r = UrlFetchApp.fetch(claim, { method: 'post', headers: { 'Content-Length': '0' }, muteHttpExceptions: true });
+  var r = UrlFetchApp.fetch(claim, { method: 'post', payload: '', contentType: 'text/plain', muteHttpExceptions: true }); /* Apps Script sets Content-Length itself */
   if (r.getResponseCode() === 403) return { ok: false, error: 'That token was already used or doesn’t exist. Make a new one in SimpleFIN.' };
   if (r.getResponseCode() >= 300) return { ok: false, error: 'SimpleFIN said ' + r.getResponseCode() };
   PropertiesService.getScriptProperties().setProperty('SFIN_URL', r.getContentText().trim());
