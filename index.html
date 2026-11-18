@@ -529,7 +529,7 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.17.17';
+var APP_VERSION = '2026.11.17.18';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1099,19 +1099,26 @@ function pendingStmts(c, before) {
   Object.keys(S.statements).forEach(function (ym) { var st = S.statements[ym][c.id]; if (!st || st.st === 'paid' || !c.dueDay) return; var d = ymd(clampDay(+ym.slice(0, 4), +ym.slice(5) - 1, +c.dueDay)); if (d >= td && d < before) t += +st.amt || 0; });
   return r2(t);
 }
-/* What a card payment will be.
-   1. Statement entered: your plan-to-pay amount, or the statement.
-   2. Statement closed but not entered: today's balance minus charges logged since it closed and minus earlier unpaid statements.
-   3. Cycle still open: what's already on the card beyond earlier statements, or your usual statement if that's higher (you'll keep using it).
-   4. Later cycles: your usual statement for that card. */
+/* What a card payment will be. No guessing about spending you haven't done yet:
+   walk the card's due dates from today, starting from today's balance.
+   - Statement entered: you pay your plan-to-pay amount (or the statement); that comes off the balance.
+   - Statement closed but not entered: the balance minus charges logged since it closed.
+   - Next statement still open: whatever is left on the card.
+   - Anything after that: nothing yet. It fills in as you update balances and statements. */
 function cardDueInfo(e) {
-  if (e.amt != null) return { amt: e.st === 'paid' ? 0 : +e.amt || 0, est: false };
   var c = S.cards.filter(function (x) { return x.id === e.card; })[0]; if (!c) return { amt: 0, est: true };
-  var td = today(), close = cardLastClose(c, addDays(e.date, -1)), before = pendingStmts(c, e.date), typ = cardTypicalStmt(c);
-  if (close && close < td) return { amt: r2(Math.max(0, cardBal(c) - sumAmt(chargesSince(c, close)) - before)), est: true, why: 'closed' };
-  var carried = r2(Math.max(0, cardBal(c) - before));
-  if (cardCloseOnOrAfter(c, td) === close) return { amt: r2(Math.max(carried, typ)), est: true, why: typ > carried ? 'usual' : 'balance' };
-  return { amt: typ, est: true, why: 'usual' };
+  var td = today(), left = cardBal(c), res = { amt: 0, est: true, why: 'none' };
+  eventsBetween(td, e.date).filter(function (x) { return x.type === 'due' && x.card === c.id; }).forEach(function (x) {
+    var r;
+    if (x.amt != null) { r = { amt: x.st === 'paid' ? 0 : +x.amt || 0, est: false }; left = r2(Math.max(0, left - r.amt)); }
+    else {
+      var close = cardLastClose(c, addDays(x.date, -1));
+      if (close && close < td) { r = { amt: r2(Math.max(0, left - sumAmt(chargesSince(c, close)))), est: true, why: 'closed' }; left = r2(left - r.amt); }
+      else { r = { amt: r2(Math.max(0, left)), est: true, why: left > 0 ? 'balance' : 'none' }; left = 0; }
+    }
+    if (x.date === e.date) res = r;
+  });
+  return res;
 }
 function cardDueAmt(e) { return cardDueInfo(e).amt; }
 function dueBetween(from, to) {
@@ -2429,7 +2436,7 @@ function calendarPage() {
   var sd = CAL.sel && CAL.sel >= gStart && CAL.sel <= gEnd ? CAL.sel : (td >= gStart && td <= gEnd ? td : ymd(first)), sl = byDay[sd] || [], frow = fc.days.filter(function (x) { return x.d === sd; })[0];
   h += '<div class="tp-sect"><span>' + esc(dowDate(sd)) + '</span></div><div class="glass">';
   h += sl.length ? sl.map(function (e) {
-    var amt = e.type === 'due' ? cardDueAmt(e) : e.amt, label = { pay: 'Paycheck to spending', stmt: 'Statement closes; this balance is reported', due: e.amt == null ? ({ closed: 'Estimated: balance on the closed statement', usual: 'Estimated: your usual statement', balance: 'Estimated: what\u2019s on the card now' }[cardDueInfo(e).why] || 'Estimated') + ' \u00b7 tap to enter it' : 'Card payment', bill: 'Bill' + (e.sub ? ' from ' + e.sub : ''), txn: 'Logged purchase' }[e.type] || '';
+    var amt = e.type === 'due' ? cardDueAmt(e) : e.amt, label = { pay: 'Paycheck to spending', stmt: 'Statement closes; this balance is reported', due: e.amt == null ? ({ closed: 'Estimated: balance on the closed statement', balance: 'Estimated: what\u2019s left on the card after earlier payments', none: 'Nothing charged for this one yet' }[cardDueInfo(e).why] || 'Estimated') + ' \u00b7 tap to enter it' : 'Card payment', bill: 'Bill' + (e.sub ? ' from ' + e.sub : ''), txn: 'Logged purchase' }[e.type] || '';
     var inner = '<span class="tp-tile cdt cd-' + e.type + '">' + TP.svg({ pay: 'piggy', stmt: 'doc', due: 'card', bill: 'receipt', txn: 'chart' }[e.type] || 'calendar') + '</span><span class="tp-t"><b>' + esc(e.title) + '</b><span>' + label + '</span></span>' + (amt ? '<span class="amt' + (e.type === 'pay' ? ' up' : '') + '">' + (e.type === 'pay' ? '+' : '') + money(amt, 1) + '</span>' : '');
     return e.type === 'due' ? '<button class="tp-row" data-act="stmt" data-card="' + e.card + '" data-ym="' + e.ym + '">' + inner + '</button>' : '<div class="tp-row static">' + inner + '</div>';
   }).join('') : '<div class="empty">Nothing scheduled.</div>';
