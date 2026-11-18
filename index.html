@@ -577,7 +577,7 @@ input[type=date].tp-input::-webkit-calendar-picker-indicator{filter:var(--pickfi
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.2';
+var APP_VERSION = '2026.11.18.3';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -737,7 +737,11 @@ function acctBal(id) { for (var i = S.snaps.length - 1; i >= 0; i--) { var b = S
 function weekStartOf(dateStr) { var d = parseD(dateStr), ws = +S.profile.weekStart || 0; var diff = (d.getDay() - ws + 7) % 7; d.setDate(d.getDate() - diff); return ymd(d); }
 function weekSpare(w) { return r2((+w.payroll || 0) + (+w.other || 0) - (+w.out || 0) - (+w.invest || 0)); }
 function realWeeks() { return S.weeks.filter(function (w) { return !w.planned; }); }
-function thisWeek() { var k = weekStartOf(today()), l = S.weeks.filter(function (w) { return !w.planned && weekStartOf(w.date) === k; }); return l.filter(function (w) { return w.app; })[0] || l[0] || null; }
+/* check-ins are dated by the day you did them; the latest one in the last 7 days is "this week" */
+function ckDay(w) { return w.ckDate || (w.period && w.period.to) || w.date; }
+function lastCheckin() { var a = S.weeks.filter(function (w) { return w.app && !w.planned; }).sort(function (x, y) { return ckDay(x) < ckDay(y) ? -1 : 1; }); return a[a.length - 1] || null; }
+function checkinDue() { var l = lastCheckin(); return !l || daysBetween(ckDay(l), today()) >= 6; }
+function thisWeek() { var l = lastCheckin(); if (l && daysBetween(ckDay(l), today()) < 7) return l; var k = weekStartOf(today()), o = S.weeks.filter(function (w) { return !w.planned && !w.app && weekStartOf(w.date) === k; }); return o[0] || null; }
 function flows(from, to) {
   var f = { payroll: 0, other: 0, transfer: 0, out: 0, invest: 0, n: 0 };
   realWeeks().forEach(function (w) { if (w.date >= from && w.date <= to) { f.payroll += +w.payroll || 0; f.other += +w.other || 0; f.transfer += +w.transfer || 0; f.out += +w.out || 0; f.invest += +w.invest || 0; f.n++; } });
@@ -1199,6 +1203,8 @@ function liveNet() { var t = 0; S.accounts.forEach(function (a) { if (!a.closed)
 function appWeeks() { return realWeeks().filter(function (w) { return w.app; }); }
 function avgWeeklySpend() {
   var aw = appWeeks().slice(-4).filter(function (w) { return w.spendTotal != null; });
+  var dd = aw.reduce(function (t, w) { return t + (w.period ? Math.max(1, daysBetween(w.period.from, w.period.to) + 1) : 7); }, 0);
+  if (aw.length && dd) return r2(aw.reduce(function (t, w) { return t + (+w.spendTotal || 0); }, 0) / dd * 7);
   if (!aw.length) return null;
   var t = 0; aw.forEach(function (w) { t += +w.spendTotal || 0; }); return r2(t / aw.length);
 }
@@ -1230,7 +1236,7 @@ function forecast(days) {
   var td = today(), chk = spendCash(), sav = 0;
   S.accounts.forEach(function (a) { if (!a.closed && a.kind === 'save') sav += acctBal(a.id); });
   var aw = appWeeks().slice(-4).filter(function (w) { return w.spendCash != null; }), daily = 0;
-  if (aw.length) { var t = 0; aw.forEach(function (w) { t += +w.spendCash || 0; }); daily = t / aw.length / 7; }
+  if (aw.length) { var t = 0, n = 0; aw.forEach(function (w) { t += +w.spendCash || 0; n += w.period ? Math.max(1, daysBetween(w.period.from, w.period.to) + 1) : 7; }); daily = n ? t / n : 0; }
   var gross = +(S.profile.pay || {}).amt || 0, pay = netPay(gross), auto = autoSaveOf(gross), plan = currentPlan(), weekly = plan ? +plan.save || 0 : 0;
   var end = addDays(td, days), paydays = paydaysBetween(addDays(td, 1), end), evs = eventsBetween(addDays(td, 1), end), firstDue = {};
   var out = [{ d: td, chk: r2(chk), sav: r2(sav), ev: [] }], steps = [], low = { d: td, y: r2(chk) }, ws = +S.profile.weekStart || 0;
@@ -1430,7 +1436,7 @@ function render() {
     (inFlow ? '' : '<nav class="nav" aria-label="Sections">' + NAV.map(function (t) {
       if (t.plus) return '<button class="plus" data-act="quickAdd" aria-label="Log a purchase">' + TP.svg('plus') + '</button>';
       return '<button data-act="go" data-a="' + t.id + '" class="' + (VIEW === t.id ? 'on' : '') + '"' + (VIEW === t.id ? ' aria-current="page"' : '') + '>' + TP.svg(t.icon) + t.name + '</button>';
-    }).join('') + '</nav>' + (VIEW === 'home' || VIEW === 'accounts' || VIEW === 'cards' || VIEW === 'bills' || VIEW === 'spending' || VIEW === 'explore' ? '<button class="ckfab' + (thisWeek() && thisWeek().app ? '' : ' due') + '" data-act="checkinStart" aria-label="Weekly check-in">' + TP.svg('check') + '<span>Check in</span></button>' : ''));
+    }).join('') + '</nav>' + (VIEW === 'home' || VIEW === 'accounts' || VIEW === 'cards' || VIEW === 'bills' || VIEW === 'spending' || VIEW === 'explore' ? '<button class="ckfab' + (checkinDue() ? ' due' : '') + '" data-act="checkinStart" aria-label="Weekly check-in">' + TP.svg('check') + '<span>Check in</span></button>' : ''));
   afterRender(); window.scrollTo(0, render._keep ? keep : 0); render._keep = false;
 }
 function rerender() { render._keep = true; render(); }
@@ -1476,7 +1482,8 @@ PAGES.home = function () {
     (st.value < 0 ? '<div class="tp-err">Short before payday. Move ' + money(-st.value) + ' from savings, or pay a card closer to its due date.</div>' : '') + '</div>';
   /* check-in prompt */
   var tw = thisWeek();
-  if (!tw || !tw.app) h += '<button class="glass tp-row tp-rise cta" style="--i:1" data-act="checkinStart"><span class="tp-tile">' + TP.svg('pencil') + '</span><span class="tp-t"><b>Check in for the week of ' + shortDate(weekStartOf(td)) + '</b><span>Confirm balances, explain the week, plan the next. About a minute.</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+  var lck = lastCheckin();
+  if (checkinDue()) h += '<button class="glass tp-row tp-rise cta" style="--i:1" data-act="checkinStart"><span class="tp-tile">' + TP.svg('pencil') + '</span><span class="tp-t"><b>Time to check in' + (lck ? ' \u00b7 last one ' + shortDate(ckDay(lck)) : '') + '</b><span>Confirm balances, explain the week, plan the next. About a minute.</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
   /* plan split */
   if (tw && tw.plan) {
     var p = tw.plan, parts = [['Bills', +p.bills || 0, 'var(--tp-ink)'], ['Cards', +p.cards || 0, 'var(--tp-ink3)'], ['Savings', (+p.save || 0) + (+p.auto || 0), 'var(--hi)'], ['Spending', +p.spend || 0, 'var(--c2)']], tot = parts.reduce(function (a, x) { return a + x[1]; }, 0);
@@ -1856,7 +1863,7 @@ PAGES.checkin = function () {
     h += '<button class="tp-btn tp-block mt big1" data-act="ckSave">Use this plan</button>';
   } else {
     var sfs = safeToSpend();
-    h += '<div class="center tp-rise" style="padding-top:12px">' + TP.done('Checked in', 'Week of ' + shortDate(weekStartOf(today()))) + '<div class="eyebrow muted">Safe to spend through ' + shortDate(sfs.end) + '</div><div class="disp donebig" data-count="' + sfs.value + '">' + money(sfs.value) + '</div><p class="muted">' + esc(CK.doneLine || '') + '</p><p style="font-size:15px">' + esc(sayFor(SAY_OFF + 3)) + '</p><button class="tp-btn tp-block mt big1" data-act="ckFinish">See home</button></div>';
+    h += '<div class="center tp-rise" style="padding-top:12px">' + TP.done('Checked in', dowDate(today())) + '<div class="eyebrow muted">Safe to spend through ' + shortDate(sfs.end) + '</div><div class="disp donebig" data-count="' + sfs.value + '">' + money(sfs.value) + '</div><p class="muted">' + esc(CK.doneLine || '') + '</p><p style="font-size:15px">' + esc(sayFor(SAY_OFF + 3)) + '</p><button class="tp-btn tp-block mt big1" data-act="ckFinish">See home</button></div>';
   }
   return h;
 };
@@ -2055,11 +2062,11 @@ var ACT = {
   ckStep: function (d, el, e) { CK[d.a] = Math.max(0, (CK[d.a] || 0) + +d.v * (e && e.shiftKey ? 10 : 1)); ckPlanLine(); },
   ckSave: function () {
     var m = ckMath(), td = today(), plan = ckPlanDefaults(), ws = weekStartOf(td);
-    var w = S.weeks.filter(function (x) { return !x.planned && x.app && weekStartOf(x.date) === ws; })[0]; if (!w) { w = { id: uid() }; S.weeks.push(w); }
+    var w = S.weeks.filter(function (x) { return !x.planned && x.app && ckDay(x) === td; })[0]; if (!w) { w = { id: uid() }; S.weeks.push(w); }
     var pay = 0, other = 0; CK.inc.forEach(function (x) { if (x.kind === 'pay') pay += num(x.amt); else other += num(x.amt); });
     var cats = {}; m.logged.forEach(function (x) { cats[x.cat || 'Other'] = r2((cats[x.cat || 'Other'] || 0) + (+x.amt || 0)); });
     var rest = m.unlogged != null ? m.unlogged : 0; if (CK.cats.length && rest > 0) { var each = r2(rest / CK.cats.length); CK.cats.forEach(function (c) { cats[c] = r2((cats[c] || 0) + each); }); }
-    w.date = ws; w.app = true; w.payroll = r2(pay); w.other = r2(other); w.transfer = 0; w.out = r2(m.outBills + m.outCards); w.invest = r2(m.invest); w.moves = CK.moves.filter(function (mv) { return num(mv.amt); }).map(function (mv) { return { to: mv.to, amt: r2(num(mv.amt)) }; });
+    w.date = td; w.ckDate = td; w.ws = ws; w.app = true; w.payroll = r2(pay); w.other = r2(other); w.transfer = 0; w.out = r2(m.outBills + m.outCards); w.invest = r2(m.invest); w.moves = CK.moves.filter(function (mv) { return num(mv.amt); }).map(function (mv) { return { to: mv.to, amt: r2(num(mv.amt)) }; });
     w.spendCash = m.gap == null ? null : r2(Math.max(0, m.gap)); w.spendCards = m.cardSpend == null ? null : r2(Math.max(0, m.cardSpend)); w.spendTotal = m.gap == null ? null : m.total; w.cats = cats;
     w.gap = m.gap == null || CK.cats.length || m.unlogged <= 25 ? null : -m.unlogged; /* coach convention: negative = spent but not explained */
     w.plan = { spend: CK.spend, save: CK.save, auto: plan.auto, bills: plan.bills, cards: plan.cards }; w.autoSave = r2(CK.inc.reduce(function (t, x) { return t + (x.kind === 'pay' ? autoSaveOf(num(x.amt)) : 0); }, 0)); w.period = { from: CK.from, to: CK.to }; delete w.planned;
