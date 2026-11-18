@@ -1,1 +1,1 @@
-{"version": "2026.11.18.5", "note": "Bank connection through SimpleFIN (Settings)"}
+{"version": "2026.11.18.6", "note": "Bank connect: recovers when the first bank pull is slow"}

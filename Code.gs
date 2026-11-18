@@ -317,7 +317,7 @@ function bankClaim_(token) {
   if (r.getResponseCode() >= 300) return { ok: false, error: 'SimpleFIN said ' + r.getResponseCode() };
   PropertiesService.getScriptProperties().setProperty('SFIN_URL', r.getContentText().trim());
   CacheService.getScriptCache().remove('bank1');
-  return bank_(true);
+  try { return bank_(true); } catch (e) { return { ok: true, connected: true, note: 'Connected. First pull failed: ' + e.message }; }
 }
 function bankFetch_(path) {
   var acc = PropertiesService.getScriptProperties().getProperty('SFIN_URL'); if (!acc) throw new Error('No bank connection yet');
