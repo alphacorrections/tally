@@ -726,6 +726,26 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .smartcard.warn .tp-tile{background:var(--bad-bg);color:var(--bad)}
 .duechip{border-style:solid;border-color:var(--hi)}
 .duechip em{font-style:normal;font-size:11px;color:var(--hi);margin-left:4px}
+/* Ask Tally */
+.chat{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+.bub{max-width:88%;padding:11px 14px;border-radius:18px;font-size:15px;line-height:1.5;overflow-wrap:anywhere}
+.bub.me{align-self:flex-end;background:var(--tp-btn);color:var(--tp-btn-ink);border-bottom-right-radius:6px}
+.bub.ai{align-self:flex-start;background:var(--tp-card);border:1px solid var(--tp-line);border-bottom-left-radius:6px;max-width:96%}
+.bub.ai.err{border-color:var(--bad);color:var(--bad)}
+.bub.ai p{margin:0 0 8px}.bub.ai p:last-child{margin-bottom:0}
+.bub.ai ul,.bub.ai ol{margin:0 0 8px;padding-left:20px}.bub.ai li{margin:2px 0}
+.bub.ai a{color:var(--hi)} :root[data-theme="light"] .bub.ai a{color:var(--tp-btn)}
+.bub.ai code{font-size:13px;background:var(--tp-card2);padding:1px 5px;border-radius:5px}
+.aitbl{overflow-x:auto;margin:0 0 8px}
+.aitbl table{border-collapse:collapse;font-size:13.5px;min-width:100%}
+.aitbl th,.aitbl td{text-align:left;padding:5px 10px 5px 0;border-bottom:1px solid var(--tp-line2);white-space:nowrap}
+.bub .srcs{margin-top:8px;padding-top:8px;border-top:1px solid var(--tp-line2);font-size:12px;color:var(--tp-ink2)}
+.bub.think{display:flex;gap:5px;padding:14px 16px}
+.bub.think i{width:7px;height:7px;border-radius:50%;background:var(--tp-ink2);animation:think 1.1s infinite ease-in-out}
+.bub.think i:nth-child(2){animation-delay:.15s}.bub.think i:nth-child(3){animation-delay:.3s}
+@keyframes think{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+.askbar{display:flex;gap:8px;position:sticky;bottom:calc(92px + env(safe-area-inset-bottom));z-index:5;padding:8px;border-radius:18px;background:var(--tp-card2);border:1px solid var(--tp-line);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.askbar .tp-input{flex:1;min-width:0}
 
 </style>
 </head>
@@ -736,7 +756,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.19.2';
+var APP_VERSION = '2026.11.19.3';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -3579,7 +3599,7 @@ function smartItems() {
 }
 var SMARTC = [];
 function cancelUrl(name) { return 'https://www.google.com/search?q=' + encodeURIComponent('how to cancel ' + name + ' subscription'); }
-function smartRow(it, i) { return '<div class="glass pad smartcard ' + it.tone + '"><div class="flex" style="flex-wrap:nowrap;align-items:flex-start;gap:12px"><span class="tp-tile">' + TP.svg(it.icon) + '</span><span class="tp-t"><b>' + esc(it.title) + '</b><span>' + esc(it.text) + '</span></span></div><div class="flex mt"><button class="tp-btn tp-sm" data-act="smartRun" data-i="' + i + '">' + esc(it.btn) + '</button>' + (it.rec && !/^(Details|See the charges)$/.test(it.btn) ? '<button class="tp-btn tp-ghost tp-sm" data-act="subOpen" data-a="' + esc(it.rec.key) + '">Details</button>' : '') + '<button class="tp-btn tp-ghost tp-sm" data-act="smartHide" data-i="' + i + '">Dismiss</button></div></div>'; }
+function smartRow(it, i) { return '<div class="glass pad smartcard ' + it.tone + '"><div class="flex" style="flex-wrap:nowrap;align-items:flex-start;gap:12px"><span class="tp-tile">' + TP.svg(it.icon) + '</span><span class="tp-t"><b>' + esc(it.title) + '</b><span>' + esc(it.text) + '</span></span></div><div class="flex mt"><button class="tp-btn tp-sm" data-act="smartRun" data-i="' + i + '">' + esc(it.btn) + '</button>' + (it.rec && !/^(Details|See the charges)$/.test(it.btn) ? '<button class="tp-btn tp-ghost tp-sm" data-act="subOpen" data-a="' + esc(it.rec.key) + '">Details</button>' : '') + (typeof CLOUD !== 'undefined' && CLOUD.on() ? '<button class="tp-btn tp-ghost tp-sm" data-act="goAsk" data-a="' + esc('Tally noticed: ' + it.title + '. What should I do about it?') + '">Ask Tally</button>' : '') + '<button class="tp-btn tp-ghost tp-sm" data-act="smartHide" data-i="' + i + '">Dismiss</button></div></div>'; }
 function smartPage() {
   var items = SMARTC = smartItems(), recs = recurring(), h = topBar('Smart', 'What Tally noticed', 'home');
   h += '<div class="tp-sect"><span>Worth a look' + (items.length ? ' · ' + items.length : '') + '</span></div>' + (items.length ? items.map(smartRow).join('') : '<div class="glass"><div class="empty">Nothing right now. Tally keeps watching for new bills, price changes, double charges, and more.</div></div>');
@@ -3646,6 +3666,99 @@ PAGES.bills = function () {
   if (!recs.length) return h;
   var row = '<button class="glass tp-row cta" data-act="goSmart"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>' + (miss.length ? miss.length + ' repeating charge' + (miss.length > 1 ? 's' : '') + ' not in Bills yet' : recs.length + ' recurring charges tracked') + '</b><span>' + esc(miss.length ? miss.slice(0, 3).map(function (r) { return r.name + ' ' + money(r.amt, 1); }).join(' · ') : 'Price changes and missed charges get flagged') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
   var at = h.indexOf('<div class="tp-sect">'); return at >= 0 ? h.slice(0, at) + row + h.slice(at) : h + row;
+};
+
+/* ---------- Ask Tally: chat about your own money, answered by Claude through your account's server ---------- */
+var LS_CHAT = 'tally.chat';
+var CHAT = lsGet(LS_CHAT) || { msgs: [] }; CHAT.busy = false;
+function chatKeep() { CHAT.msgs = CHAT.msgs.slice(-40); lsSet(LS_CHAT, { msgs: CHAT.msgs, left: CHAT.left }); }
+/* what the assistant gets to see: a summary of this person's numbers, built on the phone */
+function aiContext() {
+  var td = today(), p = S.profile.pay || {}, L = spendLimit(), st = safeToSpend(), tx = S.txns || [], au = autoSave();
+  var cut = function (o) { Object.keys(o).forEach(function (k) { o[k] = Math.round(o[k]); }); return o; }, months = {};
+  monthsBack(td, 4).forEach(function (m) { months[m.slice(0, 7)] = cut(byKey(spendIn(m, m === monthStart(td) ? td : monthEnd(m)), function (x) { return x.cat || 'Other'; })); });
+  var places = byKey(spendIn(addDays(td, -90), td), function (x) { return spMerchant(x); }), low = lastSnap() ? runway(30).low : null;
+  var ctx = {
+    name: S.profile.name, today: td, weekStartsOn: DOW[+S.profile.weekStart || 0],
+    pay: +p.amt > 0 ? { perPaycheck: +p.amt, how_often: payLabel(p), next: nextPayday(td), autoSavedPerPaycheck: au ? autoSaveOf(p.amt) + ' to ' + au.name : 0 } : 'not set',
+    otherIncome: (S.incomes || []).filter(function (x) { return !x.off; }).map(function (x) { return { name: x.name, amount: +x.amount, every: billEveryLabel(x) }; }),
+    spendingLimit: L.ok ? { perWeek: Math.round(L.week), perMonth: Math.round(L.month), setByUser: !!L.custom, takeHomePerMonth: Math.round(L.inc), billsPerMonth: Math.round(L.bills), goalsPerMonth: L.goals } : { none: true, takeHomePerMonth: Math.round(L.inc), billsPerMonth: Math.round(L.bills), goalsPerMonth: L.goals, shortBy: Math.round(-L.autoLimit) },
+    spentNotCountingBills: { thisWeek: sumAmt(everyday(weekStartOf(td), td)), thisMonth: sumAmt(everyday(monthStart(td), td)) },
+    beforeNextPayday: { until: st.end, checkingNow: st.cash, payComing: st.pays, billsAndCardPaymentsDue: st.due.total, spare: st.room, due: st.due.list.map(function (x) { return { what: x.e.title, date: x.e.date, amount: x.amt }; }) },
+    lowestCheckingNext30Days: low ? { amount: low.y, date: low.d } : null,
+    accounts: S.accounts.filter(function (a) { return !a.closed; }).map(function (a) { return { name: a.name, type: { spend: 'checking/spending', save: 'savings', invest: 'investing', retire: 'retirement' }[a.kind] || a.kind, balance: acctBal(a.id), cushion: +a.floor || 0 }; }),
+    cards: S.cards.filter(function (c) { return !c.off; }).map(function (c) { return { name: c.name, balance: cardBal(c), limit: +c.limit || 'none', statementClosesDay: c.stmtDay || '', dueDay: c.dueDay || '', earns: c.perk || '', fixedMonthlyPayment: +c.fixedPay || 0 }; }),
+    bills: S.bills.map(function (b) { return { name: b.name, amount: +b.amount, every: billEveryLabel(b), day: b.day || b.next || '', paidFrom: b.account || '', paused: !!b.off }; }),
+    goals: S.goals.map(function (g) { return { name: g.name, type: g.kind, target: +g.target, progress: g.kind === 'payoff' ? { stillOwed: goalOwed(g) } : { saved: goalNow(g) }, targetDate: g.due || '', setMonthly: +g.monthly || 0, summary: goalLine(g) }; }),
+    recurringCharges: recurring().map(function (r) { return { name: r.name, amount: r.amt, every: r.F.label, next: r.next, perYear: Math.round(r.perMo * 12), inBills: !!r.bill, paidWith: srcName(r.src) }; }),
+    tallyNoticed: smartItems().slice(0, 12).map(function (i) { return i.title + '. ' + i.text; }),
+    spendingByMonthAndCategory: months,
+    topPlacesLast90Days: Object.keys(places).sort(function (a, b) { return places[b] - places[a]; }).slice(0, 12).map(function (k) { return { place: k, total: Math.round(places[k]) }; }),
+    recentPurchases: tx.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 40).map(function (x) { return { date: x.date, amount: +x.amt, place: spMerchant(x), category: x.cat || 'Other', paidWith: srcName(x.src) }; }),
+    purchasesFromBankSince: bankFrom() || 'no bank connected'
+  };
+  var sc = scoreSnaps(); if (sc.length) ctx.creditScore = { score: sc[sc.length - 1].score, date: sc[sc.length - 1].date };
+  if (typeof SH !== 'undefined' && SH.on() && SH.doc && shLive('people').length) { var net = shNet(), th = shThem();
+    ctx.together = { partner: th.name, balance: Math.abs(net) < 0.5 ? 'all square' : net > 0 ? th.name + ' owes me ' + money(net, 1) : 'I owe ' + th.name + ' ' + money(-net, 1), sharedBills: shLive('bills').map(function (b) { return { name: b.name, amount: +b.amt, usuallyPaidBy: shPerson(b.payer).name, split: b.split }; }),
+      sharedGoals: shLive('goals').map(function (g) { return { name: g.name, target: +g.target, saved: sumAmt(shLive('contrib').filter(function (c) { return c.goal === g.id; })) }; }),
+      shoppingList: shLive('shop').filter(function (x) { return !x.got; }).map(function (x) { return x.name; }), todos: shLive('todo').filter(function (x) { return !x.done; }).map(function (x) { return x.text + (x.due ? ' (by ' + x.due + ')' : ''); }),
+      comingUp: shLive('plans').filter(function (x) { return x.date >= td; }).slice(0, 8).map(function (x) { return x.date + ' ' + x.title; }) }; }
+  return ctx;
+}
+/* the answer comes back as light markdown: bold, lists, small tables, links */
+function mdLite(t) {
+  var inl = function (s) { return esc(s).replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>').replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>'); };
+  var out = '', list = '', tbl = [], lines = String(t || '').split('\n');
+  var flush = function () { if (list) { out += '<' + list + '>' + flush.items + '</' + list + '>'; list = ''; flush.items = ''; } if (tbl.length) { out += '<div class="aitbl"><table>' + tbl.map(function (r, i) { return '<tr>' + r.map(function (c) { return (i ? '<td>' : '<th>') + inl(c) + (i ? '</td>' : '</th>'); }).join('') + '</tr>'; }).join('') + '</table></div>'; tbl = []; } };
+  flush.items = '';
+  lines.forEach(function (ln) {
+    var s = ln.trim(), m;
+    if (/^\|.*\|$/.test(s)) { if (list) flush(); if (!/^\|[\s:|-]+\|$/.test(s)) tbl.push(s.slice(1, -1).split('|').map(function (c) { return c.trim(); })); return; }
+    if ((m = /^[-*•]\s+(.*)$/.exec(s))) { if (list !== 'ul' || tbl.length) flush(); list = 'ul'; flush.items += '<li>' + inl(m[1]) + '</li>'; return; }
+    if ((m = /^\d+[.)]\s+(.*)$/.exec(s))) { if (list !== 'ol' || tbl.length) flush(); list = 'ol'; flush.items += '<li>' + inl(m[1]) + '</li>'; return; }
+    flush(); if (!s) return;
+    if ((m = /^#{1,4}\s+(.*)$/.exec(s))) out += '<p><b>' + inl(m[1]) + '</b></p>'; else out += '<p>' + inl(s) + '</p>';
+  });
+  flush(); return out;
+}
+var ASK_IDEAS = ['How am I doing this month?', 'Can I afford a $300 purchase this week?', 'Where can I cut back?', 'What’s the fastest way to pay off my cards?', 'Which subscriptions could I cancel?'];
+function askPage() {
+  var h = topBar('Ask Tally', 'Answers from your own numbers', 'home');
+  if (!CLOUD.on()) return h + '<div class="glass pad"><b>Sign in first</b><p class="small muted mb0">The assistant runs through your Tally account. Settings › Your account.</p><button class="tp-btn tp-sm mt" data-act="go" data-a="settings">Go to Settings</button></div>';
+  if (!S.profile.aiOk) return h + '<div class="glass hero tp-rise"><span class="label">Ask Tally</span><div class="disp" style="font-size:24px;font-weight:700;line-height:1.25;margin:6px 0 8px">Ask anything about your money.</div><div class="heroSub">“Can I afford it?” “Where did October go?” “How do I cancel this?”</div></div>' +
+    '<div class="glass pad"><b>Before you start</b><ul class="small" style="padding-left:18px;margin:8px 0 12px"><li>Your question and a summary of your Tally numbers (balances, bills, goals, recent purchases) go to Claude, an AI made by Anthropic, to write the answer.</li><li>Only your own numbers, plus what’s in Together. Nothing is posted or shared with anyone else.</li><li>It explains and suggests. It isn’t a licensed financial advisor, and it can get things wrong, so check anything important.</li></ul><button class="tp-btn tp-block" data-act="askOk">Turn it on</button></div>';
+  h += '<div class="chat">' + (CHAT.msgs.length ? CHAT.msgs.map(function (m) {
+    if (m.role === 'user') return '<div class="bub me">' + esc(m.content) + '</div>';
+    return '<div class="bub ai' + (m.err ? ' err' : '') + '">' + mdLite(m.content) + (m.sources && m.sources.length ? '<div class="srcs">Sources: ' + m.sources.map(function (s2) { return '<a href="' + esc(s2.url) + '" target="_blank" rel="noopener">' + esc(s2.title) + '</a>'; }).join(' · ') + '</div>' : '') + '</div>';
+  }).join('') : '<div class="glass pad"><b>Try one</b><div class="chips" style="margin-top:10px">' + ASK_IDEAS.map(function (q) { return '<button class="chip" data-act="askChip" data-a="' + esc(q) + '">' + esc(q) + '</button>'; }).join('') + '</div></div>') +
+    (CHAT.busy ? '<div class="bub ai think"><i></i><i></i><i></i></div>' : '') + '</div>';
+  h += '<div class="askbar"><input class="tp-input" id="ask_q" placeholder="Ask about your money" autocomplete="off" enterkeyhint="send" aria-label="Your question"' + (CHAT.busy ? ' disabled' : '') + '><button class="tp-btn" data-act="askSend"' + (CHAT.busy ? ' disabled' : '') + '>Send</button></div>';
+  h += '<div class="flex" style="justify-content:space-between;margin-top:8px"><span class="small muted">' + (CHAT.left != null ? CHAT.left + ' question' + (CHAT.left === 1 ? '' : 's') + ' left today' : 'Checks your numbers and can look things up.') + '</span>' + (CHAT.msgs.length ? '<button class="chip" data-act="askClear">Clear chat</button>' : '') + '</div>';
+  return h;
+}
+PAGES.ask = askPage;
+function askGo(q) {
+  q = String(q || '').trim(); if (!q || CHAT.busy) return;
+  CHAT.msgs.push({ role: 'user', content: q }); CHAT.busy = true; chatKeep(); askPaint();
+  var done = function (m) { CHAT.busy = false; CHAT.msgs.push(m); chatKeep(); if (VIEW === 'ask') askPaint(); else toast('Tally answered. Open Ask to read it.'); };
+  CLOUD.fn('assistant', { messages: CHAT.msgs.filter(function (m) { return !m.err; }).slice(-12).map(function (m) { return { role: m.role, content: m.content }; }), context: aiContext() })
+    .then(function (j) { if (j && j.left != null) CHAT.left = j.left; if (!j || !j.ok) return done({ role: 'assistant', content: (j && j.error) || 'Something went wrong. Try again.', err: true }); done({ role: 'assistant', content: j.text, sources: j.sources || [] }); })
+    .catch(function (e) { done({ role: 'assistant', content: /Failed to fetch|Load failed|NetworkError/i.test(e.message) ? 'Couldn’t reach the server. Check your connection and try again.' : e.message || 'Something went wrong.', err: true }); });
+}
+function askPaint() { render._keep = true; render(); setTimeout(function () { window.scrollTo(0, document.documentElement.scrollHeight); var i = document.getElementById('ask_q'); if (i && !CHAT.busy && window.innerWidth > 700) i.focus(); }, 30); }
+ACT.goAsk = function (d) { VIEW = 'ask'; render(); setTimeout(function () { window.scrollTo(0, document.documentElement.scrollHeight); }, 30); if (d && d.a && S.profile.aiOk && CLOUD.on()) askGo(d.a); };
+ACT.askOk = function () { S.profile.aiOk = true; save(); };
+ACT.askSend = function () { var i = document.getElementById('ask_q'); if (i) askGo(i.value); };
+ACT.askChip = function (d) { askGo(d.a); };
+ACT.askClear = function () { CHAT.msgs = []; CHAT.busy = false; chatKeep(); rerender(); };
+document.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.id === 'ask_q') { e.preventDefault(); ACT.askSend(); } });
+/* Home: a way in, right under the spending card; each thing Tally noticed can be asked about */
+var _home5 = PAGES.home;
+PAGES.home = function () {
+  var h = _home5(); if (!CLOUD.on()) return h;
+  var row = '<button class="glass tp-row cta askrow" data-act="goAsk"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>Ask Tally</b><span>“Can I afford it?” “Where can I cut back?”</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+  var at = h.indexOf('<details class="glass cashchk'); if (at < 0) at = h.indexOf('<div class="tp-sect"><span>Tally noticed'); if (at < 0) at = h.indexOf('<div class="tp-sect"><span>Next 2 weeks</span>');
+  return at >= 0 ? h.slice(0, at) + row + h.slice(at) : h + row;
 };
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
