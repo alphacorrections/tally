@@ -703,6 +703,19 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .chart,.chart *,.sbars,.sbars *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 .chart svg{touch-action:pan-y}
 
+/* shopping by store */
+.shopstores{margin-bottom:12px}
+.shopstores .chip em{font-style:normal;font-weight:700;margin-left:4px;opacity:.75}
+.secname{font:700 11.5px var(--tp-font);letter-spacing:.12em;text-transform:uppercase;color:var(--hi);padding:12px 16px 2px}
+.secname:first-child{padding-top:10px}
+.storebox{margin-top:10px}
+.storebox>summary{cursor:pointer;list-style:none;font-size:16px}
+.storebox>summary::-webkit-details-marker{display:none}
+.secorder{margin-top:10px}
+.secline{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--tp-line2)}
+.secline span{flex:1;font-size:14.5px}
+.secline .ibtn[disabled]{opacity:.3}
+
 </style>
 </head>
 <body class="tp-page">
@@ -712,7 +725,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.17';
+var APP_VERSION = '2026.11.18.18';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -2815,7 +2828,7 @@ var SH = {
   sync: function () { var self = this; clearTimeout(self.timer); self.timer = setTimeout(function () { if (self.cloud()) self.push(); else self.pull().then(function () { return self.push(); }); }, 900); }
 };
 function shStrip(d) { if (!d) return null; var c = JSON.parse(JSON.stringify(d)); delete c.updatedAt; return c; }
-function shBlank() { return { v: 1, updatedAt: '', people: [], exp: [], bills: [], goals: [], contrib: [], settle: [], todo: [], shop: [], plans: [] }; }
+function shBlank() { return { v: 1, updatedAt: '', people: [], exp: [], bills: [], goals: [], contrib: [], settle: [], todo: [], shop: [], plans: [], stores: [] }; }
 function shMerge(a, b) {
   if (!a) return b ? JSON.parse(JSON.stringify(b)) : null; if (!b) return a;
   var out = shBlank(), keys = {};
@@ -2944,14 +2957,54 @@ ACT.planSave = function (d) {
   var x = d.id ? shLive('plans').filter(function (p) { return p.id === d.id; })[0] : { id: 'p' + uid(), by: SH.cfg.me, addedAt: new Date().toISOString() };
   x.title = t; x.date = dt; x.time = val('pl_time'); x.who = val('pl_who') || ''; x.note = val('pl_note').trim(); shTouch('plans', x); closeSheet(); rerender();
 };
+/* ---------- shopping by store: each store walks its sections in its own order ---------- */
+var SECS = ['Produce', 'Bakery', 'Deli', 'Meat & seafood', 'Dairy & eggs', 'Frozen', 'Pantry', 'Snacks', 'Drinks', 'Household', 'Personal care', 'Pets', 'Other'];
+var SEC_WORDS = [
+  ['Produce', /apple|banana|berr|grape|lemon|lime|orange|avocado|tomato|potato|onion|garlic|lettuce|spinach|kale|salad|pepper|carrot|celery|cucumber|broccoli|cilantro|basil|parsley|herb|mushroom|zucchini|squash|corn|fruit|veg|ginger|jalape|scallion|peach|pear|melon|mango|pineapple/],
+  ['Bakery', /bread|bagel|bun|roll|tortilla|muffin|croissant|sourdough|pita|cake|donut|baguette/],
+  ['Deli', /deli|turkey slic|ham|salami|prosciutto|hummus|rotisserie|sliced cheese/],
+  ['Meat & seafood', /chicken|beef|steak|pork|bacon|sausage|ground|salmon|shrimp|fish|tuna steak|lamb|turkey|meat/],
+  ['Dairy & eggs', /milk|egg|cheese|yogurt|butter|cream|sour cream|half and half|creamer|cottage|oat milk|almond milk/],
+  ['Frozen', /frozen|ice cream|pizza|ice\b|popsicle|waffle/],
+  ['Snacks', /chip|cracker|cookie|pretzel|popcorn|nuts|almond|bar\b|bars\b|candy|chocolate|snack|jerky/],
+  ['Drinks', /water|seltzer|soda|juice|coffee|tea|beer|wine|kombucha|sparkling|gatorade|drink|la croix/],
+  ['Household', /paper towel|toilet|tissue|detergent|soap|dish|trash|bag|foil|wrap|sponge|clean|bleach|napkin|battery|light bulb/],
+  ['Personal care', /shampoo|conditioner|toothpaste|toothbrush|floss|deodorant|razor|lotion|sunscreen|vitamin|medicine|advil|tylenol|band.?aid|tampon|pad\b/],
+  ['Pets', /dog|cat|litter|pet|treats|kibble/],
+  ['Pantry', /rice|pasta|bean|flour|sugar|oil|vinegar|sauce|spice|salt|cereal|oat|peanut butter|jam|honey|soup|broth|can|canned|syrup|ketchup|mustard|mayo|salsa|granola|noodle/]
+];
+function guessSec(name) { var n = String(name || '').toLowerCase(); for (var i = 0; i < SEC_WORDS.length; i++) if (SEC_WORDS[i][1].test(n)) return SEC_WORDS[i][0]; return 'Other'; }
+/* typical walk-throughs; reorder any of them to match your store */
+var STORE_DEFAULTS = [
+  { id: 'shaws', name: 'Shaw’s', order: ['Produce', 'Bakery', 'Deli', 'Meat & seafood', 'Pantry', 'Snacks', 'Drinks', 'Household', 'Personal care', 'Pets', 'Dairy & eggs', 'Frozen', 'Other'] },
+  { id: 'costco', name: 'Costco', order: ['Household', 'Personal care', 'Pets', 'Snacks', 'Drinks', 'Pantry', 'Bakery', 'Produce', 'Meat & seafood', 'Deli', 'Dairy & eggs', 'Frozen', 'Other'] }
+];
+var SHOP = { store: '' };
+function shStores() { var l = shLive('stores'); return l.length ? l.slice().sort(function (a, b) { return (a.pos || 0) - (b.pos || 0); }) : STORE_DEFAULTS; }
+function shStore(id) { return shStores().filter(function (x) { return x.id === id; })[0] || null; }
+function ensureStores() { if (!shLive('stores').length) STORE_DEFAULTS.forEach(function (st, i) { shTouch('stores', { id: st.id, name: st.name, order: st.order.slice(), pos: i }); }); }
+function secOf(x) { return x.sec || guessSec(x.name); }
+function shopRow(x, showStore) {
+  var st = x.store ? shStore(x.store) : null;
+  return '<div class="tp-row static chkrow"><button class="chk" data-act="shopGot" data-id="' + x.id + '" aria-label="Got ' + esc(x.name) + '"></button><button class="tp-t chkt" data-act="shopEdit" data-id="' + x.id + '"><b>' + esc(x.name) + (x.qty ? ' <em>× ' + esc(x.qty) + '</em>' : '') + '</b><span>' + esc([showStore ? (st ? st.name : 'Any store') : '', whoName(x.by) + ' added ' + agoTxt(x.addedAt), x.note || ''].filter(Boolean).join(' · ')) + '</span></button></div>';
+}
+/* items for the picked store (plus ones for any store), grouped by section in that store's order */
+function shopGroups(need) {
+  var st = SHOP.store ? shStore(SHOP.store) : null, order = st ? st.order : SECS;
+  var list = st ? need.filter(function (x) { return !x.store || x.store === st.id; }) : need, groups = {};
+  list.forEach(function (x) { var k = secOf(x); (groups[k] = groups[k] || []).push(x); });
+  var keys = order.filter(function (k) { return groups[k]; }).concat(Object.keys(groups).filter(function (k) { return order.indexOf(k) < 0; }));
+  return { st: st, n: list.length, html: keys.map(function (k) { return '<div class="secname">' + esc(k) + '</div>' + groups[k].map(function (x) { return shopRow(x, !st); }).join(''); }).join('') };
+}
 function shopPage() {
   var items = shLive('shop'), need = items.filter(function (x) { return !x.got; }).sort(function (a, b) { return (a.addedAt || '') < (b.addedAt || '') ? -1 : 1; }), td = today();
   var gotToday = items.filter(function (x) { return x.got && (x.gotAt || '').slice(0, 10) === td; });
   var usual = items.filter(function (x) { return x.got && (x.gotAt || '').slice(0, 10) !== td; }).sort(function (a, b) { return (b.n || 0) - (a.n || 0) || ((b.gotAt || '') > (a.gotAt || '') ? 1 : -1); }).slice(0, 16);
   var h = '<div class="glass pad tp-rise"><div class="addline"><input class="tp-input" id="sh_new" placeholder="Add to the list" autocomplete="off" enterkeyhint="done" aria-label="Add to the shopping list"><button class="tp-btn" data-act="shopAdd">Add</button></div><p class="small muted mb0">Add a few at once with commas: milk, eggs, coffee</p></div>';
-  h += '<div class="tp-sect"><span>Need' + (need.length ? ' · ' + need.length : '') + '</span></div><div class="glass">' + (need.length ? need.map(function (x) {
-    return '<div class="tp-row static chkrow"><button class="chk" data-act="shopGot" data-id="' + x.id + '" aria-label="Got ' + esc(x.name) + '"></button><button class="tp-t chkt" data-act="shopEdit" data-id="' + x.id + '"><b>' + esc(x.name) + (x.qty ? ' <em>× ' + esc(x.qty) + '</em>' : '') + '</b><span>' + esc(whoName(x.by) + ' added ' + agoTxt(x.addedAt) + (x.note ? ' · ' + x.note : '')) + '</span></button></div>';
-  }).join('') : '<div class="empty">Nothing on the list. Add something, or tap a usual below when you run out.</div>') + '</div>';
+  var stores = shStores(), G = shopGroups(need);
+  h = '<div class="chips scrollx shopstores">' + [['', 'All stores', need.length]].concat(stores.map(function (st) { return [st.id, st.name, need.filter(function (x) { return !x.store || x.store === st.id; }).length]; })).map(function (o) { return '<button class="chip' + (SHOP.store === o[0] ? ' on' : '') + '" data-act="shopStore" data-a="' + esc(o[0]) + '">' + esc(o[1]) + (o[2] ? ' <em>' + o[2] + '</em>' : '') + '</button>'; }).join('') + '<button class="chip" data-act="storesEdit">Edit stores</button></div>' + h.replace('placeholder="Add to the list"', 'placeholder="' + (G.st ? 'Add for ' + esc(G.st.name) : 'Add to the list') + '"');
+  h += '<div class="tp-sect"><span>' + (G.st ? 'At ' + esc(G.st.name) : 'Need') + (G.n ? ' · ' + G.n : '') + '</span><span class="sp"></span><span class="small muted">' + (G.st ? 'in aisle order' : 'by section') + '</span></div><div class="glass">' + (G.n ? G.html : '<div class="empty">' + (G.st ? 'Nothing for ' + esc(G.st.name) + '.' : 'Nothing on the list. Add something, or tap a usual below when you run out.') + '</div>') + '</div>' +
+    (G.st && need.length > G.n ? '<p class="small muted">' + (need.length - G.n) + ' more for other stores.</p>' : '');
   if (gotToday.length) h += '<div class="tp-sect"><span>Got today · ' + gotToday.length + '</span></div><div class="glass">' + gotToday.map(function (x) { return '<div class="tp-row static chkrow done"><button class="chk on" data-act="shopGot" data-id="' + x.id + '" aria-label="Put ' + esc(x.name) + ' back on the list">' + TP.svg('check') + '</button><span class="tp-t"><b>' + esc(x.name) + '</b><span>' + esc(whoName(x.gotBy) + ' got it') + '</span></span></div>'; }).join('') +
     '<button class="tp-row" data-act="shopLog"><span class="tp-tile">' + TP.svg('receipt') + '</span><span class="tp-t"><b>Log the receipt as a shared expense</b><span>Then the split and who owes whom stay right</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button></div>';
   if (usual.length) h += '<div class="tp-sect"><span>Out of something?</span><span class="sp"></span><span class="small muted">tap to add back</span></div><div class="chips usual">' + usual.map(function (x) { return '<button class="chip" data-act="shopAgain" data-id="' + x.id + '">+ ' + esc(x.name) + '</button>'; }).join('') + '</div>';
@@ -2978,15 +3031,39 @@ ACT.shopAdd = function () {
   var el = document.getElementById('sh_new'), now = new Date().toISOString();
   var n = shAddMany('shop', el && el.value, function (name) {
     var old = shLive('shop').filter(function (x) { return x.name.toLowerCase() === name.toLowerCase(); })[0];
-    if (old) { old.got = false; old.addedAt = now; old.by = SH.cfg.me; return old; }
-    var m = /^(\d+)\s*x?\s+(.+)$/i.exec(name); return { id: 'i' + uid(), name: m ? m[2] : name, qty: m ? m[1] : '', got: false, n: 0, by: SH.cfg.me, addedAt: now };
+    if (old) { old.got = false; old.addedAt = now; old.by = SH.cfg.me; if (SHOP.store) old.store = SHOP.store; return old; }
+    var m = /^(\d+)\s*x?\s+(.+)$/i.exec(name), nm = m ? m[2] : name; return { id: 'i' + uid(), name: nm, qty: m ? m[1] : '', got: false, n: 0, by: SH.cfg.me, addedAt: now, store: SHOP.store || '', sec: guessSec(nm) };
   });
   if (n) { rerender(); var e2 = document.getElementById('sh_new'); if (e2) e2.focus(); }
 };
 ACT.shopGot = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; if (x.got) { x.got = false; x.n = Math.max(0, (x.n || 1) - 1); } else { x.got = true; x.gotAt = new Date().toISOString(); x.gotBy = SH.cfg.me; x.n = (x.n || 0) + 1; } shTouch('shop', x); rerender(); };
 ACT.shopAgain = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; x.got = false; x.addedAt = new Date().toISOString(); x.by = SH.cfg.me; shTouch('shop', x); rerender(); toast(x.name + ' is back on the list'); };
-ACT.shopEdit = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; sheet(sxHead('Edit item') + '<div class="fgrid">' + textField('se_name', 'Item', x.name) + textField('se_qty', 'How many', x.qty || '', 'e.g. 2') + '</div>' + textField('se_note', 'Note', x.note || '', 'Brand, size, store') + '<div class="acts"><button class="tp-btn tp-danger" data-act="shDel" data-list="shop" data-id="' + x.id + '" data-label="Delete">Delete</button><button class="tp-btn" data-act="shopSave" data-id="' + x.id + '">Save</button></div>'); };
-ACT.shopSave = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; x.name = val('se_name').trim() || x.name; x.qty = val('se_qty').trim(); x.note = val('se_note').trim(); shTouch('shop', x); closeSheet(); rerender(); };
+ACT.shopEdit = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; sheet(sxHead('Edit item') + '<div class="fgrid">' + textField('se_name', 'Item', x.name) + textField('se_qty', 'How many', x.qty || '', 'e.g. 2') + '</div>' + textField('se_note', 'Note', x.note || '', 'Brand, size') +
+    '<label class="tp-label">Store</label>' + seg('se_store', [['', 'Any']].concat(shStores().map(function (st) { return [st.id, st.name]; })), x.store || '') +
+    '<div><label class="tp-label" for="se_sec">Section</label><select class="tp-input" id="se_sec">' + SECS.map(function (k) { return '<option' + (secOf(x) === k ? ' selected' : '') + '>' + k + '</option>'; }).join('') + '</select></div><div class="acts"><button class="tp-btn tp-danger" data-act="shDel" data-list="shop" data-id="' + x.id + '" data-label="Delete">Delete</button><button class="tp-btn" data-act="shopSave" data-id="' + x.id + '">Save</button></div>'); };
+ACT.shopSave = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; x.name = val('se_name').trim() || x.name; x.qty = val('se_qty').trim(); x.note = val('se_note').trim(); x.store = val('se_store') || ''; x.sec = val('se_sec') || secOf(x); shTouch('shop', x); closeSheet(); rerender(); };
+ACT.shopStore = function (d) { SHOP.store = d.a; rerender(); };
+/* stores: rename, add, and put sections in the order you walk them */
+var SED = null;
+function storesSheet() {
+  var l = SED;
+  sheet(sxHead('Stores') + '<p class="small muted">Put sections in the order you walk the store. Items then show up in that order when you pick the store.</p>' +
+    l.map(function (st, i) { return '<details class="glass pad storebox"' + (st.open ? ' open' : '') + '><summary><b>' + esc(st.name) + '</b></summary>' + textField('sn_' + i, 'Name', st.name) +
+      '<div class="secorder">' + st.order.map(function (k, j) { return '<div class="secline"><span>' + (j + 1) + '. ' + esc(k) + '</span><button class="ibtn sm" data-act="secMove" data-i="' + i + '" data-j="' + j + '" data-d="-1" aria-label="Move ' + esc(k) + ' up"' + (j ? '' : ' disabled') + '>↑</button><button class="ibtn sm" data-act="secMove" data-i="' + i + '" data-j="' + j + '" data-d="1" aria-label="Move ' + esc(k) + ' down"' + (j < st.order.length - 1 ? '' : ' disabled') + '>↓</button></div>'; }).join('') + '</div>' +
+      (l.length > 1 ? '<button class="tp-btn tp-ghost tp-sm mt" data-act="storeDel" data-i="' + i + '">Remove ' + esc(st.name) + '</button>' : '') + '</details>'; }).join('') +
+    '<button class="tp-btn tp-ghost tp-block mt" data-act="storeAdd">+ Add a store</button><div class="acts"><button class="tp-btn" data-act="storesSave">Save</button></div>');
+}
+function sedKeep() { SED.forEach(function (st, i) { var e = document.getElementById('sn_' + i); if (e) st.name = e.value.trim() || st.name; var dt = document.querySelectorAll('.storebox')[i]; if (dt) st.open = dt.open; }); }
+ACT.storesEdit = function () { SED = shStores().map(function (st) { return { id: st.id, name: st.name, order: st.order.slice(), pos: st.pos, open: SHOP.store === st.id }; }); storesSheet(); };
+ACT.secMove = function (d) { sedKeep(); var st = SED[+d.i], j = +d.j, k = j + +d.d; if (k < 0 || k >= st.order.length) return; var t = st.order[j]; st.order[j] = st.order[k]; st.order[k] = t; st.open = true; storesSheet(); };
+ACT.storeAdd = function () { sedKeep(); SED.push({ id: 'st' + uid(), name: 'New store', order: SECS.slice(), open: true }); storesSheet(); };
+ACT.storeDel = function (d) { sedKeep(); var st = SED.splice(+d.i, 1)[0]; st.del = true; SED.removed = (SED.removed || []).concat([st]); storesSheet(); };
+ACT.storesSave = function () {
+  sedKeep(); ensureStores();
+  SED.forEach(function (st, i) { shTouch('stores', { id: st.id, name: st.name, order: st.order, pos: i }); });
+  (SED.removed || []).forEach(function (st) { shTouch('stores', { id: st.id, name: st.name, order: st.order, pos: 99, del: true }); if (SHOP.store === st.id) SHOP.store = ''; });
+  SED = null; closeSheet(); rerender(); toast('Stores saved for both of you');
+};
 ACT.shopLog = function () { var g = shLive('shop').filter(function (x) { return x.got && (x.gotAt || '').slice(0, 10) === today() && x.gotBy === SH.cfg.me; }); SHX = { payer: SH.cfg.me, split: 'half', date: today(), cat: 'Groceries', note: 'Groceries' + (g.length ? ' (' + g.slice(0, 4).map(function (x) { return x.name; }).join(', ') + (g.length > 4 ? '…' : '') + ')' : ''), src: ((S.profile.last || {}).src) || ((srcList()[0] || {}).id) }; shExpSheet(); };
 ACT.todoAdd = function () {
   var el = document.getElementById('td_new'), now = new Date().toISOString();
