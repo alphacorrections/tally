@@ -747,6 +747,14 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .askbar{display:flex;gap:8px;position:sticky;bottom:calc(92px + env(safe-area-inset-bottom));z-index:5;padding:8px;border-radius:18px;background:var(--tp-card2);border:1px solid var(--tp-line);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
 .askbar .tp-input{flex:1;min-width:0}
 
+/* account and card rows: tap for purchases, gear for settings */
+.rowwrap{position:relative}
+.rowwrap>.tp-row{padding-right:58px;width:100%}
+.rowgear{position:absolute;right:10px;top:50%;transform:translateY(-50%);z-index:2}
+.ccard{position:relative}
+.ccard>.rowgear{top:10px;right:10px;transform:none;background:rgba(0,0,0,.28);color:#fff;border-color:rgba(255,255,255,.25)}
+.ccard .face .top2{padding-right:44px}
+
 </style>
 </head>
 <body class="tp-page">
@@ -756,7 +764,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.19.3';
+var APP_VERSION = '2026.11.19.4';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -2039,7 +2047,7 @@ PAGES.accounts = function () {
 function acctRow(a) {
   var b = acctBal(a.id), src = acctSource(a.id), sub = KIND_NAME[a.kind] + (src ? ' · ' + src : ''), extra = '';
   if (a.floor && (a.kind === 'save' || a.kind === 'spend')) { var free = b - a.floor; sub += ' · ' + (free >= 0 ? money(free) + ' above cushion' : money(-free) + ' under cushion'); extra = '<span class="bar thin cush" style="margin-top:6px"><i style="width:' + Math.min(100, b / Math.max(b, a.floor * 1.5) * 100).toFixed(1) + '%' + (free < 0 ? ';background:var(--warn)' : '') + '"></i><em style="left:' + Math.min(100, a.floor / Math.max(b, a.floor * 1.5) * 100).toFixed(1) + '%"></em></span>'; }
-  return '<button class="tp-row" data-act="acctEdit" data-id="' + a.id + '"><span class="tp-tile">' + esc(a.name.charAt(0).toUpperCase()) + '</span><span class="tp-t"><b>' + esc(a.name) + '</b><span>' + esc(sub) + '</span>' + extra + '</span><span class="amt">' + money(b) + '</span></button>';
+  return '<div class="rowwrap"><button class="tp-row" data-act="srcTx" data-a="a:' + a.id + '"><span class="tp-tile">' + esc(a.name.charAt(0).toUpperCase()) + '</span><span class="tp-t"><b>' + esc(a.name) + '</b><span>' + esc(sub) + '</span>' + extra + '</span><span class="amt">' + money(b) + '</span></button><button class="ibtn sm rowgear" data-act="acctEdit" data-id="' + a.id + '" aria-label="Settings for ' + esc(a.name) + '">' + TP.svg('gear') + '</button></div>';
 }
 function acctSource(id) { for (var i = S.snaps.length - 1; i >= 0; i--) { var s = S.snaps[i]; if (s.bal && s.bal[id] != null) return (s.src && s.src[id] === 'email' ? 'from email ' : 'updated ') + shortDate(s.date); } return ''; }
 
@@ -2059,7 +2067,7 @@ PAGES.cards = function () {
     var f = cardFace(c), b = cardBal(c), evs = eventsBetween(td, addDays(td, 40)), nd = evs.filter(function (e) { return e.card === c.id && e.type === 'due'; })[0], ns = evs.filter(function (e) { return e.card === c.id && e.type === 'stmt'; })[0];
     var pct = c.limit ? Math.min(100, b / c.limit * 100) : 0;
     var due = nextDueDate(c.dueDay, td), sto = stmtFor(c.id, due);
-    h += '<div class="ccard tp-rise" style="--i:' + i + '"><button class="ccmain" data-act="cardEdit" data-id="' + c.id + '"><span class="face' + (f.lt ? ' lt' : '') + '" style="' + f.style + '"><span class="top2"><b>' + esc(c.name) + '</b>' + (nd ? pillDays(daysBetween(td, nd.date), nd.st === 'paid').replace('tp-plain', 'light') : '') + '</span><span>' + esc([c.use ? 'Use for ' + c.use : '', c.perk].filter(Boolean).join(' · ') || 'Tap to add what it’s best for') + '</span></span>' +
+    h += '<div class="ccard tp-rise" style="--i:' + i + '"><button class="ibtn sm rowgear" data-act="cardEdit" data-id="' + c.id + '" aria-label="Settings for ' + esc(c.name) + '">' + TP.svg('gear') + '</button><button class="ccmain" data-act="srcTx" data-a="c:' + c.id + '"><span class="face' + (f.lt ? ' lt' : '') + '" style="' + f.style + '"><span class="top2"><b>' + esc(c.name) + '</b>' + (nd ? pillDays(daysBetween(td, nd.date), nd.st === 'paid').replace('tp-plain', 'light') : '') + '</span><span>' + esc([c.use ? 'Use for ' + c.use : '', c.perk].filter(Boolean).join(' · ') || 'Tap the gear to add what it’s best for') + '</span></span>' +
       '<span class="body"><span class="flex" style="justify-content:space-between"><span class="small muted">Balance' + (c.limit ? ' · ' + Math.round(pct) + '% of ' + moneyK(c.limit) : '') + '</span><b class="disp" style="font-size:20px">' + money(b) + '</b></span>' + (c.limit ? '<span class="bar thin"><i style="width:' + pct.toFixed(1) + '%;' + (pct >= 30 ? 'background:var(--warn)' : '') + '"></i></span>' : '') +
       '<span class="row2"><span>Statement closes<b>' + (ns ? DOW[parseD(ns.date).getDay()] + ', ' + shortDate(ns.date) : (c.stmtDay ? 'the ' + ordinal(c.stmtDay) : 'Not set')) + '</b></span><span>Payment due<b>' + (nd ? DOW[parseD(nd.date).getDay()] + ', ' + shortDate(nd.date) : (c.dueDay ? 'the ' + ordinal(c.dueDay) : 'Not set')) + '</b></span></span></span></button>' +
       (due ? '<button class="ccstmt' + (sto ? '' : ' need') + '" data-act="stmt" data-card="' + c.id + '" data-ym="' + due.slice(0, 7) + '"><span>' + (sto ? 'Statement due ' + shortDate(due) + (sto.st === 'paid' ? ' · paid' : sto.plan !== '' && sto.plan != null && +sto.plan !== +sto.amt ? ' · paying ' + money(+sto.plan, 1) : +c.fixedPay ? ' · paying ' + money(Math.min(+c.fixedPay, +sto.amt), 1) : '') : 'Add the statement balance due ' + shortDate(due)) + '</span><b>' + (sto ? money(+sto.amt, 1) : '+') + '</b></button>' : '') + cycleLine(c) + (+c.fixedPay ? (function () { var po = payoffMonth(c); return '<button class="ccstmt cyc" data-act="cardEdit" data-id="' + c.id + '"><span>Paying ' + money(+c.fixedPay) + ' a month' + (po ? ' \u00b7 paid off around ' + po.label + ' (' + po.months + ' payments)' : '') + '</span><b>' + TP.svg('pencil') + '</b></button>'; })() : '') + '</div>';
@@ -3760,6 +3768,17 @@ PAGES.home = function () {
   var at = h.indexOf('<details class="glass cashchk'); if (at < 0) at = h.indexOf('<div class="tp-sect"><span>Tally noticed'); if (at < 0) at = h.indexOf('<div class="tp-sect"><span>Next 2 weeks</span>');
   return at >= 0 ? h.slice(0, at) + row + h.slice(at) : h + row;
 };
+
+/* tap an account or card: its recent purchases. Settings moved to the gear. */
+ACT.srcTx = function (d) {
+  var src = d.a, isCard = src.indexOf('c:') === 0, o = isCard ? byId(S.cards, src.slice(2)) : byId(S.accounts, src.slice(2)); if (!o) return;
+  var td = today(), list = (S.txns || []).filter(function (x) { return x.src === src; }).sort(function (a, b) { return (b.at || b.date) < (a.at || a.date) ? -1 : 1; }), mo = sumAmt(list.filter(function (x) { return x.date >= monthStart(td); }));
+  var spendable = isCard || o.kind === 'spend' || o.kind === 'save';
+  sheet(sxHead(o.name) + '<div class="kv"><span>' + (isCard ? 'Balance' : 'Balance now') + '</span><b>' + money(isCard ? cardBal(o) : acctBal(o.id), 1) + '</b></div>' + (spendable ? '<div class="kv"><span>Spent in ' + MONTHS[parseD(td).getMonth()] + '</span><b>' + money(mo, 1) + '</b></div>' : '') +
+    '<label class="tp-label">Recent purchases</label>' + (list.length ? '<div class="glass">' + list.slice(0, 30).map(function (x) { return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc(x.cat || 'Other') + (x.ext || x.bank ? ' · bank' : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>'; }).join('') + '</div>' : '<p class="small muted">' + (spendable ? 'No purchases yet. They show up here from your bank, or when you log one with +.' : 'Purchases don’t come out of this kind of account. Its balance history is on the chart above the list.') + '</p>') +
+    '<div class="acts">' + (list.length > 30 ? '<button class="tp-btn tp-ghost" data-act="srcAll" data-a="' + esc(src) + '">See all ' + list.length + '</button>' : list.length ? '<button class="tp-btn tp-ghost" data-act="srcAll" data-a="' + esc(src) + '">Open in Spending</button>' : '') + '<button class="tp-btn tp-ghost" data-act="' + (isCard ? 'cardEdit' : 'acctEdit') + '" data-id="' + o.id + '">Settings</button></div>');
+};
+ACT.srcAll = function (d) { closeSheet(); SPV = { range: 'm3', src: d.a, cat: '', more: 0 }; VIEW = 'spending'; render(); };
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
