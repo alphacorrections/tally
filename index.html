@@ -725,7 +725,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.18';
+var APP_VERSION = '2026.11.18.19';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -2921,7 +2921,9 @@ PAGES.together = togetherPage;
 /* ---------- Together lists: shopping and to-dos, shared live between you two ---------- */
 var SHV = 'money';
 function whoName(id) { return id === SH.cfg.me ? 'You' : shPerson(id).name; }
-function agoTxt(iso) { if (!iso) return ''; var d = iso.slice(0, 10), td = today(), n = daysBetween(d, td); return n <= 0 ? 'today' : n === 1 ? 'yesterday' : n < 7 ? DOW[parseD(d).getDay()] : shortDate(d); }
+/* timestamps are saved in UTC; compare them by your own local day */
+function localDay(iso) { if (!iso) return ''; if (!/T.*(Z|[+-]\d\d:?\d\d)$/.test(iso)) return iso.slice(0, 10); var d = new Date(iso); return isNaN(d) ? iso.slice(0, 10) : ymd(d); }
+function agoTxt(iso) { if (!iso) return ''; var d = localDay(iso), td = today(), n = daysBetween(d, td); return n <= 0 ? 'today' : n === 1 ? 'yesterday' : n < 7 ? DOW[parseD(d).getDay()] : shortDate(d); }
 /* shared calendar: dates you both add (dinners, trips, appointments), by day */
 function timeTxt(t) { if (!t) return ''; var p = t.split(':'), hh = +p[0], mm = p[1] || '00'; return (hh % 12 || 12) + (mm !== '00' ? ':' + mm : '') + (hh < 12 ? 'am' : 'pm'); }
 function shAgenda(from, to) {
@@ -2998,8 +3000,8 @@ function shopGroups(need) {
 }
 function shopPage() {
   var items = shLive('shop'), need = items.filter(function (x) { return !x.got; }).sort(function (a, b) { return (a.addedAt || '') < (b.addedAt || '') ? -1 : 1; }), td = today();
-  var gotToday = items.filter(function (x) { return x.got && (x.gotAt || '').slice(0, 10) === td; });
-  var usual = items.filter(function (x) { return x.got && (x.gotAt || '').slice(0, 10) !== td; }).sort(function (a, b) { return (b.n || 0) - (a.n || 0) || ((b.gotAt || '') > (a.gotAt || '') ? 1 : -1); }).slice(0, 16);
+  var gotToday = items.filter(function (x) { return x.got && localDay(x.gotAt) === td; });
+  var usual = items.filter(function (x) { return x.got && localDay(x.gotAt) !== td; }).sort(function (a, b) { return (b.n || 0) - (a.n || 0) || ((b.gotAt || '') > (a.gotAt || '') ? 1 : -1); }).slice(0, 16);
   var h = '<div class="glass pad tp-rise"><div class="addline"><input class="tp-input" id="sh_new" placeholder="Add to the list" autocomplete="off" enterkeyhint="done" aria-label="Add to the shopping list"><button class="tp-btn" data-act="shopAdd">Add</button></div><p class="small muted mb0">Add a few at once with commas: milk, eggs, coffee</p></div>';
   var stores = shStores(), G = shopGroups(need);
   h = '<div class="chips scrollx shopstores">' + [['', 'All stores', need.length]].concat(stores.map(function (st) { return [st.id, st.name, need.filter(function (x) { return !x.store || x.store === st.id; }).length]; })).map(function (o) { return '<button class="chip' + (SHOP.store === o[0] ? ' on' : '') + '" data-act="shopStore" data-a="' + esc(o[0]) + '">' + esc(o[1]) + (o[2] ? ' <em>' + o[2] + '</em>' : '') + '</button>'; }).join('') + '<button class="chip" data-act="storesEdit">Edit stores</button></div>' + h.replace('placeholder="Add to the list"', 'placeholder="' + (G.st ? 'Add for ' + esc(G.st.name) : 'Add to the list') + '"');
@@ -3064,7 +3066,7 @@ ACT.storesSave = function () {
   (SED.removed || []).forEach(function (st) { shTouch('stores', { id: st.id, name: st.name, order: st.order, pos: 99, del: true }); if (SHOP.store === st.id) SHOP.store = ''; });
   SED = null; closeSheet(); rerender(); toast('Stores saved for both of you');
 };
-ACT.shopLog = function () { var g = shLive('shop').filter(function (x) { return x.got && (x.gotAt || '').slice(0, 10) === today() && x.gotBy === SH.cfg.me; }); SHX = { payer: SH.cfg.me, split: 'half', date: today(), cat: 'Groceries', note: 'Groceries' + (g.length ? ' (' + g.slice(0, 4).map(function (x) { return x.name; }).join(', ') + (g.length > 4 ? '…' : '') + ')' : ''), src: ((S.profile.last || {}).src) || ((srcList()[0] || {}).id) }; shExpSheet(); };
+ACT.shopLog = function () { var g = shLive('shop').filter(function (x) { return x.got && localDay(x.gotAt) === today() && x.gotBy === SH.cfg.me; }); SHX = { payer: SH.cfg.me, split: 'half', date: today(), cat: 'Groceries', note: 'Groceries' + (g.length ? ' (' + g.slice(0, 4).map(function (x) { return x.name; }).join(', ') + (g.length > 4 ? '…' : '') + ')' : ''), src: ((S.profile.last || {}).src) || ((srcList()[0] || {}).id) }; shExpSheet(); };
 ACT.todoAdd = function () {
   var el = document.getElementById('td_new'), now = new Date().toISOString();
   var n = shAddMany('todo', el && el.value, function (t) { return { id: 'd' + uid(), text: t, who: '', due: '', done: false, by: SH.cfg.me, addedAt: now }; });
