@@ -715,6 +715,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .secline{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--tp-line2)}
 .secline span{flex:1;font-size:14.5px}
 .secline .ibtn[disabled]{opacity:.3}
+.calpop{margin-top:4px} .calpop .tp-row:first-child{padding-top:6px}
 
 </style>
 </head>
@@ -725,7 +726,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.18.19';
+var APP_VERSION = '2026.11.19.1';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -3277,9 +3278,15 @@ function calendarPage() {
   }
   h += '<div class="callegend"><span><i class="cd-pay"></i>Payday</span><span><i class="cd-inc"></i>Other income</span><span><i class="cd-stmt"></i>Statement closes</span><span><i class="cd-due"></i>Card due</span><span><i class="cd-bill"></i>Bill</span><span><i class="cd-txn"></i>Logged purchase</span>' + (SH.on() && SH.doc ? '<span><i class="cd-plan"></i>Together plan</span>' : '') + '</div>';
   h += '<div class="callegend"><span class="act">Actual: from a check-in</span><span class="exp">Expected: paydays, bills, card payments' + (fc.weekly ? ', ' + money(fc.weekly) + '/wk to savings' : '') + (fc.daily ? ', ~' + money(fc.daily * 7) + '/wk spending' : '') + '</span></div></div>';
-  /* selected day */
-  var sd = CAL.sel && CAL.sel >= gStart && CAL.sel <= gEnd ? CAL.sel : (td >= gStart && td <= gEnd ? td : ymd(first)), sl = byDay[sd] || [], frow = fc.days.filter(function (x) { return x.d === sd; })[0];
-  h += '<div class="tp-sect"><span>' + esc(dowDate(sd)) + '</span></div><div class="glass">';
+  CAL.byDay = byDay; CAL.fc = fc;
+  h += '<p class="small muted" style="text-align:center;margin:10px 0 0">Tap a day to see what’s on it.</p>';
+  return h;
+}
+/* one day's items, shown in a pop-up when you tap the day */
+function calDay(sd, byDay, fc) {
+  var td = today();
+  var sl = byDay[sd] || [], frow = fc.days.filter(function (x) { return x.d === sd; })[0];
+  var h = '<div class="glass calpop">';
   h += sl.length ? sl.map(function (e) {
     var amt = e.type === 'due' ? cardDueAmt(e) : e.amt, label = { inc: 'Income' + (byId(S.accounts, e.to) ? ' into ' + byId(S.accounts, e.to).name : ''), pay: 'Paycheck to spending', stmt: 'Statement closes; this balance is reported', due: e.amt == null ? ({ closed: 'Estimated: balance on the closed statement', balance: 'Estimated: what\u2019s left on the card after earlier payments', none: 'Nothing charged for this one yet' }[cardDueInfo(e).why] || 'Estimated') + ' \u00b7 tap to enter it' : 'Card payment', bill: 'Bill' + (e.sub ? ' from ' + e.sub : ''), txn: 'Logged purchase', plan: 'Together' + (e.sub ? ' · ' + e.sub : '') }[e.type] || '';
     var inner = '<span class="tp-tile cdt cd-' + e.type + '">' + TP.svg({ inc: 'piggy', pay: 'piggy', stmt: 'doc', due: 'card', bill: 'receipt', txn: 'chart', plan: 'people' }[e.type] || 'calendar') + '</span><span class="tp-t"><b>' + esc(e.title) + '</b><span>' + label + '</span></span>' + (amt ? '<span class="amt' + (e.type === 'pay' || e.type === 'inc' ? ' up' : '') + '">' + (e.type === 'pay' || e.type === 'inc' ? '+' : '') + money(amt, 1) + '</span>' : '');
@@ -3292,7 +3299,7 @@ function calendarPage() {
 PAGES.calendar = calendarPage;
 ACT.calMove = function (d) { var y = +CAL.ym.slice(0, 4), m = +CAL.ym.slice(5) - 1 + +d.v, x = new Date(y, m, 1); CAL.ym = x.getFullYear() + '-' + pad(x.getMonth() + 1); CAL.sel = null; rerender(); };
 ACT.calToday = function () { CAL.ym = null; CAL.sel = null; rerender(); };
-ACT.calSel = function (d) { CAL.sel = d.a; rerender(); };
+ACT.calSel = function (d) { CAL.sel = d.a; rerender(); sheet(sxHead(dowDate(d.a)) + calDay(d.a, CAL.byDay || {}, CAL.fc || forecast(35))); };
 
 /* ---------- bank connection (SimpleFIN through your account's server, or the older Sheet script) ---------- */
 var LS_BANK = 'tally.bank';
