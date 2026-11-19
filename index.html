@@ -717,6 +717,16 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .secline .ibtn[disabled]{opacity:.3}
 .calpop{margin-top:4px} .calpop .tp-row:first-child{padding-top:6px}
 
+/* Smart */
+.smartcard{margin-bottom:10px}
+.smartcard .tp-t{display:flex;flex-direction:column;gap:3px;min-width:0}
+.smartcard .tp-t b{font-size:15.5px;line-height:1.3}
+.smartcard .tp-t span{font-size:13.5px;line-height:1.45;color:var(--tp-ink2)}
+.smartcard.warn{border-color:var(--bad)}
+.smartcard.warn .tp-tile{background:var(--bad-bg);color:var(--bad)}
+.duechip{border-style:solid;border-color:var(--hi)}
+.duechip em{font-style:normal;font-size:11px;color:var(--hi);margin-left:4px}
+
 </style>
 </head>
 <body class="tp-page">
@@ -726,7 +736,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.19.1';
+var APP_VERSION = '2026.11.19.2';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1460,8 +1470,8 @@ function spendLimit() {
 }
 /* bills you pay by card show up as card purchases; leave them out so they aren't counted against the limit twice */
 function isBillTxn(x) {
-  var n = String(x.note || '').toLowerCase(); if (!n) return false;
-  return S.bills.some(function (b) { if (b.off) return false; var w = String(b.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (t) { return t.length >= 4; })[0]; return w && n.indexOf(w) >= 0 && Math.abs((+x.amt || 0) - (+b.amount || 0)) <= Math.max(2, (+b.amount || 0) * 0.15); });
+  var n = String(x.note || '').toLowerCase(); if (!n) return false; var k = typeof mkey === 'function' ? mkey(x) : '';
+  return S.bills.some(function (b) { if (b.off) return false; if (b.mkey) return b.mkey === k; var w = String(b.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (t) { return t.length >= 4; })[0]; return w && n.indexOf(w) >= 0 && Math.abs((+x.amt || 0) - (+b.amount || 0)) <= Math.max(2, (+b.amount || 0) * 0.15); });
 }
 function everyday(from, to) { return (S.txns || []).filter(function (x) { return x.date >= from && x.date <= to && !isBillTxn(x); }); }
 function floorOf(kind) { var t = 0; S.accounts.forEach(function (a) { if (!a.closed && a.kind === kind && a.floor) t += +a.floor || 0; }); return t; }
@@ -1748,18 +1758,9 @@ function spendTips(R, cur, prev, all) {
     var mb = Object.keys(miss).map(function (k) { return miss[k]; }).sort(function (a, b) { return b.extra - a.extra; })[0];
     if (mb && mb.extra >= 3) out.push({ i: 'card', t: 'Use ' + mb.card.name + ' for ' + mb.cat.toLowerCase(), s: money(mb.amt) + ' of ' + mb.cat.toLowerCase() + ' went on other cards or debit. ' + mb.card.name + ' would have earned about ' + money(mb.extra, 1) + ' more' + ((mb.card.runit || '%') === 'x' ? ' (points at about 1¢ each)' : '') + '.' });
   }
-  /* charges that repeat monthly but aren't in Bills */
-  var since = monthStart(addMonths(td, -3)), byM = {};
-  all.filter(function (x) { return x.date >= since; }).forEach(function (x) { var m = spMerchant(x).toLowerCase(); if (m.length < 3) return; (byM[m] = byM[m] || []).push(x); });
-  var billNames = S.bills.map(function (b) { return String(b.name || '').toLowerCase(); });
-  var subs = Object.keys(byM).map(function (m) {
-    var xs = byM[m], months = {}; xs.forEach(function (x) { months[x.date.slice(0, 7)] = +x.amt; });
-    var ks = Object.keys(months), vals = ks.map(function (k) { return months[k]; }), avg = vals.reduce(function (a, b) { return a + b; }, 0) / (vals.length || 1);
-    var steady = vals.every(function (v) { return Math.abs(v - avg) <= Math.max(2, avg * 0.1); });
-    var inBills = billNames.some(function (b) { return b && (m.indexOf(b) >= 0 || b.indexOf(m) >= 0); });
-    return ks.length >= 3 && xs.length <= ks.length + 1 && steady && !inBills ? { m: spMerchant(xs[0]), avg: avg } : null;
-  }).filter(Boolean).sort(function (a, b) { return b.avg - a.avg; });
-  if (subs.length) out.push({ i: 'receipt', t: subs.length === 1 ? subs[0].m + ' looks like a subscription' : subs.length + ' charges look like subscriptions', s: subs.slice(0, 3).map(function (x) { return x.m + ' ~' + money(x.avg, 1) + '/mo'; }).join(' · ') + '. Not in your Bills, so projections miss them.', act: 'billEdit' });
+  /* charges that repeat on a schedule but aren't in Bills */
+  var subs = typeof recurring === 'function' ? recurring().filter(function (r) { return !r.bill && !(S.profile.cancelled || {})[r.key]; }) : [];
+  if (subs.length) out.push({ i: 'receipt', t: subs.length === 1 ? subs[0].name + ' repeats ' + subs[0].F.label + ' and isn’t in Bills' : subs.length + ' repeating charges aren’t in your Bills', s: subs.slice(0, 3).map(function (x) { return x.name + ' ' + money(x.amt, 1); }).join(' · ') + '. Add them so your limit and forecast count them.', act: 'goSmart' });
   /* small stuff adds up */
   var small = cur.filter(function (x) { return +x.amt < 10; });
   if (small.length >= 8 && sumAmt(small) >= 60) out.push({ i: 'spark', t: small.length + ' purchases under $10 added up to ' + money(sumAmt(small)), s: 'Coffee, snacks, app charges. Easy to miss one at a time.' });
@@ -2999,10 +3000,12 @@ function shopGroups(need) {
   var keys = order.filter(function (k) { return groups[k]; }).concat(Object.keys(groups).filter(function (k) { return order.indexOf(k) < 0; }));
   return { st: st, n: list.length, html: keys.map(function (k) { return '<div class="secname">' + esc(k) + '</div>' + groups[k].map(function (x) { return shopRow(x, !st); }).join(''); }).join('') };
 }
+/* you buy this on a rhythm, and it's been about that long */
+function shopDue(x) { var h = x.hist || []; if (h.length < 3) return false; var g = 0; for (var i = 1; i < h.length; i++) g += daysBetween(h[i - 1], h[i]); g /= (h.length - 1); return g >= 2 && daysBetween(h[h.length - 1], today()) >= g * 0.9; }
 function shopPage() {
   var items = shLive('shop'), need = items.filter(function (x) { return !x.got; }).sort(function (a, b) { return (a.addedAt || '') < (b.addedAt || '') ? -1 : 1; }), td = today();
   var gotToday = items.filter(function (x) { return x.got && localDay(x.gotAt) === td; });
-  var usual = items.filter(function (x) { return x.got && localDay(x.gotAt) !== td; }).sort(function (a, b) { return (b.n || 0) - (a.n || 0) || ((b.gotAt || '') > (a.gotAt || '') ? 1 : -1); }).slice(0, 16);
+  var usual = items.filter(function (x) { return x.got && localDay(x.gotAt) !== td; }).sort(function (a, b) { return (shopDue(b) ? 1 : 0) - (shopDue(a) ? 1 : 0) || (b.n || 0) - (a.n || 0) || ((b.gotAt || '') > (a.gotAt || '') ? 1 : -1); }).slice(0, 16);
   var h = '<div class="glass pad tp-rise"><div class="addline"><input class="tp-input" id="sh_new" placeholder="Add to the list" autocomplete="off" enterkeyhint="done" aria-label="Add to the shopping list"><button class="tp-btn" data-act="shopAdd">Add</button></div><p class="small muted mb0">Add a few at once with commas: milk, eggs, coffee</p></div>';
   var stores = shStores(), G = shopGroups(need);
   h = '<div class="chips scrollx shopstores">' + [['', 'All stores', need.length]].concat(stores.map(function (st) { return [st.id, st.name, need.filter(function (x) { return !x.store || x.store === st.id; }).length]; })).map(function (o) { return '<button class="chip' + (SHOP.store === o[0] ? ' on' : '') + '" data-act="shopStore" data-a="' + esc(o[0]) + '">' + esc(o[1]) + (o[2] ? ' <em>' + o[2] + '</em>' : '') + '</button>'; }).join('') + '<button class="chip" data-act="storesEdit">Edit stores</button></div>' + h.replace('placeholder="Add to the list"', 'placeholder="' + (G.st ? 'Add for ' + esc(G.st.name) : 'Add to the list') + '"');
@@ -3010,7 +3013,7 @@ function shopPage() {
     (G.st && need.length > G.n ? '<p class="small muted">' + (need.length - G.n) + ' more for other stores.</p>' : '');
   if (gotToday.length) h += '<div class="tp-sect"><span>Got today · ' + gotToday.length + '</span></div><div class="glass">' + gotToday.map(function (x) { return '<div class="tp-row static chkrow done"><button class="chk on" data-act="shopGot" data-id="' + x.id + '" aria-label="Put ' + esc(x.name) + ' back on the list">' + TP.svg('check') + '</button><span class="tp-t"><b>' + esc(x.name) + '</b><span>' + esc(whoName(x.gotBy) + ' got it') + '</span></span></div>'; }).join('') +
     '<button class="tp-row" data-act="shopLog"><span class="tp-tile">' + TP.svg('receipt') + '</span><span class="tp-t"><b>Log the receipt as a shared expense</b><span>Then the split and who owes whom stay right</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button></div>';
-  if (usual.length) h += '<div class="tp-sect"><span>Out of something?</span><span class="sp"></span><span class="small muted">tap to add back</span></div><div class="chips usual">' + usual.map(function (x) { return '<button class="chip" data-act="shopAgain" data-id="' + x.id + '">+ ' + esc(x.name) + '</button>'; }).join('') + '</div>';
+  if (usual.length) h += '<div class="tp-sect"><span>Out of something?</span><span class="sp"></span><span class="small muted">tap to add back</span></div><div class="chips usual">' + usual.map(function (x) { return '<button class="chip' + (shopDue(x) ? ' duechip' : '') + '" data-act="shopAgain" data-id="' + x.id + '">+ ' + esc(x.name) + (shopDue(x) ? ' <em>probably out</em>' : '') + '</button>'; }).join('') + '</div>';
   return h + '<p class="small muted">Both of you see changes within a few seconds while this screen is open.</p>';
 }
 function todoPage() {
@@ -3039,7 +3042,7 @@ ACT.shopAdd = function () {
   });
   if (n) { rerender(); var e2 = document.getElementById('sh_new'); if (e2) e2.focus(); }
 };
-ACT.shopGot = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; if (x.got) { x.got = false; x.n = Math.max(0, (x.n || 1) - 1); } else { x.got = true; x.gotAt = new Date().toISOString(); x.gotBy = SH.cfg.me; x.n = (x.n || 0) + 1; } shTouch('shop', x); rerender(); };
+ACT.shopGot = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; if (x.got) { x.got = false; x.n = Math.max(0, (x.n || 1) - 1); } else { x.got = true; x.gotAt = new Date().toISOString(); x.gotBy = SH.cfg.me; x.n = (x.n || 0) + 1; x.hist = (x.hist || []).concat([today()]).slice(-6); } shTouch('shop', x); rerender(); };
 ACT.shopAgain = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; x.got = false; x.addedAt = new Date().toISOString(); x.by = SH.cfg.me; shTouch('shop', x); rerender(); toast(x.name + ' is back on the list'); };
 ACT.shopEdit = function (d) { var x = shLive('shop').filter(function (i) { return i.id === d.id; })[0]; if (!x) return; sheet(sxHead('Edit item') + '<div class="fgrid">' + textField('se_name', 'Item', x.name) + textField('se_qty', 'How many', x.qty || '', 'e.g. 2') + '</div>' + textField('se_note', 'Note', x.note || '', 'Brand, size') +
     '<label class="tp-label">Store</label>' + seg('se_store', [['', 'Any']].concat(shStores().map(function (st) { return [st.id, st.name]; })), x.store || '') +
@@ -3465,6 +3468,185 @@ ACT.bankHistory = function () {
 };
 ACT.bankRefresh = function () { BANK.refresh(true).then(function () { rerender(); if (BANK.err) toast(BANK.err); }); rerender(); };
 ACT.bankOff = function (d, el) { armDelete(el, function () { BANK.call('off').catch(function () {}); S.profile.bank = { on: false }; BANK.data = null; lsDel(LS_BANK); save(true); rerender(); }); };
+
+/* Tally — Smart: things worked out from your purchases, on this device. Nothing here is sent anywhere.
+   Recurring charges and subscriptions, price changes, missing charges, duplicates, unusually big charges,
+   category pace, card use before a statement closes, paycheck detection, new subscriptions and trials. */
+function mkey(x) { return spMerchant(x).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+function median(a) { var s = a.slice().sort(function (x, y) { return x - y; }), n = s.length; return n ? (n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2) : 0; }
+var FREQS = [{ f: 'w', days: 7, tol: 1, min: 4, label: 'weekly', every: 'a week', perMo: 52 / 12 }, { f: '2w', days: 14, tol: 2, min: 3, label: 'every 2 weeks', every: 'every 2 weeks', perMo: 26 / 12 },
+  { f: 'm', days: 30.4, tol: 5, min: 2, label: 'monthly', every: 'a month', perMo: 1 }, { f: 'q', days: 91, tol: 8, min: 2, label: 'every 3 months', every: 'every 3 months', perMo: 1 / 3 }, { f: 'y', days: 365, tol: 12, min: 2, label: 'yearly', every: 'a year', perMo: 1 / 12 }];
+var SUBRX = /netflix|spotify|hulu|disney|hbo|\bmax\b|youtube|apple com bill|icloud|prime video|amazon prime|audible|peacock|paramount|adobe|dropbox|chatgpt|openai|claude|anthropic|nytimes|new york times|planet fitness|peloton|patreon|xbox|playstation|nintendo|duolingo|headspace|calm|strava|linkedin|microsoft|google one|google storage|siriusxm|crunchyroll|espn|gym|fitness|membership|subscription/;
+var SMEMO = { k: '', v: null };
+function billForKey(k) {
+  return S.bills.filter(function (b) {
+    if (b.mkey) return b.mkey === k;
+    var n = String(b.name || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' '), w = n.split(/\s+/).filter(function (t) { return t.length >= 4; })[0], kw = k.split(' ').filter(function (t) { return t.length >= 4; })[0];
+    return (w && k.indexOf(w) >= 0) || (kw && n.indexOf(kw) >= 0);
+  })[0] || null;
+}
+/* every merchant that charges on a schedule: weekly, every 2 weeks, monthly, quarterly, yearly */
+function recurring() {
+  var memo = S.updatedAt + '|' + (S.txns || []).length + '|' + S.bills.length; if (SMEMO.k === memo && SMEMO.v) return SMEMO.v;
+  var td = today(), since = addDays(td, -420), g = {}, out = [];
+  (S.txns || []).forEach(function (x) { if (x.date < since || !(+x.amt > 0) || !x.note) return; var k = mkey(x); if (k.length < 3) return; (g[k] = g[k] || []).push(x); });
+  Object.keys(g).forEach(function (k) {
+    var seen = {}, xs = g[k].slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).filter(function (x) { if (seen[x.date]) return false; seen[x.date] = 1; return true; });
+    if (xs.length < 2) return;
+    var gaps = []; for (var i = 1; i < xs.length; i++) gaps.push(daysBetween(xs[i - 1].date, xs[i].date));
+    var mg = median(gaps), F = FREQS.filter(function (q) { return Math.abs(mg - q.days) <= q.tol && xs.length >= q.min; })[0]; if (!F) return;
+    /* every gap is on schedule, or exactly one cycle was skipped */
+    if (!gaps.every(function (gp) { return Math.abs(gp - F.days) <= F.tol * 1.6 || Math.abs(gp - 2 * F.days) <= F.tol * 2.2; })) return;
+    var amts = xs.map(function (x) { return +x.amt; }), base = amts.slice(0, -1), mb = median(base), la = amts[amts.length - 1], near = function (a) { return Math.abs(a - mb) <= Math.max(1.5, mb * 0.08); };
+    if (!base.every(near)) return;
+    var changed = !near(la); if (changed && !(xs.length >= 3 && Math.abs(la - mb) <= mb * 0.5)) return;
+    var lx = xs[xs.length - 1], everyday = /Groceries|Eating out|Gas/.test(lx.cat || '');
+    if (everyday && (xs.length < 4 || changed || !base.every(function (a) { return Math.abs(a - mb) < 0.02; }))) return; /* a habit, not a bill */
+    if (daysBetween(lx.date, td) > F.days * 2.2 + 10) return; /* stopped a while ago */
+    var ld = parseD(lx.date), next = F.f === 'm' ? ymd(clampDay(ld.getFullYear(), ld.getMonth() + 1, ld.getDate())) : F.f === 'q' ? ymd(clampDay(ld.getFullYear(), ld.getMonth() + 3, ld.getDate())) : F.f === 'y' ? ymd(clampDay(ld.getFullYear() + 1, ld.getMonth(), ld.getDate())) : addDays(lx.date, F.days);
+    out.push({ key: k, name: spMerchant(lx), F: F, f: F.f, amt: r2(la), was: changed ? r2(mb) : null, up: changed && la > mb, last: lx.date, next: next, src: lx.src, cat: lx.cat || 'Other', n: xs.length, list: xs, perMo: r2(la * F.perMo), bill: billForKey(k), bank: !!lx.ext });
+  });
+  out.sort(function (a, b) { return b.perMo - a.perMo; });
+  SMEMO = { k: memo, v: out }; return out;
+}
+function billFromRec(r) {
+  var td = today(), ld = parseD(r.last), b = { id: uid(), name: r.name, amount: r.amt, account: srcName(r.src), mkey: r.key, off: false };
+  if (r.f === 'm') { b.freq = 'm'; b.day = ld.getDate(); b.month = ''; }
+  else if (r.f === 'y') { b.freq = 'y'; b.day = ld.getDate(); b.month = ld.getMonth() + 1; }
+  else { var nx = r.next, g = 0; while (nx < td && g++ < 60) nx = r.f === 'q' ? ymd(clampDay(parseD(nx).getFullYear(), parseD(nx).getMonth() + 3, ld.getDate())) : addDays(nx, r.F.days); b.freq = 'c'; b.unit = r.f === 'q' ? 'm' : 'w'; b.n = r.f === 'q' ? 3 : r.f === '2w' ? 2 : 1; b.next = nx; b.day = ''; b.month = ''; }
+  return b;
+}
+/* paychecks, read from deposits your bank shows */
+function payGuess() {
+  if (typeof BANK === 'undefined' || !BANK.data || !BANK.data.accounts) return null;
+  var mp = BANK.map(), g = {};
+  BANK.data.accounts.forEach(function (a) { var t = mp[a.id]; if (!t || t.indexOf('a:') !== 0) return; var ac = byId(S.accounts, t.slice(2)); if (!ac || ac.kind !== 'spend') return;
+    (a.txns || []).forEach(function (x) { if (!(x.amt >= 200) || /transfer|xfer|zelle|venmo|cash app|savings|refund|atm|mobile deposit|reversal/i.test(x.desc)) return; var k = String(x.desc).toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 2).join(' '); (g[k] = g[k] || []).push(x); }); });
+  var best = null;
+  Object.keys(g).forEach(function (k) {
+    var xs = g[k].slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }); if (xs.length < 2) return;
+    var gaps = []; for (var i = 1; i < xs.length; i++) gaps.push(daysBetween(xs[i - 1].date, xs[i].date));
+    var mg = median(gaps), every = mg >= 6 && mg <= 8 ? 7 : mg >= 13 && mg <= 16 ? 14 : mg >= 28 && mg <= 32 ? 30 : 0, m = median(xs.map(function (x) { return x.amt; }));
+    if (!every || !xs.every(function (x) { return Math.abs(x.amt - m) <= m * 0.15; })) return;
+    var last = xs[xs.length - 1].date, next = last, td = today(), n = 0; while (next < td && n++ < 20) next = every === 30 ? ymd(clampDay(parseD(next).getFullYear(), parseD(next).getMonth() + 1, parseD(last).getDate())) : addDays(next, every);
+    if (!best || xs.length > best.n) best = { amt: r2(m), every: every, next: next, n: xs.length, last: last };
+  });
+  return best;
+}
+function smartOff(k) { return !!((S.profile.smartOff || {})[k]); }
+/* everything worth a look, most urgent first. Each: { key, tone, icon, title, text, btn, run, rec } */
+function smartItems() {
+  var out = [], td = today(), recs = recurring(), tx = S.txns || [], bf = typeof bankFrom === 'function' ? bankFrom() : null;
+  var add = function (o) { if (!smartOff(o.key)) out.push(o); };
+  var fresh = typeof BANK !== 'undefined' && BANK.on() && BANK.data && BANK.data.at && Date.now() - Date.parse(BANK.data.at) < 3 * 86400000;
+  var cancelled = S.profile.cancelled || {};
+  /* anything you marked cancelled that charged again, on schedule or not */
+  Object.keys(cancelled).forEach(function (k) { var again = tx.filter(function (x) { return x.note && x.date > cancelled[k] && mkey(x) === k; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; })[0]; if (again) add({ key: 'again:' + k + again.date, tone: 'warn', icon: 'bell', title: spMerchant(again) + ' charged you after you cancelled', text: money(+again.amt, 1) + ' on ' + shortDate(again.date) + ' (' + srcName(again.src) + '). You marked it cancelled ' + shortDate(cancelled[k]) + '. Contact them, or dispute it with your card.', btn: 'Open the charge', run: function () { ACT.qaEdit({ id: again.id }); } }); });
+  recs.forEach(function (r) {
+    var b = r.bill;
+    if (!b && !cancelled[r.key]) add({ key: 'rec:' + r.key, tone: 'todo', icon: 'receipt', title: r.name + ' repeats ' + r.F.label + ' and isn’t in Bills', text: money(r.amt, 1) + ' ' + r.F.every + (r.was ? ' (was ' + money(r.was, 1) + ')' : '') + ', ' + r.n + ' times, last on ' + shortDate(r.last) + '. Add it so your limit and forecast count it.', btn: 'Add to Bills', run: function () { S.bills.push(billFromRec(r)); save(); toast(r.name + ' added to Bills'); }, rec: r });
+    if (b && !b.off && Math.abs((+b.amount || 0) - r.amt) > Math.max(0.5, r.amt * 0.02)) add({ key: 'amt:' + r.key + r.amt, tone: r.amt > +b.amount ? 'warn' : 'info', icon: 'trend', title: r.name + (r.amt > +b.amount ? ' went up' : ' went down') + ': ' + money(+b.amount, 1) + ' → ' + money(r.amt, 1), text: 'Charged ' + money(r.amt, 1) + ' on ' + shortDate(r.last) + '. Your bill still says ' + money(+b.amount, 1) + (r.amt > +b.amount ? '. That’s ' + money((r.amt - b.amount) * r.F.perMo * 12) + ' more a year.' : '.'), btn: 'Update the bill', run: function () { b.amount = r.amt; if (!b.mkey) b.mkey = r.key; save(); toast('Bill updated to ' + money(r.amt, 1)); }, rec: r });
+    var grace = { w: 3, '2w': 4, m: 6, q: 10, y: 15 }[r.f];
+    if (fresh && r.bank && !cancelled[r.key] && (b ? !b.off : r.n >= 3) && td > addDays(r.next, grace) && td < addDays(r.next, Math.round(r.F.days * 1.2))) add({ key: 'miss:' + r.key + r.next, tone: 'info', icon: 'calendar', title: 'No ' + r.name + ' charge yet', text: 'It usually comes around ' + shortDate(r.next) + '. The last one was ' + shortDate(r.last) + '. Cancelled, moved to another card, or just late?', btn: b ? 'Pause the bill' : 'See the charges', run: function () { if (b) { b.off = true; save(); toast(b.name + ' paused'); } else subSheet(r.key); }, rec: r });
+    var soon = daysBetween(td, r.next);
+    if ((r.f === 'y' || r.f === 'q') && soon >= 0 && soon <= 14) add({ key: 'renew:' + r.key + r.next, tone: 'info', icon: 'calendar', title: r.name + ' renews around ' + shortDate(r.next), text: money(r.amt, 1) + ' ' + r.F.every + '. If you don’t use it, now is the time to cancel.', btn: 'Details', run: function () { subSheet(r.key); }, rec: r });
+  });
+  /* charged twice */
+  var recent = tx.filter(function (x) { return x.ext && x.date >= addDays(td, -10) && +x.amt >= 5; }), used = {};
+  recent.forEach(function (x) { if (used[x.id]) return; var tw = recent.filter(function (y) { return y !== x && !used[y.id] && mkey(y) === mkey(x) && Math.abs(y.amt - x.amt) < 0.005 && Math.abs(daysBetween(x.date, y.date)) <= 1; })[0]; if (!tw) return; used[x.id] = used[tw.id] = 1;
+    add({ key: 'dup:' + [x.id, tw.id].sort().join(), tone: 'warn', icon: 'bell', title: 'Charged twice? ' + spMerchant(x) + ' ' + money(+x.amt, 1), text: 'Two charges for the same amount on ' + shortDate(x.date) + (tw.date !== x.date ? ' and ' + shortDate(tw.date) : '') + ' (' + srcName(x.src) + '). If only one is right, call the store or dispute it with the card.', btn: 'See them', run: function () { SPV = { range: 'month', src: 'all', cat: '', more: 0 }; VIEW = 'spending'; render(); } }); });
+  /* much bigger than usual at a place you go often */
+  tx.filter(function (x) { return x.ext && x.date >= addDays(td, -10); }).forEach(function (x) { var k = mkey(x), prior = tx.filter(function (y) { return y.date < x.date && mkey(y) === k; }).map(function (y) { return +y.amt; }); if (prior.length < 4) return; var m = median(prior); if (x.amt >= m * 2.5 && x.amt - m >= 40) add({ key: 'big:' + x.id, tone: 'info', icon: 'spark', title: spMerchant(x) + ': ' + money(+x.amt, 1) + ' is ' + (x.amt / m).toFixed(1) + '× your usual', text: 'You usually spend about ' + money(m, 1) + ' there. This was on ' + shortDate(x.date) + ' (' + srcName(x.src) + ').', btn: 'Open it', run: function () { ACT.qaEdit({ id: x.id }); } }); });
+  /* a category already past last month's total */
+  var ms = monthStart(td), lastS = addMonths(td, -1), dom = parseD(td).getDate(), dim = parseD(monthEnd(td)).getDate();
+  if (bf && bf <= lastS && dom <= 24) { var cur = byKey(spendIn(ms, td), function (x) { return x.cat || 'Other'; }), prev = byKey(spendIn(lastS, monthEnd(lastS)), function (x) { return x.cat || 'Other'; });
+    Object.keys(cur).forEach(function (c) { if (c !== 'Other' && prev[c] >= 100 && cur[c] > prev[c]) add({ key: 'pace:' + c + ms, tone: 'info', icon: 'trend', title: c + ' already passed last month', text: money(cur[c]) + ' so far vs ' + money(prev[c]) + ' for all of ' + MONTHS[parseD(lastS).getMonth()] + ', with ' + (dim - dom) + ' days left.', btn: 'See ' + c.toLowerCase(), run: function () { SPV = { range: 'month', src: 'all', cat: c, more: 0 }; VIEW = 'spending'; render(); } }); }); }
+  /* a card about to report a high balance */
+  S.cards.forEach(function (c) { if (c.off || !(+c.limit > 0) || !c.stmtDay) return; var close = cardCloseOnOrAfter(c, td), dd = daysBetween(td, close), bal = cardBal(c), u = bal / c.limit; if (dd < 0 || dd > 5 || u < 0.3) return; var pay = Math.ceil((bal - c.limit * 0.29) / 10) * 10;
+    add({ key: 'util:' + c.id + close, tone: 'todo', icon: 'card', title: c.name + ' closes ' + (dd === 0 ? 'today' : dd === 1 ? 'tomorrow' : DOW[parseD(close).getDay()]) + ' at ' + Math.round(u * 100) + '% of its limit', text: 'The balance on closing day is what gets reported. Paying ' + money(pay) + ' before then reports under 30%, which helps your score.', btn: 'Open Cards', run: function () { VIEW = 'cards'; render(); } }); });
+  /* payday from your deposits */
+  var pg = payGuess(), p = S.profile.pay || {};
+  if (pg) { var lab = { 7: 'every week', 14: 'every 2 weeks', 30: 'every month' }[pg.every];
+    if (!(+p.amt > 0)) add({ key: 'pay:new', tone: 'todo', icon: 'piggy', title: 'Looks like you’re paid about ' + money(pg.amt) + ' ' + lab, text: pg.n + ' matching deposits, the last on ' + shortDate(pg.last) + '. Next one around ' + shortDate(pg.next) + '.', btn: 'Use this', run: function () { S.profile.pay = { amt: pg.amt, every: pg.every, next: pg.next, auto: p.auto }; save(); toast('Payday set'); } });
+    else if (pg.n >= 3 && Math.abs(pg.amt - +p.amt) > p.amt * 0.06 && Math.abs(pg.amt - netPay(p.amt)) > p.amt * 0.06) add({ key: 'pay:diff' + Math.round(pg.amt), tone: 'info', icon: 'piggy', title: 'Your paychecks have been about ' + money(pg.amt), text: 'Your payday setting says ' + money(+p.amt) + '. If your pay changed, update it so your limit and forecast are right.', btn: 'Review payday', run: function () { ACT.payEdit(); } }); }
+  /* brand-new subscriptions and small "trial" charges (only once there's enough history to know they're new) */
+  if (bf && bf <= addDays(td, -60)) { var firsts = {}; tx.forEach(function (x) { if (!x.note) return; var k = mkey(x); if (!firsts[k] || x.date < firsts[k].date) firsts[k] = x; });
+    Object.keys(firsts).forEach(function (k) { var x = firsts[k]; if (!x.ext || x.date < addDays(td, -21) || billForKey(k) || recs.some(function (r) { return r.key === k; })) return; var n = tx.filter(function (y) { return mkey(y) === k; }).length;
+      if (SUBRX.test(k) && n === 1) add({ key: 'newsub:' + k, tone: 'todo', icon: 'receipt', title: 'New subscription? ' + spMerchant(x) + ' ' + money(+x.amt, 1), text: 'First charge on ' + shortDate(x.date) + ' (' + srcName(x.src) + '). If it repeats monthly, add it to Bills now.', btn: 'Add to Bills', run: function () { S.bills.push({ id: uid(), name: spMerchant(x), amount: +x.amt, freq: 'm', day: parseD(x.date).getDate(), month: '', account: srcName(x.src), mkey: k, off: false }); save(); toast(spMerchant(x) + ' added to Bills'); } });
+      else if (+x.amt <= 1.5 && n === 1 && !/Groceries|Eating out|Gas/.test(x.cat || '')) add({ key: 'trial:' + k, tone: 'info', icon: 'bell', title: 'Possible free trial: ' + spMerchant(x), text: 'A ' + money(+x.amt, 1) + ' charge on ' + shortDate(x.date) + ' from a place you haven’t paid before. Small first charges often turn into a full price later.', btn: 'How to cancel', run: function () { window.open(cancelUrl(spMerchant(x)), '_blank', 'noopener'); } }); }); }
+  var rank = { warn: 0, todo: 1, info: 2 }; out.sort(function (a, b) { return rank[a.tone] - rank[b.tone]; });
+  return out;
+}
+var SMARTC = [];
+function cancelUrl(name) { return 'https://www.google.com/search?q=' + encodeURIComponent('how to cancel ' + name + ' subscription'); }
+function smartRow(it, i) { return '<div class="glass pad smartcard ' + it.tone + '"><div class="flex" style="flex-wrap:nowrap;align-items:flex-start;gap:12px"><span class="tp-tile">' + TP.svg(it.icon) + '</span><span class="tp-t"><b>' + esc(it.title) + '</b><span>' + esc(it.text) + '</span></span></div><div class="flex mt"><button class="tp-btn tp-sm" data-act="smartRun" data-i="' + i + '">' + esc(it.btn) + '</button>' + (it.rec && !/^(Details|See the charges)$/.test(it.btn) ? '<button class="tp-btn tp-ghost tp-sm" data-act="subOpen" data-a="' + esc(it.rec.key) + '">Details</button>' : '') + '<button class="tp-btn tp-ghost tp-sm" data-act="smartHide" data-i="' + i + '">Dismiss</button></div></div>'; }
+function smartPage() {
+  var items = SMARTC = smartItems(), recs = recurring(), h = topBar('Smart', 'What Tally noticed', 'home');
+  h += '<div class="tp-sect"><span>Worth a look' + (items.length ? ' · ' + items.length : '') + '</span></div>' + (items.length ? items.map(smartRow).join('') : '<div class="glass"><div class="empty">Nothing right now. Tally keeps watching for new bills, price changes, double charges, and more.</div></div>');
+  var tot = recs.reduce(function (t, r) { return t + r.perMo; }, 0);
+  h += '<div class="tp-sect"><span>Recurring charges</span><span class="sp"></span><span class="small muted">' + (recs.length ? money(tot) + '/mo · ' + money(tot * 12) + '/yr' : '') + '</span></div><div class="glass">' + (recs.length ? recs.map(function (r) {
+    var off = (S.profile.cancelled || {})[r.key];
+    return '<button class="tp-row" data-act="subOpen" data-a="' + esc(r.key) + '"><span class="tp-tile">' + TP.svg('receipt') + '</span><span class="tp-t"><b>' + esc(r.name) + '</b><span>' + esc(r.F.label + ' · ' + (off ? 'marked cancelled' : 'next around ' + shortDate(r.next)) + ' · ' + (r.bill ? 'in Bills' : 'not in Bills')) + '</span></span><span class="amt">' + money(r.amt, 1) + '</span></button>'; }).join('') : '<div class="empty">No repeating charges found yet. Tally needs to see a charge at least twice. Bringing in older bank history (Settings › Bank connection) helps.</div>') + '</div>';
+  var rules = Object.keys(S.profile.catRules || {}).length, hid = Object.keys(S.profile.smartOff || {}).length;
+  h += '<div class="tp-sect"><span>How this works</span></div><div class="glass pad"><p class="small" style="margin-top:0">All of this is worked out on your phone from your purchases. Nothing is sent anywhere.</p><ul class="small muted" style="margin:0;padding-left:18px"><li>Charges that repeat on a schedule become bill suggestions.</li><li>Price changes, missing charges, double charges, and unusually big ones get flagged.</li><li>Change a purchase’s category once and Tally uses it for that place from then on' + (rules ? ' (' + rules + ' learned so far)' : '') + '.</li></ul>' + (hid ? '<button class="tp-btn tp-ghost tp-sm mt" data-act="smartReset">Bring back ' + hid + ' dismissed</button>' : '') + '</div>';
+  return h;
+}
+PAGES.smart = smartPage;
+/* one recurring charge: its history, add or update the bill, help cancelling */
+function subSheet(k) {
+  var r = recurring().filter(function (x) { return x.key === k; })[0]; if (!r) { toast('That one isn’t repeating anymore'); return; }
+  var off = (S.profile.cancelled || {})[k], apple = /apple/.test(k);
+  sheet(sxHead(r.name) + '<div class="kv"><span>Charge</span><b>' + money(r.amt, 1) + ' ' + r.F.every + '</b></div><div class="kv"><span>Per year</span><b>' + money(r.perMo * 12) + '</b></div><div class="kv"><span>Paid with</span><b>' + esc(srcName(r.src)) + '</b></div><div class="kv"><span>Next expected</span><b>' + shortDate(r.next) + '</b></div>' +
+    '<label class="tp-label">Recent charges</label><div class="small">' + r.list.slice(-6).reverse().map(function (x) { return '<div class="kv"><span>' + shortDate(x.date) + ' ' + parseD(x.date).getFullYear() + '</span><b>' + money(+x.amt, 1) + '</b></div>'; }).join('') + '</div>' +
+    '<div class="flex mt">' + (r.bill ? '<button class="tp-btn tp-ghost tp-sm" data-act="billEdit" data-id="' + r.bill.id + '">Open the bill</button>' : '<button class="tp-btn tp-sm" data-act="subAdd" data-a="' + esc(k) + '">Add to Bills</button>') + '</div>' +
+    '<div class="tp-sect"><span>Want to cancel it?</span></div><p class="small muted" style="margin-top:0">' + (apple ? 'This is billed through Apple. On your iPhone: Settings › your name › Subscriptions. ' : '') + 'Tally can’t cancel for you, but it can get you there and watch that it sticks.</p>' +
+    '<div class="flex"><a class="tp-btn tp-ghost tp-sm" style="text-decoration:none" target="_blank" rel="noopener" href="' + esc(cancelUrl(r.name)) + '">Find how to cancel</a><button class="tp-btn tp-ghost tp-sm" data-act="subMsg" data-a="' + esc(k) + '">Copy a cancellation message</button></div>' +
+    '<div class="acts">' + (off ? '<button class="tp-btn tp-ghost" data-act="subUncancel" data-a="' + esc(k) + '">Not cancelled after all</button>' : '<button class="tp-btn" data-act="subCancelled" data-a="' + esc(k) + '">I cancelled it</button>') + '</div>');
+}
+ACT.goSmart = function () { VIEW = 'smart'; render(); };
+ACT.smartRun = function (d) { var it = SMARTC[+d.i]; if (it) { it.run(); if (VIEW === 'smart' && !document.getElementById('sheet')) rerender(); } };
+ACT.smartHide = function (d) { var it = SMARTC[+d.i]; if (!it) return; S.profile.smartOff = S.profile.smartOff || {}; S.profile.smartOff[it.key] = today(); render._keep = true; save(); };
+ACT.smartReset = function () { S.profile.smartOff = {}; render._keep = true; save(); };
+ACT.subOpen = function (d) { subSheet(d.a); };
+ACT.subAdd = function (d) { var r = recurring().filter(function (x) { return x.key === d.a; })[0]; if (!r) return; S.bills.push(billFromRec(r)); closeSheet(); render._keep = true; save(); toast(r.name + ' added to Bills'); };
+ACT.subMsg = function (d) { var r = recurring().filter(function (x) { return x.key === d.a; })[0]; if (!r) return; var m = 'Hello,\n\nPlease cancel my ' + r.name + ' subscription effective immediately and stop all future charges. Please confirm the cancellation by email.\n\nThe most recent charge was ' + money(r.amt, 1) + ' on ' + longDate(r.last) + '.\n\nThank you.'; var ok = function () { toast('Copied. Paste it into their chat or an email.'); }; if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(m).then(ok, function () { prompt('Copy this message', m); }); else prompt('Copy this message', m); };
+ACT.subCancelled = function (d) { var r = recurring().filter(function (x) { return x.key === d.a; })[0]; S.profile.cancelled = S.profile.cancelled || {}; S.profile.cancelled[d.a] = today(); if (r && r.bill) r.bill.off = true; closeSheet(); render._keep = true; save(); toast('Marked cancelled' + (r && r.bill ? ' and the bill is paused' : '') + '. Tally will flag it if it charges again.'); };
+ACT.subUncancel = function (d) { if (S.profile.cancelled) delete S.profile.cancelled[d.a]; closeSheet(); render._keep = true; save(); };
+
+/* ---------- categories you correct are remembered per place ---------- */
+function learnCat(x) {
+  var k = mkey(x); if (!x.note || k.length < 3) return 0;
+  S.profile.catRules = S.profile.catRules || {}; S.profile.catRules[k] = x.cat; x.catSet = true;
+  var n = 0; (S.txns || []).forEach(function (t) { if (t !== x && !t.catSet && t.note && mkey(t) === k && t.cat !== x.cat) { t.cat = x.cat; n++; } });
+  return n;
+}
+var _qaSave4 = ACT.qaSave;
+ACT.qaSave = function () {
+  var id = QA && QA.id, old = id ? ((S.txns || []).filter(function (t) { return t.id === id; })[0] || {}).cat : null;
+  _qaSave4.apply(this, arguments);
+  if (!id || QA) return; /* a new purchase, or the form didn't save */
+  var x = (S.txns || []).filter(function (t) { return t.id === id; })[0]; if (!x || !x.note || x.cat === old) return;
+  var n = learnCat(x); render._keep = true; save();
+  $all('.toast').forEach(function (t) { t.remove(); }); toast('Saved. ' + (n ? n + ' other ' + spMerchant(x) + ' purchase' + (n > 1 ? 's are' : ' is') + ' now ' + x.cat + ' too, and' : 'From now on,') + ' new ones will be ' + x.cat + '.');
+};
+var _guessCat4 = guessCat;
+guessCat = function (desc) { var r = (S.profile.catRules || {})[mkey({ note: cleanDesc(desc) })]; return r || _guessCat4(desc); };
+
+/* ---------- where it shows up ---------- */
+var _home4 = PAGES.home;
+PAGES.home = function () {
+  var h = _home4(), items = smartItems();
+  if (!items.length) return h;
+  var card = '<div class="tp-sect"><span>Tally noticed · ' + items.length + '</span><span class="sp"></span><button data-act="goSmart">See all</button></div><div class="glass tp-rise">' + items.slice(0, 3).map(function (it) { return '<button class="tp-row" data-act="goSmart"><span class="tp-tile' + (it.tone === 'warn' ? ' cd-due' : '') + '">' + TP.svg(it.icon) + '</span><span class="tp-t"><b>' + esc(it.title) + '</b><span>' + esc(it.text) + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }).join('') + '</div>';
+  var at = h.indexOf('<div class="tp-sect"><span>Next 2 weeks</span>'); return at >= 0 ? h.slice(0, at) + card + h.slice(at) : h + card;
+};
+var _bills4 = PAGES.bills;
+PAGES.bills = function () {
+  var h = _bills4(), recs = recurring(), miss = recs.filter(function (r) { return !r.bill && !(S.profile.cancelled || {})[r.key] && !smartOff('rec:' + r.key); });
+  if (!recs.length) return h;
+  var row = '<button class="glass tp-row cta" data-act="goSmart"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>' + (miss.length ? miss.length + ' repeating charge' + (miss.length > 1 ? 's' : '') + ' not in Bills yet' : recs.length + ' recurring charges tracked') + '</b><span>' + esc(miss.length ? miss.slice(0, 3).map(function (r) { return r.name + ' ' + money(r.amt, 1); }).join(' · ') : 'Price changes and missed charges get flagged') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+  var at = h.indexOf('<div class="tp-sect">'); return at >= 0 ? h.slice(0, at) + row + h.slice(at) : h + row;
+};
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
