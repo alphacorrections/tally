@@ -765,6 +765,21 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .srcleg{margin:0 2px 10px;line-height:1.55}
 .ckc-h .bkdot{margin-right:4px}
 
+/* bills timeline: tappable dots and the pop-up under them */
+.mstrip button.m{padding:0;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .15s,box-shadow .15s}
+.mstrip button.m::after{content:"";position:absolute;inset:-14px -7px}
+.mstrip .m.sel{transform:scale(1.35);box-shadow:0 0 0 4px var(--tp-line);border-color:var(--hi);z-index:2}
+.mstrip .m.sel.paid{background:var(--hi)}
+.mpop{margin-top:10px;padding:8px 10px 6px;border-radius:14px;background:var(--tp-deep);border:1px solid var(--tp-line)}
+.mpop[hidden]{display:none}
+.mpop-h{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.mpop-h b{flex:1;text-align:center;font-size:14px}
+.mpop-h b span{font-weight:500;color:var(--tp-ink2);margin-left:4px}
+.mpop-h .ibtn[disabled]{opacity:.3}
+.mpop-r{display:flex;justify-content:space-between;gap:12px;width:100%;background:none;border:0;border-top:1px solid var(--tp-line2);padding:10px 4px;min-height:44px;align-items:center;color:var(--tp-ink);font:500 14.5px var(--tp-font);text-align:left;cursor:pointer}
+.mpop-r b{font-family:var(--tp-display);font-variant-numeric:tabular-nums}
+.mpop-t{display:flex;justify-content:space-between;border-top:1px solid var(--tp-line2);padding:8px 4px 4px;font-size:13px;color:var(--tp-ink2)}
+
 </style>
 </head>
 <body class="tp-page">
@@ -774,7 +789,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.19.5';
+var APP_VERSION = '2026.11.20.1';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -2113,6 +2128,24 @@ PAGES.cards = function () {
 };
 
 /* ---------- bills ---------- */
+/* timeline dots: one per due day this month; tap one to see what's due */
+function billDotDays(dim) {
+  var by = {}; S.bills.forEach(function (b) { if (b.freq === 'y' || b.freq === 'c' || !b.day || b.off) return; var d = Math.min(+b.day, dim); (by[d] = by[d] || []).push(b); });
+  return Object.keys(by).map(function (k) { return { day: +k, list: by[k] }; }).sort(function (a, b) { return a.day - b.day; });
+}
+function billDotTap(d) {
+  var pop = document.getElementById('mpop'); if (!pop) return;
+  var td = today(), dnow = parseD(td), dim = new Date(dnow.getFullYear(), dnow.getMonth() + 1, 0).getDate(), days = billDotDays(dim), day = +d.a, at = -1;
+  days.forEach(function (g, i) { if (g.day === day) at = i; });
+  var dots = document.querySelectorAll('.mstrip .m'), open = !pop.hidden && pop.getAttribute('data-day') === String(day);
+  [].forEach.call(dots, function (x) { x.classList.toggle('sel', !open && +x.getAttribute('data-a') === day); });
+  if (open || at < 0) { pop.hidden = true; pop.removeAttribute('data-day'); return; }
+  var g = days[at], dt = new Date(dnow.getFullYear(), dnow.getMonth(), g.day), n = g.day - dnow.getDate(), when = n === 0 ? 'today' : n === 1 ? 'tomorrow' : n > 0 ? 'in ' + n + ' days' : n === -1 ? 'yesterday' : -n + ' days ago';
+  pop.setAttribute('data-day', day); pop.hidden = false;
+  pop.innerHTML = '<div class="mpop-h"><button type="button" class="ibtn sm" data-act="billDot" data-a="' + (at > 0 ? days[at - 1].day : '') + '"' + (at > 0 ? '' : ' disabled') + ' aria-label="Earlier bill">' + TP.svg('back') + '</button><b>' + DOW[dt.getDay()] + ', ' + MON[dt.getMonth()] + ' ' + g.day + ' <span>' + when + '</span></b><button type="button" class="ibtn sm" data-act="billDot" data-a="' + (at < days.length - 1 ? days[at + 1].day : '') + '"' + (at < days.length - 1 ? '' : ' disabled') + ' aria-label="Later bill">' + TP.svg('chev') + '</button></div>' +
+    g.list.map(function (b) { return '<button type="button" class="mpop-r" data-act="billEdit" data-id="' + b.id + '"><span>' + esc(b.name) + '</span><b>' + (+b.amount ? money(+b.amount) : 'No amount yet') + '</b></button>'; }).join('') +
+    (g.list.length > 1 ? '<div class="mpop-t"><span>' + g.list.length + ' bills this day</span><b>' + money(g.list.reduce(function (t, b) { return t + (+b.amount || 0); }, 0)) + '</b></div>' : '');
+}
 PAGES.bills = function () {
   var td = today(), h = topBar('Bills', 'What leaves every month');
   var mo = S.bills.filter(function (b) { return b.freq !== 'y' && b.freq !== 'c'; }), yr = S.bills.filter(function (b) { return b.freq === 'y' || b.freq === 'c'; });
@@ -2121,9 +2154,9 @@ PAGES.bills = function () {
   var dnow = parseD(td), dim = new Date(dnow.getFullYear(), dnow.getMonth() + 1, 0).getDate();
   h += '<div class="glass hero tp-rise"><div class="flex" style="justify-content:space-between;align-items:baseline"><span class="label">Each month</span><span class="disp" style="font-size:32px;font-weight:700" data-count="' + r2(tm + ty / 12) + '">' + money(tm + ty / 12) + '</span></div>' +
     '<div class="heroMath" style="margin-top:2px">' + money(tm) + ' monthly + ' + money(ty / 12) + ' set aside for bills that aren\u2019t monthly' + (monthlyPay ? '. About ' + Math.round((tm + ty / 12) / monthlyPay * 100) + '% of take-home.' : '.') + '</div>' +
-    '<div class="mstrip" role="img" aria-label="Bill due days across ' + MONTHS[dnow.getMonth()] + '"><span class="track"></span><span class="done" style="width:' + (dnow.getDate() / dim * 100).toFixed(1) + '%"></span>' +
-    mo.filter(function (b) { return b.day && !b.off; }).map(function (b) { return '<span class="m' + (+b.day <= dnow.getDate() ? ' paid' : '') + '" style="left:' + (Math.min(+b.day, dim) / dim * 100).toFixed(1) + '%" title="' + esc(b.name + ' · ' + ordinal(+b.day) + ' · ' + money(+b.amount || 0)) + '"></span>'; }).join('') +
-    '<span class="lab" style="left:0">1st</span><span class="lab now" style="left:' + Math.min(80, Math.max(12, dnow.getDate() / dim * 100 - 4)).toFixed(1) + '%">Today</span><span class="lab" style="right:0">' + ordinal(dim) + '</span></div></div>';
+    '<div class="mstrip" role="group" aria-label="Bill due days across ' + MONTHS[dnow.getMonth()] + '. Tap a dot to see the bill."><span class="track"></span><span class="done" style="width:' + (dnow.getDate() / dim * 100).toFixed(1) + '%"></span>' +
+    billDotDays(dim).map(function (g) { return '<button type="button" class="m' + (g.day <= dnow.getDate() ? ' paid' : '') + '" data-act="billDot" data-a="' + g.day + '" style="left:' + (g.day / dim * 100).toFixed(1) + '%" aria-label="' + esc(ordinal(g.day) + ': ' + g.list.map(function (b) { return b.name + ' ' + money(+b.amount || 0); }).join(', ')) + '"></button>'; }).join('') +
+    '<span class="lab" style="left:0">1st</span><span class="lab now" style="left:' + Math.min(80, Math.max(12, dnow.getDate() / dim * 100 - 4)).toFixed(1) + '%">Today</span><span class="lab" style="right:0">' + ordinal(dim) + '</span></div><div id="mpop" class="mpop" hidden></div></div>';
   h += '<div class="tp-sect"><span>Every month</span><span class="sp"></span><button data-act="billEdit">+ Add bill</button></div>';
   if (!S.bills.length) h += '<div class="glass"><div class="empty">Rent, car, phone, internet, subscriptions. Add each once.<br><button class="tp-btn tp-sm" data-act="billEdit">Add a bill</button></div></div>';
   var up = mo.filter(function (b) { return !b.off && (!b.day || +b.day > dnow.getDate()); }).sort(function (a, b) { return (+a.day || 99) - (+b.day || 99); }), paid = mo.filter(function (b) { return !b.off && b.day && +b.day <= dnow.getDate(); }).sort(function (a, b) { return a.day - b.day; }), paused = S.bills.filter(function (b) { return b.off; });
@@ -3808,6 +3841,8 @@ ACT.srcTx = function (d) {
     '<div class="acts">' + (list.length > 30 ? '<button class="tp-btn tp-ghost" data-act="srcAll" data-a="' + esc(src) + '">See all ' + list.length + '</button>' : list.length ? '<button class="tp-btn tp-ghost" data-act="srcAll" data-a="' + esc(src) + '">Open in Spending</button>' : '') + '<button class="tp-btn tp-ghost" data-act="' + (isCard ? 'cardEdit' : 'acctEdit') + '" data-id="' + o.id + '">Settings</button></div>');
 };
 ACT.srcAll = function (d) { closeSheet(); SPV = { range: 'm3', src: d.a, cat: '', more: 0 }; VIEW = 'spending'; render(); };
+
+ACT.billDot = billDotTap;
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
