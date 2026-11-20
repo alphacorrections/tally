@@ -809,7 +809,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.20.5';
+var APP_VERSION = '2026.11.20.6';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -3583,7 +3583,7 @@ ACT.bankHistory = function () {
     save(true); rerender(); toast('Added ' + added + ' older purchase' + (added === 1 ? '' : 's') + ', back to ' + shortDate(j.from) + ' ' + parseD(j.from).getFullYear() + '.');
   }).catch(function (e) { TP.busy(false); toast(e.message || 'Couldn’t get older history'); });
 };
-ACT.bankRefresh = function () { BANK.refresh(true).then(function () { rerender(); if (BANK.err) toast(BANK.err); }); rerender(); };
+ACT.bankRefresh = function () { BANK.refresh(true).then(function () { rerender(); if (BANK.err) toast(BANK.err); else if (BANK.data && BANK.data.cached) toast('Nothing new yet. Tally can ask your bank again about 15 minutes after the last pull. A bank you just added in SimpleFIN can take a few minutes to appear.'); }); rerender(); };
 ACT.bankOff = function (d, el) { armDelete(el, function () { BANK.call('off').catch(function () {}); S.profile.bank = { on: false }; BANK.data = null; lsDel(LS_BANK); save(true); rerender(); }); };
 
 /* Tally — Smart: things worked out from your purchases, on this device. Nothing here is sent anywhere.
