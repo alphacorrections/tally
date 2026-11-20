@@ -796,6 +796,10 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .togq .tp-t b{display:block} .togq .tp-t span{display:block;font-size:12.5px;color:var(--tp-ink2)}
 .togtag{font-weight:700;color:var(--hi)}
 
+/* account type picker: five choices wrap to two rows on a phone */
+.kindseg .seg{flex-wrap:wrap}
+.kindseg .seg button{flex:1 1 30%}
+
 </style>
 </head>
 <body class="tp-page">
@@ -805,7 +809,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.20.4';
+var APP_VERSION = '2026.11.20.5';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -953,7 +957,9 @@ function snapSum(s, kinds) {
 }
 function snapSpend(s) { return r2(snapSum(s, ['spend']) - (s && s.cc ? +s.cc : 0)); }
 function snapCash(s) { return snapSum(s, ['spend', 'save']); }
-function snapNet(s) { return r2(snapSum(s, ['spend', 'save', 'invest', 'retire']) - (s && s.cc ? +s.cc : 0)); }
+function snapNet(s) { return r2(snapSum(s, ['spend', 'save', 'invest', 'retire']) - snapSum(s, ['loan']) - (s && s.cc ? +s.cc : 0)); }
+/* loans are accounts of kind 'loan'; their balance is the amount still owed, kept as a positive number */
+function loansOwed() { var t = 0; S.accounts.forEach(function (a) { if (!a.closed && a.kind === 'loan') t += acctBal(a.id); }); return r2(t); }
 function lastSnap() { return S.snaps.length ? S.snaps[S.snaps.length - 1] : null; }
 function snapOnOrBefore(date) { var r = null; for (var i = 0; i < S.snaps.length; i++) { if (S.snaps[i].date <= date) r = S.snaps[i]; else break; } return r; }
 function snapOnOrAfter(date) { for (var i = 0; i < S.snaps.length; i++) if (S.snaps[i].date >= date) return S.snaps[i]; return null; }
@@ -1493,7 +1499,7 @@ function dueBetween(from, to) {
   return { total: r2(t), list: list };
 }
 function spendCash() { var t = 0; S.accounts.forEach(function (a) { if (!a.closed && a.kind === 'spend') t += acctBal(a.id); }); return r2(t); }
-function liveNet() { var t = 0; S.accounts.forEach(function (a) { if (!a.closed) t += acctBal(a.id); }); return r2(t - cardsOwed()); }
+function liveNet() { var t = 0; S.accounts.forEach(function (a) { if (!a.closed) t += (a.kind === 'loan' ? -1 : 1) * acctBal(a.id); }); return r2(t - cardsOwed()); }
 function appWeeks() { return realWeeks().filter(function (w) { return w.app; }); }
 function avgWeeklySpend() {
   var aw = appWeeks().slice(-4).filter(function (w) { return w.spendTotal != null; });
@@ -1605,7 +1611,7 @@ function cardRewards(c) { return c.rewards && Object.keys(c.rewards).length ? c.
 function rateFor(c, cat) { var r = cardRewards(c); return r[cat] != null && r[cat] !== '' ? +r[cat] : (r['*'] != null && r['*'] !== '' ? +r['*'] : 0); }
 function rewardUnit(c) { return c.runit === 'x' ? 'x' : '%'; }
 var GOAL_LBL = { save: ['Target', 'Saved so far'], payoff: ['Balance when you started', 'Still owed'], trip: ['Trip budget', 'Saved so far'] };
-var KIND_NAME = { spend: 'Spending', save: 'Savings', invest: 'Investing', retire: 'Retirement' };
+var KIND_NAME = { spend: 'Spending', save: 'Savings', invest: 'Investing', retire: 'Retirement', loan: 'Loan' };
 
 /* ---------- helpers ---------- */
 function val(id) { var e = document.getElementById(id); return e ? e.value : ''; }
@@ -2077,7 +2083,9 @@ PAGES.accounts = function () {
     h += '<div class="tp-sect"><span>' + g[0] + '</span><span class="sp"></span><span>' + money(tot) + '</span></div><div class="glass">' + (list.length ? list.map(acctRow).join('') : '<div class="empty">None yet.</div>') + '</div>';
   });
   var lim = S.cards.reduce(function (t, c) { return t + (c.off ? 0 : +c.limit || 0); }, 0), owed = cardsOwed();
-  h += '<div class="tp-sect"><span>Owed</span><span class="sp"></span><span>−' + money(owed) + '</span></div>';
+  var loans = S.accounts.filter(function (a) { return !a.closed && a.kind === 'loan'; });
+  h += '<div class="tp-sect"><span>Owed</span><span class="sp"></span><span>−' + money(owed + loansOwed()) + '</span></div>';
+  if (loans.length) h += '<div class="glass">' + loans.map(acctRow).join('') + '</div>';
   h += '<button class="deep tp-row" style="padding:14px 16px" data-act="go" data-a="cards"><span class="tp-tile">' + TP.svg('card') + '</span><span class="tp-t"><b>' + S.cards.filter(function (c) { return !c.off; }).length + ' credit cards</b><span>' + (limitUse() != null ? limitUse() + '% of your limits used · ' : '') + 'see Cards</span></span><span class="amt">' + money(owed) + '</span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
   var ls = scoreSnaps(), lsc = ls.length ? parseScore(ls[ls.length - 1].score) : null;
   h += '<div class="tp-sect"><span>Credit</span></div><button class="glass tp-row cta" data-act="go" data-a="credit"><span class="tp-tile">' + TP.svg('trend') + '</span><span class="tp-t"><b>' + (lsc ? 'Credit score ' + lsc.tu + (lsc.eq ? ' / ' + lsc.eq : '') : 'Track your credit score') + '</b><span>' + (lsc ? scoreBand(lsc.tu) + ' \u00b7 as of ' + shortDate(ls[ls.length - 1].date) : 'Add it at check-in') + (limitUse() != null ? ' \u00b7 ' + limitUse() + '% of limits used' : '') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
@@ -2743,7 +2751,7 @@ var ACT = {
   /* accounts */
   acctEdit: function (d) {
     var a = d.id ? byId(S.accounts, d.id) : { id: '', name: '', kind: 'spend', floor: '', match: '' };
-    sheet(sxHead(a.id ? a.name : 'Add an account') + '<input type="hidden" id="a_id" value="' + esc(a.id) + '">' + textField('a_name', 'Name', a.name, 'e.g. Chime checking') + '<label class="tp-label">Counts as</label>' + seg('a_kind', [['spend', 'Spending'], ['save', 'Savings'], ['invest', 'Investing'], ['retire', 'Retirement']], a.kind) +
+    sheet(sxHead(a.id ? a.name : 'Add an account') + '<input type="hidden" id="a_id" value="' + esc(a.id) + '">' + textField('a_name', 'Name', a.name, 'e.g. Chime checking') + '<label class="tp-label">Counts as</label>' + '<div class="kindseg">' + seg('a_kind', [['spend', 'Spending'], ['save', 'Savings'], ['invest', 'Investing'], ['retire', 'Retirement'], ['loan', 'Loan']], a.kind) + '</div><div class="small muted" style="margin-top:4px">Loan: a car loan, student loan or mortgage. Type what you still owe as the balance. It counts against your net worth.</div>' +
       '<div class="fgrid">' + moneyField('a_bal', 'Balance right now', a.id ? acctBal(a.id) : '') + moneyField('a_floor', 'Cushion (don’t go below)', a.floor, 'Optional') + '</div>' +
       textField('a_match', 'Words in its balance emails (optional)', a.match, 'e.g. chime, checking') + '<div class="small muted" style="margin-top:3px">Comma-separated. All must appear in an email for Tally to use it for this account.</div>' +
       '<label class="tp-opt mt"><input type="checkbox" id="a_closed" ' + (a.closed ? 'checked' : '') + '><span><b>Closed</b><span>Keeps its history. Drops it from check-ins.</span></span></label><div id="a_err"></div><div class="acts">' + (a.id ? '<button class="tp-btn tp-danger" data-act="acctDel" data-id="' + a.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="acctSave">Save</button></div>');
@@ -3446,7 +3454,7 @@ var BANK = {
     if (!sn) { var l = lastSnap(); sn = { date: td, bal: l ? JSON.parse(JSON.stringify(l.bal || {})) : {}, cards: l && l.cards ? JSON.parse(JSON.stringify(l.cards)) : {}, cc: null, score: '', note: 'From your bank', auto: 'bank' }; Object.keys(sn.bal).forEach(function (k) { sn.bal[k] = acctBal(k); }); S.cards.forEach(function (c) { if (sn.cards[c.id] != null) sn.cards[c.id] = cardBal(c); }); S.snaps.push(sn); }
     /* several bank accounts can feed one Tally account: add them up */
     var sums = {};
-    d.accounts.forEach(function (a) { var t = mp[a.id]; if (!t || t.indexOf('new:') === 0) return; sums[t] = r2((sums[t] || 0) + (t.indexOf('c:') === 0 ? Math.abs(a.bal) : a.bal)); });
+    d.accounts.forEach(function (a) { var t = mp[a.id]; if (!t || t.indexOf('new:') === 0) return; sums[t] = r2((sums[t] || 0) + (t.indexOf('c:') === 0 || isLoanSrc(t) ? Math.abs(a.bal) : a.bal)); });
     Object.keys(sums).forEach(function (t) {
       if (t.indexOf('a:') === 0) { sn.bal[t.slice(2)] = sums[t]; sn.src = sn.src || {}; sn.src[t.slice(2)] = 'bank'; changed = true; }
       else if (t.indexOf('c:') === 0) { sn.cards = sn.cards || {}; sn.cards[t.slice(2)] = sums[t]; changed = true; }
@@ -3480,7 +3488,7 @@ var BANK = {
     if (!CK || !this.data) return; var mp = this.map();
     this.data.accounts.forEach(function (a) {
       var t = mp[a.id]; if (!t) return;
-      if (t.indexOf('a:') === 0 && CK.src[t.slice(2)] !== 'typed') { CK.bal[t.slice(2)] = r2(a.bal); CK.src[t.slice(2)] = 'From bank ' + shortDate(a.date || today()); }
+      if (t.indexOf('a:') === 0 && CK.src[t.slice(2)] !== 'typed') { CK.bal[t.slice(2)] = r2(isLoanSrc(t) ? Math.abs(a.bal) : a.bal); CK.src[t.slice(2)] = 'From bank ' + shortDate(a.date || today()); }
       if (t.indexOf('c:') === 0 && CK.src['c_' + t.slice(2)] !== 'typed') { CK.cards[t.slice(2)] = r2(Math.abs(a.bal)); CK.src['c_' + t.slice(2)] = 'From bank ' + shortDate(a.date || today()); }
     });
   }
@@ -3507,6 +3515,7 @@ function guessCat(desc) {
   for (var i = 0; i < rules.length; i++) if (rules[i][1].test(d)) return rules[i][0];
   return 'Other';
 }
+function isLoanSrc(t) { var a = t && t.indexOf('a:') === 0 ? byId(S.accounts, t.slice(2)) : null; return !!(a && a.kind === 'loan'); }
 function bankGuessMap(a) {
   var n = (a.name + ' ' + a.conn).toLowerCase(), best = '', score = 0;
   var test = function (id, name, extra) { var words = (name + ' ' + (extra || '')).toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length > 2; }), sc = 0; words.forEach(function (w) { if (n.indexOf(w) >= 0) sc++; }); if (sc > score) { score = sc; best = id; } };
@@ -3518,7 +3527,7 @@ function bankSettings() {
   var b = S.profile.bank || {}, d = BANK.data, h = '<div class="tp-sect"><span>Bank connection</span></div><div class="glass pad">';
   if (!Sync.on()) return h + '<p class="small muted mb0">Sign in first (Your account, at the top of Settings). The bank link is kept on the server with your account, not on your phone.</p></div>';
   if (!BANK.on()) return h + (b.on && CLOUD.on() ? '<p class="small" style="margin-top:0"><b>Move your bank link to your account.</b> It’s in your Google Sheet right now. In SimpleFIN, make a new setup token (Apps › New connection) and paste it here. Your matches are kept.</p>' : '') + '<p class="small" style="margin-top:0">Pull balances and transactions from your banks through <b>SimpleFIN Bridge</b> ($15/yr, read-only: it can’t move money).</p><ol class="small" style="padding-left:18px;margin:0 0 10px"><li>At bridge.simplefin.org, connect your banks.</li><li>Under <b>Apps</b>, choose <b>New connection</b> and copy the setup token.</li><li>Paste it here. It’s used once, then thrown away.</li></ol>' + textField('bk_tok', 'Setup token', '', 'Long code from SimpleFIN') + '<div id="bk_err"></div><button class="tp-btn tp-sm mt" data-act="bankConnect">Connect</button>' + (CLOUD.on() ? '' : '<p class="small muted mb0">Needs the latest Sheet script.</p>') + '</div>';
-  var mp = BANK.map(), opts = [['', 'Skip this one'], ['new:acct', '+ Add as a new account'], ['new:card', '+ Add as a new card']].concat(S.accounts.filter(function (x) { return !x.closed; }).map(function (x) { return ['a:' + x.id, x.name]; }), S.cards.filter(function (c) { return !c.off; }).map(function (c) { return ['c:' + c.id, c.name + ' (card)']; }));
+  var mp = BANK.map(), opts = [['', 'Skip this one'], ['new:acct', '+ Add as a new account'], ['new:card', '+ Add as a new card'], ['new:loan', '+ Add as a new loan']].concat(S.accounts.filter(function (x) { return !x.closed; }).map(function (x) { return ['a:' + x.id, x.name]; }), S.cards.filter(function (c) { return !c.off; }).map(function (c) { return ['c:' + c.id, c.name + ' (card)']; }));
   h += '<div class="flex" style="justify-content:space-between;align-items:center"><span class="small">' + (d && d.at ? 'Updated ' + new Date(d.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not refreshed yet') + '</span><button class="tp-btn tp-sm" data-act="bankRefresh">' + (BANK.busy ? 'Refreshing…' : 'Refresh now') + '</button></div>';
   if (BANK.err) h += '<div class="tp-err">' + esc(BANK.err) + '</div>';
   var berr = ((d && d.errors) || []).filter(function (e) { return !/recommended range|may be capped/i.test(String(e)); }); /* a notice about long history pulls, not a problem */
@@ -3557,11 +3566,12 @@ ACT.bankMapSave = function () {
   var mp = {}, made = 0, accts = (BANK.data && BANK.data.accounts) || [];
   $all('[data-bkmap]').forEach(function (sel) {
     var id = sel.getAttribute('data-bkmap'), v = sel.value, a = accts.filter(function (x) { return x.id === id; })[0] || { name: 'Account', conn: '' };
-    if (v === 'new:acct') { var nm = a.name, low = (a.name + ' ' + a.conn).toLowerCase(), kind = /saving|reserve|money market|hysa/.test(low) ? 'save' : /401|ira|roth|retire/.test(low) ? 'retire' : /brokerage|invest|stock|robo|etf|crypto|robinhood|fidelity|schwab|vanguard|webull|acorns|betterment|wealthfront/.test(low) ? 'invest' : 'spend', na = { id: 'a' + uid(), name: nm, kind: kind, match: '' }; S.accounts.push(na); v = 'a:' + na.id; made++; }
+    if (v === 'new:loan') { var nl = { id: 'a' + uid(), name: a.name, kind: 'loan', match: '' }; S.accounts.push(nl); v = 'a:' + nl.id; made++; }
+    else if (v === 'new:acct') { var nm = a.name, low = (a.name + ' ' + a.conn).toLowerCase(), kind = /saving|reserve|money market|hysa/.test(low) ? 'save' : /401|ira|roth|retire/.test(low) ? 'retire' : /brokerage|invest|stock|robo|etf|crypto|robinhood|fidelity|schwab|vanguard|webull|acorns|betterment|wealthfront/.test(low) ? 'invest' : 'spend', na = { id: 'a' + uid(), name: nm, kind: kind, match: '' }; S.accounts.push(na); v = 'a:' + na.id; made++; }
     else if (v === 'new:card') { var nc = { id: 'k' + uid(), name: a.name, color: 'charcoal', perk: '', use: '', stmtDay: '', dueDay: '', limit: '', match: '' }; S.cards.push(nc); v = 'c:' + nc.id; made++; }
     mp[id] = v;
   });
-  if (made) toast('Added ' + made + '. Open each new card on the Cards tab to set its statement and due days.'); S.profile.bank.map = mp; save(true); BANK.apply(); toast('Saved. Balances updated from your bank.'); };
+  if (made) toast('Added ' + made + '. For a new card, open it on the Cards tab to set its statement and due days.'); S.profile.bank.map = mp; save(true); BANK.apply(); toast('Saved. Balances updated from your bank.'); };
 ACT.bankHistory = function () {
   TP.busy(true, 'Bringing in older purchases', 'Going back 90 days at a time. This can take a minute.');
   BANK.call('history', { days: 365 }).then(function (j) {
@@ -3773,7 +3783,7 @@ function aiContext() {
     spentNotCountingBills: { thisWeek: sumAmt(everyday(weekStartOf(td), td)), thisMonth: sumAmt(everyday(monthStart(td), td)) },
     beforeNextPayday: { until: st.end, checkingNow: st.cash, payComing: st.pays, billsAndCardPaymentsDue: st.due.total, spare: st.room, due: st.due.list.map(function (x) { return { what: x.e.title, date: x.e.date, amount: x.amt }; }) },
     lowestCheckingNext30Days: low ? { amount: low.y, date: low.d } : null,
-    accounts: S.accounts.filter(function (a) { return !a.closed; }).map(function (a) { return { name: a.name, type: { spend: 'checking/spending', save: 'savings', invest: 'investing', retire: 'retirement' }[a.kind] || a.kind, balance: acctBal(a.id), cushion: +a.floor || 0 }; }),
+    accounts: S.accounts.filter(function (a) { return !a.closed; }).map(function (a) { return { name: a.name, type: { spend: 'checking/spending', save: 'savings', invest: 'investing', retire: 'retirement', loan: 'loan (balance is the amount still owed)' }[a.kind] || a.kind, balance: acctBal(a.id), cushion: +a.floor || 0 }; }),
     cards: S.cards.filter(function (c) { return !c.off; }).map(function (c) { return { name: c.name, balance: cardBal(c), limit: +c.limit || 'none', statementClosesDay: c.stmtDay || '', dueDay: c.dueDay || '', earns: c.perk || '', fixedMonthlyPayment: +c.fixedPay || 0 }; }),
     bills: S.bills.map(function (b) { return { name: b.name, amount: +b.amount, every: billEveryLabel(b), day: b.day || b.next || '', paidFrom: b.account || '', paused: !!b.off }; }),
     goals: S.goals.map(function (g) { return { name: g.name, type: g.kind, target: +g.target, progress: g.kind === 'payoff' ? { stillOwed: goalOwed(g) } : { saved: goalNow(g) }, targetDate: g.due || '', setMonthly: +g.monthly || 0, summary: goalLine(g) }; }),
@@ -3853,8 +3863,8 @@ ACT.srcTx = function (d) {
   var src = d.a, isCard = src.indexOf('c:') === 0, o = isCard ? byId(S.cards, src.slice(2)) : byId(S.accounts, src.slice(2)); if (!o) return;
   var td = today(), list = (S.txns || []).filter(function (x) { return x.src === src; }).sort(function (a, b) { return (b.at || b.date) < (a.at || a.date) ? -1 : 1; }), mo = sumAmt(list.filter(function (x) { return x.date >= monthStart(td); }));
   var spendable = isCard || o.kind === 'spend' || o.kind === 'save';
-  sheet(sxHead(o.name) + '<div class="kv"><span>' + (isCard ? 'Balance' : 'Balance now') + '</span><b>' + money(isCard ? cardBal(o) : acctBal(o.id), 1) + '</b></div>' + (spendable ? '<div class="kv"><span>Spent in ' + MONTHS[parseD(td).getMonth()] + '</span><b>' + money(mo, 1) + '</b></div>' : '') +
-    '<label class="tp-label">Recent purchases</label>' + (list.length ? '<div class="glass">' + list.slice(0, 30).map(function (x) { return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc(x.cat || 'Other') + (x.ext || x.bank ? ' · bank' : '') + (x.shared ? ' · <span class="togtag">Together</span>' : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>'; }).join('') + '</div>' : '<p class="small muted">' + (spendable ? 'No purchases yet. They show up here from your bank, or when you log one with +.' : 'Purchases don’t come out of this kind of account. Its balance history is on the chart above the list.') + '</p>') +
+  sheet(sxHead(o.name) + '<div class="kv"><span>' + (isCard ? 'Balance' : o.kind === 'loan' ? 'Still owed' : 'Balance now') + '</span><b>' + money(isCard ? cardBal(o) : acctBal(o.id), 1) + '</b></div>' + (spendable ? '<div class="kv"><span>Spent in ' + MONTHS[parseD(td).getMonth()] + '</span><b>' + money(mo, 1) + '</b></div>' : '') +
+    '<label class="tp-label">Recent purchases</label>' + (list.length ? '<div class="glass">' + list.slice(0, 30).map(function (x) { return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc(x.cat || 'Other') + (x.ext || x.bank ? ' · bank' : '') + (x.shared ? ' · <span class="togtag">Together</span>' : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>'; }).join('') + '</div>' : '<p class="small muted">' + (spendable ? 'No purchases yet. They show up here from your bank, or when you log one with +.' : (o.kind === 'loan' ? 'This is a loan. Tally tracks what you still owe. Add its monthly payment under Bills so it shows on your calendar.' : 'Purchases don’t come out of this kind of account. Its balance history is on the chart above the list.')) + '</p>') +
     '<div class="acts">' + (list.length > 30 ? '<button class="tp-btn tp-ghost" data-act="srcAll" data-a="' + esc(src) + '">See all ' + list.length + '</button>' : list.length ? '<button class="tp-btn tp-ghost" data-act="srcAll" data-a="' + esc(src) + '">Open in Spending</button>' : '') + '<button class="tp-btn tp-ghost" data-act="' + (isCard ? 'cardEdit' : 'acctEdit') + '" data-id="' + o.id + '">Settings</button></div>');
 };
 ACT.srcAll = function (d) { closeSheet(); SPV = { range: 'm3', src: d.a, cat: '', more: 0 }; VIEW = 'spending'; render(); };
@@ -3866,7 +3876,7 @@ var INTRX = /interest charge|purchase interest|interest charged|finance charge|c
 var FEERX = /late fee|late payment fee|annual (membership )?fee|membership fee|overdraft|nsf fee|insufficient funds|atm fee|atm surcharge|foreign trans|intl trans|international trans|service fee|service charge|maintenance fee|monthly fee|returned (payment|item)|cash advance fee|balance transfer fee|wire fee|paper statement/i;
 var XFERRX = /transfer|xfer|from savings|to savings|from checking|to checking|round ?up|payment thank|payment received|credit card pmt|card payment|cash ?out|standard transfer|instant transfer/i;
 var _bankSkip4 = bankSkip;
-bankSkip = function (desc, src) { return INTRX.test(desc || '') || FEERX.test(desc || '') || _bankSkip4(desc, src); };
+bankSkip = function (desc, src) { return isLoanSrc(src) || INTRX.test(desc || '') || FEERX.test(desc || '') || _bankSkip4(desc, src); }; /* loan activity is payments and interest, not purchases */
 function bankExtras(d) {
   d = d || BANK.data; if (!d || !d.accounts) return 0;
   var mp = BANK.map(), haveC = {}, haveI = {}, n = 0; S.costs = S.costs || []; S.inflows = S.inflows || [];
