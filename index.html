@@ -805,7 +805,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.20.3';
+var APP_VERSION = '2026.11.20.4';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -3521,7 +3521,8 @@ function bankSettings() {
   var mp = BANK.map(), opts = [['', 'Skip this one'], ['new:acct', '+ Add as a new account'], ['new:card', '+ Add as a new card']].concat(S.accounts.filter(function (x) { return !x.closed; }).map(function (x) { return ['a:' + x.id, x.name]; }), S.cards.filter(function (c) { return !c.off; }).map(function (c) { return ['c:' + c.id, c.name + ' (card)']; }));
   h += '<div class="flex" style="justify-content:space-between;align-items:center"><span class="small">' + (d && d.at ? 'Updated ' + new Date(d.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'Not refreshed yet') + '</span><button class="tp-btn tp-sm" data-act="bankRefresh">' + (BANK.busy ? 'Refreshing…' : 'Refresh now') + '</button></div>';
   if (BANK.err) h += '<div class="tp-err">' + esc(BANK.err) + '</div>';
-  if (d && d.errors && d.errors.length) h += '<div class="tp-err">SimpleFIN: ' + esc(d.errors.join('; ')) + '</div>';
+  var berr = ((d && d.errors) || []).filter(function (e) { return !/recommended range|may be capped/i.test(String(e)); }); /* a notice about long history pulls, not a problem */
+  if (berr.length) h += '<div class="tp-err">SimpleFIN: ' + esc(berr.join('; ')) + '</div>';
   if (d && d.accounts) h += '<label class="tp-label">Match each bank account to Tally</label>' + d.accounts.map(function (a) { var cur = mp[a.id] != null ? mp[a.id] : ''; return '<div class="bkrow"><span><b>' + esc(a.name) + '</b><span class="small muted">' + esc(a.conn) + ' · ' + money(a.bal, 1) + '</span></span><select class="tp-input" data-bkmap="' + esc(a.id) + '">' + opts.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select></div>'; }).join('') + '<button class="tp-btn tp-sm mt" data-act="bankMapSave">Save matches</button>';
   if (CLOUD.on()) h += '<div class="tp-row static" style="padding-left:0;padding-right:0"><span class="tp-t"><b>Older history</b><span>' + (b.histFrom ? 'Purchases go back to ' + shortDate(b.histFrom) + ' (' + parseD(b.histFrom).getFullYear() + '). That’s as far as your banks share.' : 'Bring in up to a year of past purchases, as far back as each bank shares. Run it once.') + '</span></span><button class="tp-btn tp-ghost tp-sm" data-act="bankHistory">' + (b.histFrom ? 'Run again' : 'Bring it in') + '</button></div>';
   h += '<p class="small muted">Refreshes when you open Tally (every 6 hours at most) and when you check in. Purchases come into Spending with a category guess you can change. Card payments and transfers are skipped.</p><button class="tp-btn tp-ghost tp-sm" data-act="bankOff" data-label="Disconnect bank">Disconnect bank</button></div>';
