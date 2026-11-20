@@ -779,6 +779,16 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .mpop-r{display:flex;justify-content:space-between;gap:12px;width:100%;background:none;border:0;border-top:1px solid var(--tp-line2);padding:10px 4px;min-height:44px;align-items:center;color:var(--tp-ink);font:500 14.5px var(--tp-font);text-align:left;cursor:pointer}
 .mpop-r b{font-family:var(--tp-display);font-variant-numeric:tabular-nums}
 .mpop-t{display:flex;justify-content:space-between;border-top:1px solid var(--tp-line2);padding:8px 4px 4px;font-size:13px;color:var(--tp-ink2)}
+/* money in vs out */
+.iolegend{display:flex;gap:14px;margin-bottom:8px}
+.iolegend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.io-in{background:var(--c2)!important} .io-out{background:var(--c1)!important}
+.iorow{padding:10px 0;border-top:1px solid var(--tp-line2)}
+.iorow:first-of-type{border-top:0}
+.iol{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin-bottom:6px}
+.iol span{font-size:12.5px;color:var(--tp-ink2)} .iol .io-neg{color:var(--warn);font-weight:600}
+.iob{display:flex;align-items:center;gap:10px;margin-top:5px}
+.iob .bar{flex:1} .iob em{font-style:normal;font-size:12.5px;width:64px;text-align:right;font-variant-numeric:tabular-nums}
 
 </style>
 </head>
@@ -789,7 +799,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.20.1';
+var APP_VERSION = '2026.11.20.2';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -3843,6 +3853,101 @@ ACT.srcTx = function (d) {
 ACT.srcAll = function (d) { closeSheet(); SPV = { range: 'm3', src: d.a, cat: '', more: 0 }; VIEW = 'spending'; render(); };
 
 ACT.billDot = billDotTap;
+
+/* ---------- interest, fees, and money in vs out (from the bank feed) ---------- */
+var INTRX = /interest charge|purchase interest|interest charged|finance charge|cash advance interest|interest on (purchases|cash|balance)/i;
+var FEERX = /late fee|late payment fee|annual (membership )?fee|membership fee|overdraft|nsf fee|insufficient funds|atm fee|atm surcharge|foreign trans|intl trans|international trans|service fee|service charge|maintenance fee|monthly fee|returned (payment|item)|cash advance fee|balance transfer fee|wire fee|paper statement/i;
+var XFERRX = /transfer|xfer|from savings|to savings|from checking|to checking|round ?up|payment thank|payment received|credit card pmt|card payment|cash ?out|standard transfer|instant transfer/i;
+var _bankSkip4 = bankSkip;
+bankSkip = function (desc, src) { return INTRX.test(desc || '') || FEERX.test(desc || '') || _bankSkip4(desc, src); };
+function bankExtras(d) {
+  d = d || BANK.data; if (!d || !d.accounts) return 0;
+  var mp = BANK.map(), haveC = {}, haveI = {}, n = 0; S.costs = S.costs || []; S.inflows = S.inflows || [];
+  S.costs.forEach(function (x) { haveC[x.ext] = 1; }); S.inflows.forEach(function (x) { haveI[x.ext] = 1; });
+  d.accounts.forEach(function (a) {
+    var src = mp[a.id]; if (!src || src.indexOf('new:') === 0) return;
+    var acct = src.indexOf('a:') === 0 ? byId(S.accounts, src.slice(2)) : null;
+    (a.txns || []).forEach(function (t) {
+      var key = a.id + ':' + t.id, desc = String(t.desc || '');
+      if (t.amt < 0) {
+        var kind = INTRX.test(desc) ? 'interest' : FEERX.test(desc) ? 'fee' : ''; if (!kind || haveC[key]) return;
+        haveC[key] = 1; S.costs.push({ id: 'k' + uid(), ext: key, date: t.date, amt: r2(-t.amt), src: src, kind: kind, note: cleanDesc(desc) }); n++;
+      } else if (t.amt > 0 && acct && (acct.kind === 'spend' || acct.kind === 'save') && !haveI[key] && !XFERRX.test(desc)) {
+        haveI[key] = 1; S.inflows.push({ id: 'i' + uid(), ext: key, date: t.date, amt: r2(t.amt), src: src, note: cleanDesc(desc) }); n++;
+      }
+    });
+  });
+  /* fees that came in as purchases before this existed: move them over */
+  var moved = (S.txns || []).filter(function (x) { return x.ext && haveC[x.ext]; }); if (moved.length) S.txns = S.txns.filter(function (x) { return !(x.ext && haveC[x.ext]); });
+  return n;
+}
+var _imp4 = BANK.importTxns;
+BANK.importTxns = function (d0, since0) { try { bankExtras(d0); } catch (e) {} return _imp4.call(this, d0, since0); };
+
+function costsIn(from, to, kind) { return (S.costs || []).filter(function (x) { return x.date >= from && x.date <= to && (!kind || x.kind === kind); }); }
+function yearStart(d) { return d.slice(0, 4) + '-01-01'; }
+ACT.costsSheet = function () {
+  var td = today(), list = costsIn(yearStart(td), td).sort(function (a, b) { return a.date < b.date ? 1 : -1; }), by = {};
+  list.forEach(function (x) { var o = by[x.src] = by[x.src] || { i: 0, f: 0 }; o[x.kind === 'interest' ? 'i' : 'f'] += +x.amt; });
+  var bf = bankFrom(), first = (S.costs || []).reduce(function (m, x) { return !m || x.date < m ? x.date : m; }, '');
+  sheet(sxHead('Interest and fees in ' + td.slice(0, 4)) +
+    '<div class="kv"><span>Interest</span><b>' + money(sumAmt(list.filter(function (x) { return x.kind === 'interest'; })), 1) + '</b></div><div class="kv"><span>Fees</span><b>' + money(sumAmt(list.filter(function (x) { return x.kind === 'fee'; })), 1) + '</b></div>' +
+    (Object.keys(by).length > 1 ? '<label class="tp-label">By card or account</label>' + Object.keys(by).sort(function (a, b) { return by[b].i + by[b].f - by[a].i - by[a].f; }).map(function (k) { return '<div class="kv"><span>' + esc(srcName(k)) + '</span><b>' + money(by[k].i + by[k].f, 1) + '</b></div>'; }).join('') : '') +
+    '<label class="tp-label">Each charge</label>' + (list.length ? '<div class="glass">' + list.slice(0, 40).map(function (x) { return '<div class="tp-row static">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || (x.kind === 'interest' ? 'Interest' : 'Fee')) + '</b><span>' + esc((x.kind === 'interest' ? 'Interest' : 'Fee') + ' · ' + srcName(x.src)) + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></div>'; }).join('') + '</div>' : '<p class="small muted">None found.</p>') +
+    '<p class="small muted">Read from your bank’s transaction list' + (first ? ', going back to ' + shortDate(first) + ' ' + first.slice(0, 4) : '') + '. Tally can only see as far back as your bank shares. To reach further back, use “Older history” in Settings › Bank connection.</p>' +
+    '<div class="acts"><button class="tp-btn" data-act="close">Done</button></div>');
+};
+var _cards5 = PAGES.cards;
+PAGES.cards = function () {
+  var h = _cards5(), td = today(), list = costsIn(yearStart(td), td); if (!list.length) return h;
+  var i = sumAmt(list.filter(function (x) { return x.kind === 'interest'; })), f = sumAmt(list.filter(function (x) { return x.kind === 'fee'; }));
+  var row = '<button class="glass tp-row cta tp-rise" data-act="costsSheet"><span class="tp-tile cd-due">' + TP.svg('receipt') + '</span><span class="tp-t"><b>' + money(i + f) + ' in interest and fees this year</b><span>' + (i ? 'Interest ' + money(i) : '') + (i && f ? ' · ' : '') + (f ? 'Fees ' + money(f) : '') + ' · tap to see each one</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+  var at = h.indexOf('<div class="tp-sect"><span>Your cards</span>'); return at >= 0 ? h.slice(0, at) + row + h.slice(at) : h + row;
+};
+
+/* money in vs out, by month: bank deposits against everything spent */
+function inOut(n) {
+  var td = today(), inf = S.inflows || []; if (!inf.length) return [];
+  var first = inf.reduce(function (m, x) { return !m || x.date < m ? x.date : m; }, ''), bf = bankFrom() || first, from = first < bf ? first : bf;
+  return monthsBack(td, n || 6).map(function (m) {
+    m = monthStart(m); var end = m === monthStart(td) ? td : monthEnd(m); if (end < from) return null;
+    var win = sumAmt(inf.filter(function (x) { return x.date >= m && x.date <= end; })), out = r2(sumAmt((S.txns || []).filter(function (x) { return x.date >= m && x.date <= end; })) + sumAmt(costsIn(m, end)));
+    return { m: m, 'in': win, out: out, net: r2(win - out), part: m === monthStart(td) || (m === monthStart(from) && from > addDays(m, 5)) };
+  }).filter(Boolean).sort(function (a, b) { return a.m < b.m ? -1 : 1; });
+}
+function inOutCard() {
+  var rows = inOut(6); if (!rows.length) return '';
+  var mx = Math.max.apply(null, rows.map(function (r) { return Math.max(r['in'], r.out); })) || 1, td = today();
+  return '<div class="tp-sect"><span>Money in vs out</span></div><div class="glass pad"><div class="iolegend small muted"><span><i class="io-in"></i>Came in</span><span><i class="io-out"></i>Went out</span></div>' +
+    rows.map(function (r) { var d = parseD(r.m); return '<div class="iorow"><div class="iol"><b>' + MON[d.getMonth()] + (r.m === monthStart(td) ? ' so far' : r.part ? ' (partial)' : '') + '</b><span class="' + (r.net < 0 ? 'io-neg' : 'io-pos') + '">' + (r.net < 0 ? 'Spent ' + money(-r.net) + ' more than came in' : 'Kept ' + money(r.net)) + '</span></div>' +
+      '<div class="iob"><span class="bar thin"><i class="io-in" style="width:' + (r['in'] / mx * 100).toFixed(1) + '%"></i></span><em>' + money(r['in']) + '</em></div><div class="iob"><span class="bar thin"><i class="io-out" style="width:' + (r.out / mx * 100).toFixed(1) + '%"></i></span><em>' + money(r.out) + '</em></div></div>'; }).join('') +
+    '<p class="small muted mb0">In is deposits to your bank accounts. Out is every purchase, bill, interest charge and fee. Moving money between your own accounts and paying a card aren’t counted. Money that goes straight to savings or a 401(k) from your paycheck never shows as “in”.</p></div>';
+}
+var _spend5 = spendingPage;
+spendingPage = function () { var h = _spend5(); return SPV.src === 'all' && !SPV.cat ? h + inOutCard() : h; };
+PAGES.spending = spendingPage;
+
+var _smart5 = smartItems;
+smartItems = function () {
+  var out = _smart5(), td = today(), add = function (o) { if (!smartOff(o.key)) out.push(o); };
+  costsIn(addDays(td, -35), td, 'fee').forEach(function (x) { add({ key: 'fee:' + x.ext, tone: 'warn', icon: 'bell', title: 'Fee charged: ' + (x.note || 'Fee') + ' ' + money(+x.amt, 1), text: srcName(x.src) + ' on ' + shortDate(x.date) + '. If it was a late or overdraft fee, call and ask them to waive it. Banks often do the first time.', btn: 'See fees', run: function () { ACT.costsSheet(); } }); });
+  var ints = costsIn(addDays(td, -35), td, 'interest'), bySrc = {};
+  ints.forEach(function (x) { bySrc[x.src] = r2((bySrc[x.src] || 0) + +x.amt); });
+  Object.keys(bySrc).forEach(function (k) { var yr = sumAmt(costsIn(yearStart(td), td, 'interest').filter(function (x) { return x.src === k; })); add({ key: 'int:' + k + td.slice(0, 7), tone: 'info', icon: 'trend', title: srcName(k) + ' charged ' + money(bySrc[k], 1) + ' in interest', text: money(yr, 1) + ' so far this year on this card. Every dollar you pay above the minimum lowers next month’s interest.', btn: 'See interest', run: function () { ACT.costsSheet(); } }); });
+  var io = inOut(4).filter(function (r) { return !r.part; }), last = io[io.length - 1];
+  if (last && last['in'] > 0 && last.out > last['in'] * 1.05) add({ key: 'io:' + last.m, tone: 'info', icon: 'chart', title: 'You spent more than came in during ' + MONTHS[parseD(last.m).getMonth()], text: money(last.out) + ' went out and ' + money(last['in']) + ' came in. The gap came from savings or went on cards.', btn: 'See in vs out', run: function () { SPV = { range: 'month', src: 'all', cat: '', more: 0 }; VIEW = 'spending'; render(); } });
+  var rank = { warn: 0, todo: 1, info: 2 }; out.sort(function (a, b) { return rank[a.tone] - rank[b.tone]; });
+  return out;
+};
+var _ctx5 = aiContext;
+aiContext = function () {
+  var c = _ctx5(), td = today();
+  try {
+    var yc = costsIn(yearStart(td), td); if (yc.length) { var byc = {}; yc.forEach(function (x) { var k = srcName(x.src) + ' ' + x.kind; byc[k] = r2((byc[k] || 0) + +x.amt); }); c.interestAndFeesThisYear = byc; }
+    var io = inOut(6); if (io.length) c.moneyInVsOutByMonth = io.map(function (r) { return { month: r.m.slice(0, 7), cameIn: Math.round(r['in']), wentOut: Math.round(r.out), partialMonth: !!r.part }; });
+  } catch (e) {}
+  return c;
+};
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
