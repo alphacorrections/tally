@@ -755,6 +755,16 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .ccard>.rowgear{top:10px;right:10px;transform:none;background:rgba(0,0,0,.28);color:#fff;border-color:rgba(255,255,255,.25)}
 .ccard .face .top2{padding-right:44px}
 
+/* where a balance comes from */
+.srct{font-weight:600;white-space:nowrap}
+.srct svg{vertical-align:-1px;margin-right:3px}
+.srct.bank{color:var(--hi)}
+.srct.you{opacity:.85}
+.srct svg{width:11px;height:11px;flex:none}
+.srct .bkdot{margin-right:4px}
+.srcleg{margin:0 2px 10px;line-height:1.55}
+.ckc-h .bkdot{margin-right:4px}
+
 </style>
 </head>
 <body class="tp-page">
@@ -764,7 +774,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.19.4';
+var APP_VERSION = '2026.11.19.5';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -2030,6 +2040,7 @@ PAGES.accounts = function () {
     (pts.length > 1 ? lineChart('nw', [{ name: V.label, color: 'var(--c1)', pts: pts.map(function (s) { return { t: +parseD(s.date), y: val(s), note: s.note }; }) }], { h: 150, label: V.label + ' over time' }) : '<p class="small muted">The chart fills in as you check in.</p>') +
     '<div class="chips mt">' + [['3m', '3M'], ['year', '1Y'], ['all', 'All']].map(function (r) { return '<button class="chip ' + (NW_RANGE === r[0] ? 'on' : '') + '" data-act="nwRange" data-a="' + r[0] + '">' + r[1] + '</button>'; }).join('') + '</div>' +
     (S.profile.chartNote && NW_RANGE === 'all' && !V.kinds ? '<p class="small muted mb0">' + esc(S.profile.chartNote) + '</p>' : '') + '</div>';
+  if (bankFed('x') != null) h += '<p class="srcleg small muted"><span class="srct bank"><i class="bkdot"></i>From your bank</span> updates by itself, about once a day. <span class="srct you">' + TP.svg('pencil') + 'You update</span> changes only when you type it in, at check-in or with the gear.</p>';
   [['Cash', ['spend', 'save']], ['Investing', ['invest', 'retire']]].forEach(function (g) {
     var list = S.accounts.filter(function (a) { return !a.closed && g[1].indexOf(a.kind) >= 0; }), tot = list.reduce(function (t, a) { return t + acctBal(a.id); }, 0);
     h += '<div class="tp-sect"><span>' + g[0] + '</span><span class="sp"></span><span>' + money(tot) + '</span></div><div class="glass">' + (list.length ? list.map(acctRow).join('') : '<div class="empty">None yet.</div>') + '</div>';
@@ -2045,11 +2056,22 @@ PAGES.accounts = function () {
   return h;
 };
 function acctRow(a) {
-  var b = acctBal(a.id), src = acctSource(a.id), sub = KIND_NAME[a.kind] + (src ? ' · ' + src : ''), extra = '';
+  var b = acctBal(a.id), src = acctSource(a.id), fed = bankFed('a:' + a.id), sub = fed == null ? KIND_NAME[a.kind] : '', extra = '', cush = '';
   if (a.floor && (a.kind === 'save' || a.kind === 'spend')) { var free = b - a.floor; sub += ' · ' + (free >= 0 ? money(free) + ' above cushion' : money(-free) + ' under cushion'); extra = '<span class="bar thin cush" style="margin-top:6px"><i style="width:' + Math.min(100, b / Math.max(b, a.floor * 1.5) * 100).toFixed(1) + '%' + (free < 0 ? ';background:var(--warn)' : '') + '"></i><em style="left:' + Math.min(100, a.floor / Math.max(b, a.floor * 1.5) * 100).toFixed(1) + '%"></em></span>'; }
-  return '<div class="rowwrap"><button class="tp-row" data-act="srcTx" data-a="a:' + a.id + '"><span class="tp-tile">' + esc(a.name.charAt(0).toUpperCase()) + '</span><span class="tp-t"><b>' + esc(a.name) + '</b><span>' + esc(sub) + '</span>' + extra + '</span><span class="amt">' + money(b) + '</span></button><button class="ibtn sm rowgear" data-act="acctEdit" data-id="' + a.id + '" aria-label="Settings for ' + esc(a.name) + '">' + TP.svg('gear') + '</button></div>';
+  return '<div class="rowwrap"><button class="tp-row" data-act="srcTx" data-a="a:' + a.id + '"><span class="tp-tile">' + esc(a.name.charAt(0).toUpperCase()) + '</span><span class="tp-t"><b>' + esc(a.name) + '</b><span>' + (fed == null ? esc(sub) + srcTag(fed, src) : srcTag(fed, src).slice(3) + esc(sub)) + '</span>' + extra + '</span><span class="amt">' + money(b) + '</span></button><button class="ibtn sm rowgear" data-act="acctEdit" data-id="' + a.id + '" aria-label="Settings for ' + esc(a.name) + '">' + TP.svg('gear') + '</button></div>';
 }
-function acctSource(id) { for (var i = S.snaps.length - 1; i >= 0; i--) { var s = S.snaps[i]; if (s.bal && s.bal[id] != null) return (s.src && s.src[id] === 'email' ? 'from email ' : 'updated ') + shortDate(s.date); } return ''; }
+/* where a number comes from: the bank feed, or you */
+function bankFed(t) { if (typeof BANK === 'undefined' || !BANK.on()) return null; var mp = BANK.map(), hit = false; Object.keys(mp).forEach(function (k) { if (mp[k] === t) hit = true; }); return hit; }
+function srcTag(fed, src) { var d = src.replace(/^updated |^from email /, ''); if (fed == null) return src ? ' · ' + esc(src) : ''; return ' · ' + (fed ? '<span class="srct bank"><i class="bkdot"></i>From bank' + (d ? ' · ' + esc(d) : '') + '</span>' : '<span class="srct you">' + TP.svg('pencil') + 'You update' + (d ? ' · last ' + esc(d) : '') + '</span>'); }
+/* a bank pull copies every balance into today's snapshot; don't call the copied ones "updated today" */
+function acctSource(id) {
+  for (var i = S.snaps.length - 1; i >= 0; i--) {
+    var s = S.snaps[i]; if (!s.bal || s.bal[id] == null) continue;
+    if (s.auto === 'bank' && !(s.src && s.src[id])) { var p = null; for (var j = i - 1; j >= 0; j--) if (S.snaps[j].bal && S.snaps[j].bal[id] != null) { p = S.snaps[j]; break; } if (p && r2(p.bal[id]) === r2(s.bal[id])) continue; }
+    return (s.src && s.src[id] === 'email' ? 'from email ' : 'updated ') + shortDate(s.date);
+  }
+  return '';
+}
 
 /* ---------- cards ---------- */
 PAGES.cards = function () {
@@ -2062,13 +2084,14 @@ PAGES.cards = function () {
   eventsBetween(td, addDays(td, 6)).forEach(function (e) { if (tipC || e.type !== 'stmt') return; var c = byId(S.cards, e.card); if (c && c.limit && cardBal(c) / c.limit > .3) tipC = { c: c, e: e, pay: Math.ceil((cardBal(c) - c.limit * .3) / 50) * 50 }; });
   if (tipC) h += '<div class="solid tp-rise"><b>Tip:</b> ' + esc(tipC.c.name) + ' closes ' + DOW[parseD(tipC.e.date).getDay()] + '. Paying ' + money(tipC.pay) + ' before then keeps it under 30% on your credit report.</div>';
   h += '<div class="tp-sect"><span>Your cards</span><span class="sp"></span><button data-act="cardEdit">+ Add card</button></div>';
+  if (bankFed('x') != null) h += '<p class="srcleg small muted">Balances with <i class="bkdot"></i> come from your bank. The rest change only when you type them in. Statement amounts are always yours to enter.</p>';
   if (!S.cards.length) return h + '<div class="glass"><div class="empty">Add each card once. Tally asks for its statement and due days, then reminds you before both.<br><button class="tp-btn tp-sm" data-act="cardEdit">Add a card</button></div></div>';
   S.cards.filter(function (c) { return !c.off; }).forEach(function (c, i) {
     var f = cardFace(c), b = cardBal(c), evs = eventsBetween(td, addDays(td, 40)), nd = evs.filter(function (e) { return e.card === c.id && e.type === 'due'; })[0], ns = evs.filter(function (e) { return e.card === c.id && e.type === 'stmt'; })[0];
     var pct = c.limit ? Math.min(100, b / c.limit * 100) : 0;
     var due = nextDueDate(c.dueDay, td), sto = stmtFor(c.id, due);
     h += '<div class="ccard tp-rise" style="--i:' + i + '"><button class="ibtn sm rowgear" data-act="cardEdit" data-id="' + c.id + '" aria-label="Settings for ' + esc(c.name) + '">' + TP.svg('gear') + '</button><button class="ccmain" data-act="srcTx" data-a="c:' + c.id + '"><span class="face' + (f.lt ? ' lt' : '') + '" style="' + f.style + '"><span class="top2"><b>' + esc(c.name) + '</b>' + (nd ? pillDays(daysBetween(td, nd.date), nd.st === 'paid').replace('tp-plain', 'light') : '') + '</span><span>' + esc([c.use ? 'Use for ' + c.use : '', c.perk].filter(Boolean).join(' · ') || 'Tap the gear to add what it’s best for') + '</span></span>' +
-      '<span class="body"><span class="flex" style="justify-content:space-between"><span class="small muted">Balance' + (c.limit ? ' · ' + Math.round(pct) + '% of ' + moneyK(c.limit) : '') + '</span><b class="disp" style="font-size:20px">' + money(b) + '</b></span>' + (c.limit ? '<span class="bar thin"><i style="width:' + pct.toFixed(1) + '%;' + (pct >= 30 ? 'background:var(--warn)' : '') + '"></i></span>' : '') +
+      '<span class="body"><span class="flex" style="justify-content:space-between"><span class="small muted">' + (bankFed('c:' + c.id) ? '<i class="bkdot"></i>' : '') + 'Balance' + (bankFed('c:' + c.id) == null ? '' : bankFed('c:' + c.id) ? ' from your bank' : ' · you update') + (c.limit ? ' · ' + Math.round(pct) + '% of ' + moneyK(c.limit) : '') + '</span><b class="disp" style="font-size:20px">' + money(b) + '</b></span>' + (c.limit ? '<span class="bar thin"><i style="width:' + pct.toFixed(1) + '%;' + (pct >= 30 ? 'background:var(--warn)' : '') + '"></i></span>' : '') +
       '<span class="row2"><span>Statement closes<b>' + (ns ? DOW[parseD(ns.date).getDay()] + ', ' + shortDate(ns.date) : (c.stmtDay ? 'the ' + ordinal(c.stmtDay) : 'Not set')) + '</b></span><span>Payment due<b>' + (nd ? DOW[parseD(nd.date).getDay()] + ', ' + shortDate(nd.date) : (c.dueDay ? 'the ' + ordinal(c.dueDay) : 'Not set')) + '</b></span></span></span></button>' +
       (due ? '<button class="ccstmt' + (sto ? '' : ' need') + '" data-act="stmt" data-card="' + c.id + '" data-ym="' + due.slice(0, 7) + '"><span>' + (sto ? 'Statement due ' + shortDate(due) + (sto.st === 'paid' ? ' · paid' : sto.plan !== '' && sto.plan != null && +sto.plan !== +sto.amt ? ' · paying ' + money(+sto.plan, 1) : +c.fixedPay ? ' · paying ' + money(Math.min(+c.fixedPay, +sto.amt), 1) : '') : 'Add the statement balance due ' + shortDate(due)) + '</span><b>' + (sto ? money(+sto.amt, 1) : '+') + '</b></button>' : '') + cycleLine(c) + (+c.fixedPay ? (function () { var po = payoffMonth(c); return '<button class="ccstmt cyc" data-act="cardEdit" data-id="' + c.id + '"><span>Paying ' + money(+c.fixedPay) + ' a month' + (po ? ' \u00b7 paid off around ' + po.label + ' (' + po.months + ' payments)' : '') + '</span><b>' + TP.svg('pencil') + '</b></button>'; })() : '') + '</div>';
   });
@@ -2299,12 +2322,18 @@ PAGES.checkin = function () {
   if (!CK) ckInit();
   var st = CK.step, h = '<div class="sxhead flowhead"><button class="ibtn" data-act="ckBack" aria-label="' + (st && st < 3 ? 'Back' : 'Close') + '">' + TP.svg(st && st < 3 ? 'back' : 'close') + '</button><span class="stepdots">' + [0, 1, 2].map(function (i) { return '<i class="' + (i <= st ? 'on' : '') + '"></i>'; }).join('') + '</span><span class="small muted">' + (st < 3 ? st + 1 + ' of 3' : 'Done') + '</span></div>';
   if (st === 0) {
-    h += '<div class="tp-rise"><div class="eyebrow muted">Look back · ' + (CK.prev ? shortDate(CK.from) + ' to ' + shortDate(CK.to) : 'first check-in') + '</div><h2 class="flowh">Confirm your balances</h2><p class="muted flowp">' + (INBOX ? 'Filled in from your bank emails where they matched, and your last numbers elsewhere.' : Sync.sheet() ? (INBOX_ERR ? 'Couldn’t read your email (' + esc(INBOX_ERR) + '). Using your last numbers.' : 'Checking your bank emails… You can start typing.') : 'Filled in from last time. Change what moved.') + '</p></div>';
+    h += '<div class="tp-rise"><div class="eyebrow muted">Look back · ' + (CK.prev ? shortDate(CK.from) + ' to ' + shortDate(CK.to) : 'first check-in') + '</div><h2 class="flowh">Confirm your balances</h2><p class="muted flowp">' + (INBOX ? 'Filled in from your bank emails where they matched, and your last numbers elsewhere.' : Sync.sheet() ? (INBOX_ERR ? 'Couldn’t read your email (' + esc(INBOX_ERR) + '). Using your last numbers.' : 'Checking your bank emails… You can start typing.') : (bankFed('x') != null ? 'Your bank filled in what it covers. The rest is yours to type.' : 'Filled in from last time. Change what moved.')) + '</p></div>';
     var acc = S.accounts.filter(function (a) { return !a.closed; });
     if (!acc.length) h += '<div class="glass"><div class="empty">No accounts yet.<br><button class="tp-btn tp-sm" data-act="acctEdit">Add an account</button></div></div>';
+    else if (bankFed('x') != null) {
+      var ckRow = function (a) { var s = CK.src[a.id], fed = bankFed('a:' + a.id); return '<div class="tp-row static"><span class="tp-t"><b>' + esc(a.name) + '</b><span>' + (fed ? '<i class="bkdot"></i>' : '') + esc(s && s !== 'typed' ? s : (fed ? 'From your bank' : KIND_NAME[a.kind]) + ' · last ' + money(acctBal(a.id))) + '</span></span><div class="money balin"><input class="tp-input" data-ckbal="' + a.id + '" inputmode="decimal" value="' + esc(r2(CK.bal[a.id])) + '" aria-label="' + esc(a.name) + ' balance"></div></div>'; };
+      var mine = acc.filter(function (a) { return !bankFed('a:' + a.id); }), theirs = acc.filter(function (a) { return bankFed('a:' + a.id); });
+      if (mine.length) h += '<div class="tp-sect"><span>Type these in · ' + mine.length + '</span></div><p class="small muted" style="margin:-4px 2px 8px">Your bank connection doesn’t cover these. Open each one and copy the balance.</p><div class="glass">' + mine.map(ckRow).join('') + '</div>';
+      if (theirs.length) h += '<div class="tp-sect"><span>Already filled from your bank · ' + theirs.length + '</span></div><p class="small muted" style="margin:-4px 2px 8px">Nothing to do unless one looks wrong. Banks can run a day behind.</p><div class="glass">' + theirs.map(ckRow).join('') + '</div>';
+    }
     else h += '<div class="glass">' + acc.map(function (a) { var s = CK.src[a.id]; return '<div class="tp-row static"><span class="tp-t"><b>' + esc(a.name) + '</b><span>' + esc(s && s !== 'typed' ? s : KIND_NAME[a.kind] + ' · last ' + money(acctBal(a.id))) + '</span></span><div class="money balin"><input class="tp-input" data-ckbal="' + a.id + '" inputmode="decimal" value="' + esc(r2(CK.bal[a.id])) + '" aria-label="' + esc(a.name) + ' balance"></div></div>'; }).join('') + '</div>';
     var cs = S.cards.filter(function (c) { return !c.off; });
-    if (cs.length) h += '<div class="tp-sect"><span>Cards</span></div><p class="small muted" style="margin:-4px 2px 8px">Balance now is everything on the card. Statement is what\u2019s due on the due date.</p><div class="glass">' + cs.map(function (c) { var s = CK.src['c_' + c.id], due = nextDueDate(c.dueDay, today()), sv = CK.stmt[c.id] != null ? CK.stmt[c.id] : (stmtFor(c.id, due) ? stmtFor(c.id, due).amt : ''); return '<div class="ckc"><div class="ckc-h"><b>' + esc(c.name) + '</b><span>' + esc(s && s !== 'typed' ? s : 'Last ' + money(cardBal(c))) + '</span></div><div class="ckc-f"><div><span class="small muted">Balance now</span><div class="money"><input class="tp-input" data-ckcard="' + c.id + '" inputmode="decimal" value="' + esc(r2(CK.cards[c.id])) + '" aria-label="' + esc(c.name) + ' balance now"></div></div>' + (due ? '<div><span class="small muted">Statement due ' + shortDate(due) + '</span><div class="money"><input class="tp-input" data-ckstmt="' + c.id + '" inputmode="decimal" value="' + esc(sv) + '" placeholder="Not out yet" aria-label="' + esc(c.name) + ' statement balance"></div></div>' : '') + '</div></div>'; }).join('') + '</div>';
+    if (cs.length) h += '<div class="tp-sect"><span>Cards</span></div><p class="small muted" style="margin:-4px 2px 8px">Balance now is everything on the card. Statement is what\u2019s due on the due date' + (bankFed('x') != null ? ', and your bank connection doesn\u2019t send it, so you type it' : '') + '.</p><div class="glass">' + cs.map(function (c) { var s = CK.src['c_' + c.id], due = nextDueDate(c.dueDay, today()), sv = CK.stmt[c.id] != null ? CK.stmt[c.id] : (stmtFor(c.id, due) ? stmtFor(c.id, due).amt : ''); return '<div class="ckc"><div class="ckc-h"><b>' + esc(c.name) + '</b><span>' + (bankFed('c:' + c.id) ? '<i class="bkdot"></i>' : '') + esc(s && s !== 'typed' ? s : (bankFed('c:' + c.id) === false ? 'You update · last ' : 'Last ') + money(cardBal(c))) + '</span></div><div class="ckc-f"><div><span class="small muted">Balance now</span><div class="money"><input class="tp-input" data-ckcard="' + c.id + '" inputmode="decimal" value="' + esc(r2(CK.cards[c.id])) + '" aria-label="' + esc(c.name) + ' balance now"></div></div>' + (due ? '<div><span class="small muted">Statement due ' + shortDate(due) + '</span><div class="money"><input class="tp-input" data-ckstmt="' + c.id + '" inputmode="decimal" value="' + esc(sv) + '" placeholder="Not out yet" aria-label="' + esc(c.name) + ' statement balance"></div></div>' : '') + '</div></div>'; }).join('') + '</div>';
     if (CK.newStmts) h += '<div class="solid">Found ' + CK.newStmts + ' new card statement' + (CK.newStmts > 1 ? 's' : '') + ' in your email. They’re on the Cards tab and in your plan.</div>';
     var lsn = scoreSnaps(), lsd = lsn.length ? lsn[lsn.length - 1] : null, sdue = !lsd || daysBetween(lsd.date, today()) >= 28;
     h += '<div class="tp-sect"><span>Credit score' + (sdue ? '' : ' (optional this week)') + '</span></div><div class="glass pad"><div class="fgrid">' + textField('ck_tu', 'TransUnion', CK.tu != null ? CK.tu : '', lsd ? 'Last ' + parseScore(lsd.score).tu : 'e.g. 724', 'number') + textField('ck_eq', 'Equifax', CK.eq != null ? CK.eq : '', lsd && parseScore(lsd.score).eq ? 'Last ' + parseScore(lsd.score).eq : 'e.g. 766', 'number') + '</div><p class="small muted mb0">' + (sdue ? 'Open Credit Karma and copy both numbers. ' : '') + (lsd ? 'Last entered ' + shortDate(lsd.date) + '.' : 'Leave blank to skip.') + '</p></div>';
