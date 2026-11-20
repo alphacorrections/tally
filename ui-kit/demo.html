@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" data-pal="forest" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0B2A1E">
+<meta name="robots" content="noindex">
+<title>Tally glass UI kit</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tally-glass.css">
+</head>
+<body class="tp-page">
+<div class="bgfx" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div>
+<div id="app"><div class="tp-wrap" id="page"></div></div>
+<script src="tally-glass.js"></script>
+<script>
+TG.look.apply();
+var h = TG.topBar('Kit demo', 'Every piece on one page', '<button class="ibtn" id="mode" aria-label="Light or dark">' + TP.svg('bulb') + '</button><button class="ibtn" aria-label="Settings">' + TP.svg('gear') + '</button>');
+h += '<div class="dotsrow"><span class="small">Pick a palette</span>' + TG.dots() + '</div>';
+h += '<div class="glass hero tp-rise"><span class="shine"></span><div class="label">Hero number</div><div class="big">$1,284</div><div class="small muted">One line that explains the number.</div><div class="bar" style="margin-top:12px"><i style="width:62%"></i></div></div>';
+h += '<div class="tp-stats tp-rise" style="--i:1"><div class="tp-stat"><span>Stat</span><b>42</b></div><div class="tp-stat"><span>Due</span><b>$310</b></div><div class="tp-stat"><span>Used</span><b>18%</b></div></div>';
+h += '<div class="tp-sect"><span>List</span><span class="sp"></span><button>+ Add</button></div><div class="glass">' +
+  '<div class="rowwrap"><button class="tp-row" data-open><span class="tp-tile">C</span><span class="tp-t"><b>Row with a gear</b><span><span class="srct bank"><i class="bkdot"></i>From bank · Nov 19</span></span></span><span class="amt">$2,500</span></button><button class="ibtn sm rowgear" aria-label="Settings">' + TP.svg('gear') + '</button></div>' +
+  '<button class="tp-row" data-open><span class="tp-tile">' + TP.svg('receipt') + '</span><span class="tp-t"><b>Row with a pill</b><span>Sub line</span></span><span class="tp-pill tp-warn">In 3 days</span><span class="tp-chev">' + TP.svg('chev') + '</span></button>' +
+  '<button class="tp-row" data-open><span class="datebox"><b>19</b>Nov</span><span class="tp-t"><b>Row with a date box</b><span>Groceries</span></span><span class="amt">$33.00</span></button></div>';
+h += '<div class="tp-sect"><span>Pills, chips, segments</span></div><div class="glass pad"><div class="flex"><span class="tp-pill tp-ok">Paid</span><span class="tp-pill tp-warn">Soon</span><span class="tp-pill tp-bad">Late</span><span class="tp-pill tp-plain">Plain</span></div><div class="chips mt"><button class="chip on">All</button><button class="chip">Groceries</button><button class="chip">Gas</button></div><div class="mt">' + TG.seg('rng', [['w', 'Week'], ['m', 'Month'], ['y', 'Year']], 'm') + '</div></div>';
+h += '<div class="tp-sect"><span>Bars</span></div><div class="glass pad"><div class="hbar"><div class="hl"><span>Groceries</span><b>$412 <em>38%</em></b></div><div class="bar thin"><i style="width:80%"></i></div></div><div class="hbar"><div class="hl"><span>Eating out</span><b>$188 <em>17%</em></b></div><div class="bar thin"><i style="width:36%"></i></div></div></div>';
+h += '<div class="tp-sect"><span>Form</span></div><div class="glass pad"><div class="fgrid">' + TG.field('f1', 'Name', '', 'e.g. Checking') + '<div><label class="tp-label" for="f2">Amount</label><div class="money"><input class="tp-input" id="f2" inputmode="decimal" placeholder="0"></div></div></div><div class="flex mt"><button class="tp-btn" id="save">Save</button><button class="tp-btn tp-ghost" id="open">Open a sheet</button></div></div>';
+h += '<div class="deep"><b>Deep layer</b><div class="small muted">For lists and quiet content.</div></div><div class="solid"><b>Solid note.</b> For tips and anything that must be read.</div>';
+h += '<div class="glass"><div class="empty">Empty state. Say what goes here and how to add it.<br><button class="tp-btn tp-sm">Add one</button></div></div>';
+h += TP.loading('Loading…');
+document.getElementById('page').innerHTML = h + TG.nav([{ id: 'home', name: 'Home', icon: 'home' }, { id: 'a', name: 'Charts', icon: 'chart' }, { id: 'b', name: 'Cards', icon: 'card' }, { id: 'c', name: 'Bills', icon: 'receipt' }, { id: 'add', plus: 1 }], 'home');
+function openSheet() { TG.sheet(TG.sheetHead('A sheet') + '<div class="kv"><span>Balance</span><b>$189.00</b></div><div class="kv"><span>Spent in November</span><b>$189.00</b></div><div class="acts"><button class="tp-btn tp-ghost" data-close>Cancel</button><button class="tp-btn" data-close>Done</button></div>'); }
+document.addEventListener('click', function (e) {
+  if (e.target.closest('#mode')) TG.look.set(null, TG.look.mode() === 'dark' ? 'light' : 'dark');
+  if (e.target.closest('#open') || e.target.closest('[data-open]')) openSheet();
+  if (e.target.closest('#save')) TG.toast('Saved');
+  var s = e.target.closest('.seg button'); if (s) [].forEach.call(s.parentNode.children, function (x) { x.classList.toggle('on', x === s); });
+});
+</script>
+</body>
+</html>
