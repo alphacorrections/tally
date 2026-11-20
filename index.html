@@ -790,6 +790,12 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .iob{display:flex;align-items:center;gap:10px;margin-top:5px}
 .iob .bar{flex:1} .iob em{font-style:normal;font-size:12.5px;width:64px;text-align:right;font-variant-numeric:tabular-nums}
 
+/* purchase sheet: one-tap Together */
+.togq{display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin:4px 0 12px;padding:12px;border-radius:16px;background:var(--tp-card2);border:1px solid var(--hi);color:var(--tp-ink);font:inherit;cursor:pointer}
+.togq.on{cursor:default;border-style:dashed}
+.togq .tp-t b{display:block} .togq .tp-t span{display:block;font-size:12.5px;color:var(--tp-ink2)}
+.togtag{font-weight:700;color:var(--hi)}
+
 </style>
 </head>
 <body class="tp-page">
@@ -799,7 +805,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.20.2';
+var APP_VERSION = '2026.11.20.3';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1680,7 +1686,7 @@ function srcList() {
 function srcName(id) { var x = srcList().filter(function (o) { return o.id === id; })[0]; if (x) return x.name; var k = id.slice(2), c = byId(S.cards, k) || byId(S.accounts, k); return c ? c.name : 'Unknown'; }
 function qaSheet() {
   var q = QA, srcs = srcList();
-  var h = '<div class="sxhead"><button class="ibtn" data-act="close" aria-label="Close">' + TP.svg('close') + '</button><span class="grow"></span><button class="pillbtn" data-act="checkinStart">Weekly check-in</button></div><h3>' + (q.id ? 'Edit purchase' : 'Log a purchase') + '</h3>' +
+  var h = '<div class="sxhead"><button class="ibtn" data-act="close" aria-label="Close">' + TP.svg('close') + '</button><span class="grow"></span><button class="pillbtn" data-act="checkinStart">Weekly check-in</button></div><h3>' + (q.id ? 'Edit purchase' : 'Log a purchase') + '</h3>' + (typeof qaTogQuick === 'function' ? qaTogQuick(q) : '') +
     '<div class="money qamt"><input class="tp-input" id="qa_amt" inputmode="decimal" placeholder="0.00" value="' + esc(q.amt || '') + '" aria-label="Amount"></div>' +
     '<label class="tp-label">Category</label><div class="chips">' + CATS.map(function (c) { return '<button class="chip' + (q.cat === c ? ' on' : '') + '" data-act="qaCat" data-a="' + esc(c) + '" aria-pressed="' + (q.cat === c) + '">' + c + '</button>'; }).join('') + '</div>' +
     '<div class="flex" style="justify-content:space-between;align-items:center;margin-top:14px"><label class="tp-label" style="margin:0">Paid with</label><button class="pillbtn sm" data-act="qaRw" aria-expanded="' + !!q.showR + '">' + (q.showR ? 'Hide rewards' : 'Best card' + (q.cat ? ' for ' + q.cat.toLowerCase() : '') + ' \u2191') + '</button></div>' + (q.showR ? rewardsPanel(q) : '') +
@@ -1877,7 +1883,7 @@ function spendingPage() {
   /* purchases */
   var shown = cur.slice(0, 60 + SPV.more * 100);
   h += '<div class="tp-sect"><span>Purchases</span><span class="sp"></span><span class="small muted">' + cur.length + '</span></div><div class="glass">' + (shown.length ? shown.map(function (x) {
-    return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc((x.cat || 'Other') + ' · ' + srcName(x.src)) + (x.ext || x.bank ? ' · <i class="bkdot" title="From your bank"></i>bank' : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>';
+    return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc((x.cat || 'Other') + ' · ' + srcName(x.src)) + (x.ext || x.bank ? ' · <i class="bkdot" title="From your bank"></i>bank' : '') + (x.shared ? ' · <span class="togtag">Together</span>' : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>';
   }).join('') : '<div class="empty">Nothing here for this filter.</div>') + '</div>';
   if (cur.length > shown.length) h += '<button class="tp-btn tp-ghost tp-block" data-act="spMore">Show more</button>';
   h += '<p class="small muted">Categories are guesses for bank purchases. Tap one to change it; Tally keeps your choice.</p>';
@@ -3847,7 +3853,7 @@ ACT.srcTx = function (d) {
   var td = today(), list = (S.txns || []).filter(function (x) { return x.src === src; }).sort(function (a, b) { return (b.at || b.date) < (a.at || a.date) ? -1 : 1; }), mo = sumAmt(list.filter(function (x) { return x.date >= monthStart(td); }));
   var spendable = isCard || o.kind === 'spend' || o.kind === 'save';
   sheet(sxHead(o.name) + '<div class="kv"><span>' + (isCard ? 'Balance' : 'Balance now') + '</span><b>' + money(isCard ? cardBal(o) : acctBal(o.id), 1) + '</b></div>' + (spendable ? '<div class="kv"><span>Spent in ' + MONTHS[parseD(td).getMonth()] + '</span><b>' + money(mo, 1) + '</b></div>' : '') +
-    '<label class="tp-label">Recent purchases</label>' + (list.length ? '<div class="glass">' + list.slice(0, 30).map(function (x) { return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc(x.cat || 'Other') + (x.ext || x.bank ? ' · bank' : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>'; }).join('') + '</div>' : '<p class="small muted">' + (spendable ? 'No purchases yet. They show up here from your bank, or when you log one with +.' : 'Purchases don’t come out of this kind of account. Its balance history is on the chart above the list.') + '</p>') +
+    '<label class="tp-label">Recent purchases</label>' + (list.length ? '<div class="glass">' + list.slice(0, 30).map(function (x) { return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc(x.cat || 'Other') + (x.ext || x.bank ? ' · bank' : '') + (x.shared ? ' · <span class="togtag">Together</span>' : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>'; }).join('') + '</div>' : '<p class="small muted">' + (spendable ? 'No purchases yet. They show up here from your bank, or when you log one with +.' : 'Purchases don’t come out of this kind of account. Its balance history is on the chart above the list.') + '</p>') +
     '<div class="acts">' + (list.length > 30 ? '<button class="tp-btn tp-ghost" data-act="srcAll" data-a="' + esc(src) + '">See all ' + list.length + '</button>' : list.length ? '<button class="tp-btn tp-ghost" data-act="srcAll" data-a="' + esc(src) + '">Open in Spending</button>' : '') + '<button class="tp-btn tp-ghost" data-act="' + (isCard ? 'cardEdit' : 'acctEdit') + '" data-id="' + o.id + '">Settings</button></div>');
 };
 ACT.srcAll = function (d) { closeSheet(); SPV = { range: 'm3', src: d.a, cat: '', more: 0 }; VIEW = 'spending'; render(); };
@@ -3948,6 +3954,16 @@ aiContext = function () {
   } catch (e) {}
   return c;
 };
+
+/* one tap from any purchase: split it with your partner in Together */
+function qaTogQuick(q) {
+  if (!q.id || typeof SH === 'undefined' || !SH.on() || !SH.doc || !shLive('people').length) return '';
+  var th = shThem().name, a = r2(num(q.amt));
+  if (q.together) { var mine = q.split === 'other' ? 0 : q.split === 'pct' ? num(q.pct) : 50; return '<div class="togq on"><span class="tp-tile">' + TP.svg('people') + '</span><span class="tp-t"><b>In Together</b><span>' + esc(th) + ' owes you ' + money(r2(a * (100 - mine) / 100), 1) + ' of this (' + (q.split === 'other' ? 'all theirs' : q.split === 'pct' ? 'your share ' + mine + '%' : '50/50') + ')</span></span><button class="pillbtn sm" data-act="qaTogOff">Remove</button></div>'; }
+  return '<button class="togq" data-act="qaTogNow"><span class="tp-tile">' + TP.svg('people') + '</span><span class="tp-t"><b>Mark as a Together payment</b><span>Splits it 50/50 with ' + esc(th) + ' and adds it to Together. Change the split below.</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+}
+ACT.qaTogNow = function () { if (!QA) return; qaKeep(); var a = r2(num(QA.amt)), split = QA.split || 'half', pct = num(QA.pct) || 50; QA.together = true; QA.split = split; var tg = document.getElementById('qa_tog'); if (tg) tg.checked = true; ACT.qaSave(); if (QA) return; $all('.toast').forEach(function (t) { t.remove(); }); toast('Added to Together. ' + shThem().name + ' owes you ' + money(r2(a * (split === 'other' ? 1 : split === 'pct' ? (100 - pct) / 100 : 0.5)), 1) + '.'); };
+ACT.qaTogOff = function () { if (!QA) return; qaKeep(); QA.together = false; var tg = document.getElementById('qa_tog'); if (tg) tg.checked = false; ACT.qaSave(); if (QA) return; $all('.toast').forEach(function (t) { t.remove(); }); toast('Removed from Together.'); };
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
