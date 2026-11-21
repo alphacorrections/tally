@@ -802,6 +802,18 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 
 .togq.plain{border-color:var(--tp-line);background:var(--tp-card)}
 
+/* bills: filter chips, status, doubles */
+.billchips{margin-bottom:8px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
+.billchips::-webkit-scrollbar{display:none}
+.billchips .chip{white-space:nowrap;flex:none}
+.billchips .chip em{font-style:normal;opacity:.7;margin-left:3px}
+.billrow.done .datebox,.billrow.done .amt{opacity:.6}
+.billrow .bl{display:block} .billrow .bl span{display:inline}
+.bst svg{width:11px;height:11px;vertical-align:-1px;margin-right:3px}
+.bst.ok{color:var(--ok);font-weight:600} .bst.warn{color:var(--warn);font-weight:600}
+.dblrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(0,0,0,.1);font-size:13.5px;line-height:1.45;flex-wrap:wrap}
+.dblcard .pillbtn{background:transparent;color:var(--tp-solid-ink);border-color:rgba(0,0,0,.18)}
+
 </style>
 </head>
 <body class="tp-page">
@@ -811,7 +823,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.21.1';
+var APP_VERSION = '2026.11.21.2';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -2183,19 +2195,10 @@ PAGES.bills = function () {
     '<div class="mstrip" role="group" aria-label="Bill due days across ' + MONTHS[dnow.getMonth()] + '. Tap a dot to see the bill."><span class="track"></span><span class="done" style="width:' + (dnow.getDate() / dim * 100).toFixed(1) + '%"></span>' +
     billDotDays(dim).map(function (g) { return '<button type="button" class="m' + (g.day <= dnow.getDate() ? ' paid' : '') + '" data-act="billDot" data-a="' + g.day + '" style="left:' + (g.day / dim * 100).toFixed(1) + '%" aria-label="' + esc(ordinal(g.day) + ': ' + g.list.map(function (b) { return b.name + ' ' + money(+b.amount || 0); }).join(', ')) + '"></button>'; }).join('') +
     '<span class="lab" style="left:0">1st</span><span class="lab now" style="left:' + Math.min(80, Math.max(12, dnow.getDate() / dim * 100 - 4)).toFixed(1) + '%">Today</span><span class="lab" style="right:0">' + ordinal(dim) + '</span></div><div id="mpop" class="mpop" hidden></div></div>';
-  h += '<div class="tp-sect"><span>Every month</span><span class="sp"></span><button data-act="billEdit">+ Add bill</button></div>';
+  h += '<div class="tp-sect"><span>Your bills</span><span class="sp"></span><button data-act="billEdit">+ Add bill</button></div>';
   if (!S.bills.length) h += '<div class="glass"><div class="empty">Rent, car, phone, internet, subscriptions. Add each once.<br><button class="tp-btn tp-sm" data-act="billEdit">Add a bill</button></div></div>';
-  var up = mo.filter(function (b) { return !b.off && (!b.day || +b.day > dnow.getDate()); }).sort(function (a, b) { return (+a.day || 99) - (+b.day || 99); }), paid = mo.filter(function (b) { return !b.off && b.day && +b.day <= dnow.getDate(); }).sort(function (a, b) { return a.day - b.day; }), paused = S.bills.filter(function (b) { return b.off; });
-  var row = function (b) {
-    var d = b.freq === 'c' ? nextBillDate(b, td) : b.freq === 'y' ? (b.month ? nextYearly(b, td) : null) : (b.day ? ymd(clampDay(dnow.getFullYear(), dnow.getMonth(), +b.day)) : null);
-    var sub = [b.freq === 'c' ? billEveryLabel(b) + (b.next ? '' : ' · pick the next date') : '', b.freq === 'y' && !b.month ? 'Pick the month so Tally warns you' : '', b.freq !== 'm' && b.freq && (b.freq === 'c' ? b.next : b.month) ? money(billMonthly(b)) + '/mo set aside' : '', b.account ? 'From ' + b.account : ''].filter(Boolean).join(' · ');
-    return '<button class="tp-row" data-act="billEdit" data-id="' + b.id + '">' + (d ? dateBox(d) : '<span class="datebox"><b>?</b>Set</span>') + '<span class="tp-t"><b style="' + (b.off ? 'opacity:.6' : '') + '">' + esc(b.name) + '</b><span>' + esc(sub || 'Tap to add details') + '</span></span><span class="amt">' + (b.amount ? money(+b.amount) : '—') + '</span></button>';
-  };
+  h += billsBody(td, ty);
   var sum = function (l) { return money(l.reduce(function (t, b) { return t + (+b.amount || 0); }, 0)); };
-  if (up.length) h += '<div class="tp-sect sub"><span>Coming up this month</span><span class="sp"></span><span>' + sum(up) + '</span></div><div class="glass">' + up.map(row).join('') + '</div>';
-  if (paid.length) h += '<div class="tp-sect sub"><span>Already due this month</span><span class="sp"></span><span>' + sum(paid) + '</span></div><div class="glass">' + paid.map(row).join('') + '</div>';
-  h += '<div class="tp-sect"><span>Every few weeks, months, or once a year</span><span class="sp"></span><span>' + money(ty / 12) + '/mo set aside</span></div><div class="glass">' + (yr.filter(function (b) { return !b.off; }).length ? yr.filter(function (b) { return !b.off; }).sort(function (p, q) { var x = p.freq === 'c' ? nextBillDate(p, td) : nextYearly(p, td), y = q.freq === 'c' ? nextBillDate(q, td) : nextYearly(q, td); return (x || '9') < (y || '9') ? -1 : 1; }).map(row).join('') : '<div class="empty">Insurance, registration, haircuts, anything every few weeks or months. Add them and they stop being surprises.</div>') + '</div>';
-  if (paused.length) h += '<div class="tp-sect"><span>Paused</span></div><div class="glass">' + paused.map(row).join('') + '</div>';
   var subs = mo.filter(function (b) { return !b.off && b.amount && +b.amount < 60; });
   if (subs.length >= 3) h += '<div class="solid"><b>Small recurring charges: ' + sum(subs) + ' a month across ' + subs.length + '.</b><div class="muted" style="margin-top:4px">' + esc(subs.map(function (b) { return b.name; }).join(', ')) + '. Anything you don’t use? Tap it and mark it paused.</div></div>';
   return h;
@@ -3623,7 +3626,7 @@ function recurring() {
     if (everyday && (xs.length < 4 || changed || !base.every(function (a) { return Math.abs(a - mb) < 0.02; }))) return; /* a habit, not a bill */
     if (daysBetween(lx.date, td) > F.days * 2.2 + 10) return; /* stopped a while ago */
     var ld = parseD(lx.date), next = F.f === 'm' ? ymd(clampDay(ld.getFullYear(), ld.getMonth() + 1, ld.getDate())) : F.f === 'q' ? ymd(clampDay(ld.getFullYear(), ld.getMonth() + 3, ld.getDate())) : F.f === 'y' ? ymd(clampDay(ld.getFullYear() + 1, ld.getMonth(), ld.getDate())) : addDays(lx.date, F.days);
-    out.push({ key: k, name: spMerchant(lx), F: F, f: F.f, amt: r2(la), was: changed ? r2(mb) : null, up: changed && la > mb, last: lx.date, next: next, src: lx.src, cat: lx.cat || 'Other', n: xs.length, list: xs, perMo: r2(la * F.perMo), bill: billForKey(k), bank: !!lx.ext });
+    out.push({ key: k, name: spMerchant(lx), F: F, f: F.f, amt: r2(la), was: changed ? r2(mb) : null, up: changed && la > mb, last: lx.date, next: next, src: lx.src, cat: lx.cat || 'Other', n: xs.length, list: xs, perMo: r2(la * F.perMo), bill: billForKey(k) || billByAmount(la, lx.date, F.f), bank: !!lx.ext });
   });
   out.sort(function (a, b) { return b.perMo - a.perMo; });
   SMEMO = { k: memo, v: out }; return out;
@@ -4042,6 +4045,77 @@ var _ctx6 = aiContext;
 aiContext = function () { var c = _ctx6(), td = today(); try { if ((S.moves || []).length) c.movedToInvesting = { note: 'money moved into investments; not spending', thisMonth: Math.round(sumAmt(movesIn(monthStart(td), td))), thisYear: Math.round(sumAmt(movesIn(yearStart(td), td))), recent: (S.moves || []).slice(-8).map(function (x) { return { date: x.date, amount: +x.amt, what: x.note, from: srcName(x.src) }; }) }; } catch (e) {} return c; };
 /* once, on load: clean up what was imported before this existed */
 try { sweepMoves(); } catch (e) {}
+
+/* ---------- Bills: one list by due date, with filters; where each bill came from; doubles ---------- */
+var BILLV = 'all';
+/* a bill you typed that matches a repeating bank charge by amount and day, even when the names differ */
+function billByAmount(amt, lastDate, f) {
+  if (f !== 'm') return null; var dd = parseD(lastDate).getDate();
+  return S.bills.filter(function (b) { if (b.mkey || b.off || (b.freq && b.freq !== 'm') || !(+b.amount > 0)) return false; var gap = b.day ? Math.abs(+b.day - dd) : 0; gap = Math.min(gap, 31 - gap); return Math.abs(+b.amount - amt) <= Math.max(1, amt * 0.01) && gap <= 4; })[0] || null;
+}
+function billDetected(b) { return !!b.mkey && b.auto !== false; }
+function billCharge(b, from, to) {
+  var w = String(b.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (t) { return t.length >= 4; })[0], a = +b.amount || 0;
+  return (S.txns || []).filter(function (x) { if (x.date < from || x.date > to) return false; if (b.mkey) return mkey(x) === b.mkey; var n = String(x.note || '').toLowerCase(); return (w && n.indexOf(w) >= 0 && Math.abs(+x.amt - a) <= Math.max(2, a * 0.15)) || (a >= 20 && Math.abs(+x.amt - a) <= Math.max(1, a * 0.01) && b.day && Math.abs(parseD(x.date).getDate() - +b.day) <= 4 && (x.ext || x.bank)); }).sort(function (p, q) { return p.date < q.date ? 1 : -1; })[0] || null;
+}
+function billInfo(b, td) {
+  var dn = parseD(td), monthly = b.freq !== 'y' && b.freq !== 'c';
+  if (!monthly) return { d: b.freq === 'c' ? nextBillDate(b, td) : (b.month ? nextYearly(b, td) : null), st: 'other' };
+  if (!b.day) return { d: null, st: 'due', nodate: true };
+  var d = ymd(clampDay(dn.getFullYear(), dn.getMonth(), +b.day)), hit = billCharge(b, monthStart(td), td);
+  return { d: d, hit: hit, st: hit ? 'paid' : d < td ? 'past' : 'due' };
+}
+function billDoubles() {
+  var out = [], no = S.profile.notDup || {}, used = {};
+  S.bills.forEach(function (a) { if (a.off || billDetected(a)) return; S.bills.forEach(function (b) {
+    if (b === a || b.off || !billDetected(b) || used[b.id] || used[a.id] || no[a.id + '|' + b.id]) return;
+    var am = +a.amount || 0, bm = +b.amount || 0, sameF = (a.freq || 'm') === (b.freq || 'm'), gap = a.day && b.day ? Math.abs(+a.day - +b.day) : 0; gap = Math.min(gap, 31 - gap);
+    var wa = String(a.name || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (t) { return t.length >= 4; }), nb = String(b.name || '').toLowerCase() + ' ' + (b.mkey || '');
+    var byName = wa.some(function (w) { return nb.indexOf(w) >= 0; }) && (!am || !bm || Math.abs(am - bm) <= Math.max(3, bm * 0.2));
+    var byAmt = am > 0 && bm > 0 && sameF && Math.abs(am - bm) <= Math.max(1, bm * 0.02) && gap <= 4;
+    if (byName || byAmt) { out.push({ a: a, b: b }); used[a.id] = used[b.id] = 1; }
+  }); });
+  return out;
+}
+function billsBody(td, ty) {
+  var act = S.bills.filter(function (b) { return !b.off; }), paused = S.bills.filter(function (b) { return b.off; }), dn = parseD(td), h = '';
+  var rows = act.map(function (b) { return { b: b, i: billInfo(b, td) }; });
+  var sets = { all: rows, due: rows.filter(function (r) { return r.i.st === 'due'; }), paid: rows.filter(function (r) { return r.i.st === 'paid' || r.i.st === 'past'; }), other: rows.filter(function (r) { return r.i.st === 'other'; }), paused: paused.map(function (b) { return { b: b, i: billInfo(b, td) }; }) };
+  if (!sets[BILLV] || (BILLV === 'paused' && !paused.length)) BILLV = 'all';
+  var dbl = billDoubles();
+  if (dbl.length) h += '<div class="solid dblcard"><b>' + dbl.length + ' possible double' + (dbl.length > 1 ? 's' : '') + '</b><div class="muted" style="margin:2px 0 8px">The same bill, once typed by you and once found by Tally in your bank charges. Merging keeps your name for it and uses the real amount and date from your bank.</div>' +
+    dbl.map(function (p) { return '<div class="dblrow"><div><b>' + esc(p.a.name) + '</b> ' + (p.a.amount ? money(+p.a.amount, 1) : '') + ' <span class="muted">you added</span><br><b>' + esc(p.b.name) + '</b> ' + money(+p.b.amount || 0, 1) + ' <span class="muted">found by Tally</span></div><div class="flex" style="gap:6px;flex-wrap:nowrap"><button class="tp-btn tp-sm" data-act="billMerge" data-a="' + p.a.id + '" data-b="' + p.b.id + '">Merge</button><button class="pillbtn sm" data-act="billNotDup" data-a="' + p.a.id + '" data-b="' + p.b.id + '">Not the same</button></div></div>'; }).join('') + '</div>';
+  var tabs = [['all', 'All'], ['due', 'Still due'], ['paid', 'Paid this month'], ['other', 'Not monthly']]; if (paused.length) tabs.push(['paused', 'Paused']);
+  h += '<div class="chips billchips" role="tablist">' + tabs.map(function (t) { return '<button class="chip' + (BILLV === t[0] ? ' on' : '') + '" role="tab" aria-selected="' + (BILLV === t[0]) + '" data-act="billView" data-a="' + t[0] + '">' + t[1] + ' <em>' + sets[t[0]].length + '</em></button>'; }).join('') + '</div>';
+  var list = sets[BILLV].slice().sort(function (p, q) { var x = p.i.d || '9999', y = q.i.d || '9999'; return x < y ? -1 : x > y ? 1 : String(p.b.name).localeCompare(String(q.b.name)); });
+  var total = list.reduce(function (t, r) { return t + (r.i.st === 'other' ? 0 : +r.b.amount || 0); }, 0);
+  var head = { all: 'Sorted by due date', due: money(total) + ' still to come this month', paid: money(total) + ' already due this month', other: money(ty / 12) + ' a month set aside for these', paused: 'Kept on the list, left out of totals' }[BILLV];
+  h += '<p class="small muted" style="margin:0 2px 8px">' + head + '</p>';
+  var empty = { all: 'Rent, car, phone, internet, subscriptions. Add each once.', due: 'Nothing left to pay this month.', paid: 'Nothing has come due yet this month.', other: 'Insurance, registration, haircuts, anything every few weeks or months. Add them and they stop being surprises.', paused: '' }[BILLV];
+  h += '<div class="glass">' + (list.length ? list.map(function (r) {
+    var b = r.b, i = r.i, st = '';
+    if (i.st === 'paid') st = '<span class="bst ok">' + TP.svg('check', 2.6) + 'Charged ' + shortDate(i.hit.date) + (Math.abs(+i.hit.amt - (+b.amount || 0)) > 0.5 ? ' · ' + money(+i.hit.amt, 1) : '') + '</span>';
+    else if (i.st === 'past') st = '<span class="bst">Due date passed</span>';
+    else if (i.st === 'due') { var n = i.d ? daysBetween(td, i.d) : null; st = i.nodate ? '<span class="bst warn">No due day set</span>' : '<span class="bst">' + (n === 0 ? 'Due today' : n === 1 ? 'Due tomorrow' : 'Due in ' + n + ' days') + '</span>'; }
+    else st = '<span class="bst">' + esc(b.freq === 'c' ? billEveryLabel(b) + (b.next ? '' : ' · pick the next date') : b.month ? 'Yearly' : 'Yearly · pick the month') + (i.d ? ' · ' + money(billMonthly(b)) + '/mo set aside' : '') + '</span>';
+    var src = billDetected(b) ? '<span class="srct bank"><i class="bkdot"></i>Found by Tally</span>' : '<span class="srct you">' + TP.svg('pencil') + 'You added</span>';
+    return '<button class="tp-row billrow' + (i.st === 'paid' || i.st === 'past' ? ' done' : '') + '" data-act="billEdit" data-id="' + b.id + '">' + (i.d ? dateBox(i.d) : '<span class="datebox"><b>?</b>Set</span>') + '<span class="tp-t"><b>' + esc(b.name) + '</b><span class="bl">' + st + '</span><span class="bl">' + src + (b.account ? ' · ' + esc(b.account) : '') + '</span></span><span class="amt">' + (b.amount ? money(+b.amount) : '—') + '</span></button>';
+  }).join('') : '<div class="empty">' + empty + '</div>') + '</div>';
+  if (BILLV === 'paid' && list.some(function (r) { return r.i.st === 'past'; })) h += '<p class="small muted">“Charged” means Tally saw it in your bank or card purchases this month. “Due date passed” means the day has gone by and no matching charge has shown up yet.</p>';
+  return h;
+}
+ACT.billView = function (d) { BILLV = d.a; render._keep = true; render(); };
+ACT.billMerge = function (d) {
+  var a = byId(S.bills, d.a), b = byId(S.bills, d.b); if (!a || !b) return;
+  a.mkey = b.mkey; a.auto = false; if (+b.amount > 0) a.amount = b.amount; if ((a.freq || 'm') === (b.freq || 'm')) { if (b.day) a.day = b.day; if (b.month) a.month = b.month; if (b.next) a.next = b.next; } if (!a.account && b.account) a.account = b.account;
+  S.bills = S.bills.filter(function (x) { return x !== b; }); SMEMO = { k: '', v: null }; render._keep = true; save(); toast('Merged into ' + a.name + '. It now follows the charges from ' + b.name + '.');
+};
+ACT.billNotDup = function (d) { S.profile.notDup = S.profile.notDup || {}; S.profile.notDup[d.a + '|' + d.b] = 1; render._keep = true; save(); };
+var _billEdit6 = ACT.billEdit;
+ACT.billEdit = function (d) {
+  _billEdit6.apply(this, arguments); var b = d && d.id ? byId(S.bills, d.id) : null, h3 = document.querySelector('#sheet h3'); if (!b || !h3) return;
+  h3.insertAdjacentHTML('afterend', '<p class="small muted" style="margin:0 0 10px">' + (billDetected(b) ? '<span class="srct bank"><i class="bkdot"></i>Found by Tally</span> from a repeating charge in your bank or card purchases.' : b.mkey ? '<span class="srct you">' + TP.svg('pencil') + 'You added</span> this one. It’s linked to a repeating bank charge, so Tally can tell when it’s paid.' : '<span class="srct you">' + TP.svg('pencil') + 'You added</span> this one by hand.') + '</p>');
+};
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };

@@ -1,1 +1,1 @@
-{"version": "2026.11.21.1", "note": "Accounts opens on Cash. Money moved to investing no longer counts as spending"}
+{"version": "2026.11.21.2", "note": "Bills is now one list by due date with filters, shows which bills Tally found, and offers to merge doubles"}
