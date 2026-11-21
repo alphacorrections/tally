@@ -823,7 +823,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.21.2';
+var APP_VERSION = '2026.11.21.3';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -4116,6 +4116,111 @@ ACT.billEdit = function (d) {
   _billEdit6.apply(this, arguments); var b = d && d.id ? byId(S.bills, d.id) : null, h3 = document.querySelector('#sheet h3'); if (!b || !h3) return;
   h3.insertAdjacentHTML('afterend', '<p class="small muted" style="margin:0 0 10px">' + (billDetected(b) ? '<span class="srct bank"><i class="bkdot"></i>Found by Tally</span> from a repeating charge in your bank or card purchases.' : b.mkey ? '<span class="srct you">' + TP.svg('pencil') + 'You added</span> this one. It’s linked to a repeating bank charge, so Tally can tell when it’s paid.' : '<span class="srct you">' + TP.svg('pencil') + 'You added</span> this one by hand.') + '</p>');
 };
+
+/* ---------- notifications and the icon badge ---------- */
+function goHash(h) {
+  h = String(h || '').replace(/^#/, ''); if (!h) return;
+  try { closeSheet(); if (h === 'checkin') { ACT.checkinStart({}); return; } if (PAGES[h]) { VIEW = h; render(); window.scrollTo(0, 0); } } catch (e) {}
+}
+var PUSH = {
+  reg: null, sub: null, busy: false, err: '',
+  ok: function () { return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && /^https?:/.test(location.protocol); },
+  ios: function () { return /iphone|ipad|ipod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1); },
+  standalone: function () { return navigator.standalone === true || !!(window.matchMedia && matchMedia('(display-mode: standalone)').matches); },
+  prefs: function () { return S.profile.push || {}; },
+  here: function () { return !!this.sub && typeof Notification !== 'undefined' && Notification.permission === 'granted'; },
+  tell: function (s) { if (s && CLOUD.on()) return CLOUD.fn('push', { action: 'sub', endpoint: s.endpoint, ua: navigator.userAgent.slice(0, 150) }); return Promise.resolve(); },
+  init: function () {
+    var self = this; if (!('serviceWorker' in navigator) || !/^https?:/.test(location.protocol)) return;
+    navigator.serviceWorker.register('sw.js').then(function (r) { self.reg = r; return r.pushManager ? r.pushManager.getSubscription() : null; })
+      .then(function (s) { self.sub = s; if (s) self.tell(s).catch(function () {}); if (VIEW === 'settings') rerender(); }).catch(function () {});
+    navigator.serviceWorker.addEventListener('message', function (e) { if (e.data && e.data.go) goHash(e.data.go); });
+  },
+  enable: function () {
+    var self = this; if (self.busy) return; self.busy = true; self.err = ''; rerender();
+    /* the permission question has to be the first thing that happens after the tap */
+    Promise.resolve(Notification.requestPermission()).then(function (p) {
+      if (p !== 'granted') throw new Error(p === 'denied' ? 'Notifications are blocked for Tally. Allow them in your phone’s Settings › Notifications › Tally, then try again.' : 'You didn’t allow notifications. Tap the button again when you’re ready.');
+      return self.reg || navigator.serviceWorker.ready;
+    }).then(function (r) { self.reg = r; return CLOUD.fn('push', { action: 'key' }); })
+      .then(function (j) { if (!j || !j.ok) throw new Error((j && j.error) || 'Couldn’t reach the server.'); var raw = atob(j.key.replace(/-/g, '+').replace(/_/g, '/')), key = new Uint8Array(raw.length); for (var i = 0; i < raw.length; i++) key[i] = raw.charCodeAt(i); return self.reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }); })
+      .then(function (s) { self.sub = s; return self.tell(s); })
+      .then(function (j) { if (j && j.ok === false) throw new Error(j.error || 'Couldn’t save this phone.'); S.profile.push = S.profile.push || {}; S.profile.push.on = true; save(true); return CLOUD.fn('push', { action: 'test' }); })
+      .then(function () { self.busy = false; setBadge(); rerender(); toast('Notifications are on. A test is on its way.'); })
+      .catch(function (e) { self.busy = false; self.err = (e && e.message) || 'Something went wrong.'; rerender(); });
+  },
+  disable: function () {
+    var self = this, s = self.sub; if (!s) return;
+    Promise.resolve(CLOUD.on() ? CLOUD.fn('push', { action: 'unsub', endpoint: s.endpoint }) : null).catch(function () {}).then(function () { return s.unsubscribe(); }).catch(function () {})
+      .then(function () { self.sub = null; rerender(); toast('Notifications are off on this phone.'); });
+  },
+  /* Together: tell your partner when you add something. Batched so five quick adds are one notification. */
+  pend: {}, timer: null,
+  tog: function (list, item) {
+    var self = this; if (typeof SH === 'undefined' || !SH.cloud() || !CLOUD.on() || !SH.cfg || !SH.cfg.sid) return;
+    var label = list === 'exp' ? (item.note || item.cat || 'an expense') + ' ' + money(+item.amt || 0, 1) : list === 'settle' ? money(+item.amt || 0, 1) : (item.name || item.text || item.title || '');
+    if (!label) return; (self.pend[list] = self.pend[list] || []).push(String(label)); clearTimeout(self.timer); self.timer = setTimeout(function () { self.flush(); }, 6000);
+  },
+  flush: function () {
+    var p = this.pend, me = (shMe().name || 'Your partner'), parts = []; this.pend = {};
+    var some = function (a, one, many) { return a.length === 1 ? one.replace('%', a[0]) : many.replace('#', a.length).replace('%', a.slice(0, 4).join(', ') + (a.length > 4 ? '…' : '')); };
+    if (p.exp) parts.push(some(p.exp, me + ' added a shared expense: %', me + ' added # shared expenses: %'));
+    if (p.settle) parts.push(me + ' recorded a payback of ' + p.settle[p.settle.length - 1]);
+    if (p.shop) parts.push(some(p.shop, me + ' added % to the shopping list', me + ' added # things to the shopping list: %'));
+    if (p.todo) parts.push(some(p.todo, me + ' added a to-do: %', me + ' added # to-dos: %'));
+    if (p.plans) parts.push(some(p.plans, me + ' added % to the calendar', me + ' added # dates to the calendar: %'));
+    if (parts.length) CLOUD.fn('push', { action: 'together', sid: SH.cfg.sid, what: parts.join('. ') }).catch(function () {});
+  }
+};
+var _shTouch7 = shTouch;
+shTouch = function (list, item) {
+  var isNew = false; try { isNew = !item.del && !((SH.doc && SH.doc[list]) || []).some(function (x) { return x.id === item.id; }); } catch (e) {}
+  _shTouch7(list, item); if (isNew) { try { PUSH.tog(list, item); } catch (e) {} }
+};
+/* the number on the icon: things that need you in the next day or so */
+function badgeCount() {
+  var td = today(), tm = addDays(td, 1), n = 0;
+  try {
+    S.bills.forEach(function (b) { if (b.off) return; var i = billInfo(b, td); if (i.st === 'due' && i.d && i.d <= tm) n++; else if (i.st === 'other' && i.d && i.d >= td && i.d <= tm) n++; });
+    eventsBetween(td, tm).forEach(function (e) { if (e.type === 'due' && e.st !== 'paid') n++; });
+    if (checkinDue()) n++;
+    n += smartItems().filter(function (x) { return x.tone === 'warn'; }).length;
+  } catch (e) {}
+  return n;
+}
+function setBadge() {
+  if (!navigator.setAppBadge) return; var n = PUSH.prefs().badge === false ? 0 : badgeCount();
+  try { (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(function () {}); } catch (e) {}
+}
+document.addEventListener('visibilitychange', function () { setBadge(); });
+setTimeout(setBadge, 3000);
+ACT.pushOn = function () { PUSH.enable(); };
+ACT.pushOff = function (d, el) { armDelete(el, function () { PUSH.disable(); }); };
+ACT.pushTest = function () { CLOUD.fn('push', { action: 'test' }).then(function (j) { toast(j && j.ok ? 'Sent. It should arrive in a few seconds.' : (j && j.error) || 'Couldn’t send.'); }).catch(function (e) { toast(e.message || 'Offline'); }); };
+document.addEventListener('change', function (e) { if (e.target && e.target.getAttribute && e.target.getAttribute('data-act') === 'pushPref') ACT.pushPref(e.target.dataset, e.target); });
+ACT.pushPref = function (d, el, e) { if (e && e.type === 'click') return; S.profile.push = S.profile.push || {}; if (d.a === 'hour') S.profile.push.hour = +el.value; else S.profile.push[d.a] = !!el.checked; save(true); setBadge(); };
+function pushSettings() {
+  var h = '<div class="tp-sect"><span>Notifications</span></div><div class="glass pad">', p = PUSH.prefs();
+  if (!CLOUD.on()) return h + '<p class="small muted mb0">Sign in first (Your account, at the top of Settings). Reminders are sent from the server, so they need your account.</p></div>';
+  if (!PUSH.ok()) return h + (PUSH.ios() && !PUSH.standalone() ? '<p class="small mb0" style="margin-top:0"><b>Open Tally from your Home Screen first.</b> On iPhone, notifications only work for apps added to the Home Screen. In Safari tap Share, then Add to Home Screen, and open Tally from that icon.</p>' : '<p class="small muted mb0" style="margin-top:0">This browser doesn’t support notifications. On iPhone it needs iOS 16.4 or later and Tally opened from the Home Screen.</p>') + '</div>';
+  var on = PUSH.here(), tog = function (k, title, sub, def) { return '<label class="tp-opt"><input type="checkbox" data-act="pushPref" data-a="' + k + '" ' + ((p[k] == null ? def : p[k]) ? 'checked' : '') + '><span><b>' + title + '</b><span>' + sub + '</span></span></label>'; };
+  if (PUSH.err) h += '<div class="tp-err">' + esc(PUSH.err) + '</div>';
+  if (!on) return h + '<p class="small" style="margin-top:0">Get a heads-up the day before a bill or card payment is due, when your partner adds something in Together, and when it’s time to check in. A number on the Tally icon shows what needs you.</p><button class="tp-btn tp-block" data-act="pushOn"' + (PUSH.busy ? ' disabled' : '') + '>' + (PUSH.busy ? 'Turning on…' : 'Turn on notifications on this phone') + '</button><p class="small muted mb0">Your phone will ask for permission. Each phone is turned on separately.</p></div>';
+  h += '<div class="flex" style="justify-content:space-between;margin-bottom:8px"><span class="small"><span class="srct bank"><i class="bkdot"></i>On for this phone</span></span><button class="tp-btn tp-sm tp-ghost" data-act="pushTest">Send a test</button></div>' +
+    tog('due', 'Bills and card payments', 'One note the day before, listing what’s due and the total.', true) +
+    tog('stmt', 'Statement closing', 'Two days before a card’s statement closes, so you can pay it down first.', true) +
+    tog('checkin', 'Weekly check-in', 'On your reminder day and hour, set above.', true) +
+    tog('together', 'Together', 'When your partner adds an expense, a payback, or something to a list.', true) +
+    tog('badge', 'Number on the Tally icon', 'Counts what’s due today or tomorrow, a check-in that’s due, and warnings.', true) +
+    '<label class="tp-label" for="pu_hour">Send due-date reminders around</label><select class="tp-input" id="pu_hour" data-act="pushPref" data-a="hour">' + [6, 7, 8, 9, 10, 12, 15, 17, 18, 19, 20, 21].map(function (x) { return '<option value="' + x + '"' + (+(p.hour == null ? 9 : p.hour) === x ? ' selected' : '') + '>' + (x % 12 || 12) + (x < 12 ? ' AM' : ' PM') + '</option>'; }).join('') + '</select>' +
+    '<p class="small muted">These choices follow your account, so they apply on every phone you’ve turned on. Bank data updates about once a day, so Tally can’t notify you the moment you spend.</p>' +
+    '<button class="tp-btn tp-ghost tp-sm" data-act="pushOff" data-label="Turn off on this phone">Turn off on this phone</button></div>';
+  return h;
+}
+var _settings7 = PAGES.settings;
+PAGES.settings = function () { var h = _settings7(), at = h.indexOf('<div class="tp-sect"><span>Bank connection</span>'); return at >= 0 ? h.slice(0, at) + pushSettings() + h.slice(at) : h + pushSettings(); };
+PUSH.init();
+setTimeout(function () { if (location.hash && /^#[a-z]+$/.test(location.hash)) { var h = location.hash; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} goHash(h); } }, 400);
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };

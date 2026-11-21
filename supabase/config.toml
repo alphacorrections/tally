@@ -13,3 +13,6 @@ verify_jwt = false
 
 [functions.assistant]
 verify_jwt = false
+
+[functions.push]
+verify_jwt = false
