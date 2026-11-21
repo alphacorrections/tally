@@ -800,6 +800,8 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .kindseg .seg{flex-wrap:wrap}
 .kindseg .seg button{flex:1 1 30%}
 
+.togq.plain{border-color:var(--tp-line);background:var(--tp-card)}
+
 </style>
 </head>
 <body class="tp-page">
@@ -809,7 +811,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.20.6';
+var APP_VERSION = '2026.11.21.1';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1590,7 +1592,7 @@ function runway(days) {
 }
 
 /* Tally v2 — pages, flows, actions, boot */
-var ACC_VIEW = 'net', ACC_VIEWS = { net: { tab: 'Net worth', label: 'Net worth' }, cash: { tab: 'Cash', label: 'Spending accounts', kinds: ['spend'] }, save: { tab: 'Savings', label: 'Savings', kinds: ['save'] }, inv: { tab: 'Investing', label: 'Investing + retirement', kinds: ['invest', 'retire'] } };
+var ACC_VIEW = 'cash', ACC_VIEWS = { cash: { tab: 'Cash', label: 'Spending accounts', kinds: ['spend'] }, save: { tab: 'Savings', label: 'Savings', kinds: ['save'] }, inv: { tab: 'Investing', label: 'Investing + retirement', kinds: ['invest', 'retire'] }, net: { tab: 'Net worth', label: 'Net worth' } };
 var VIEW = 'home', NW_RANGE = 'year', CARD_YEAR = null, SAY_OFF = 0, TIP_OFF = 0, WIZ = { step: 1, name: '', how: 'fresh', ws: 1 };
 var CK = null, CW = null, INBOX = null, INBOX_ERR = '';
 var PLAY = { save: 500, side: 0, cut: 0, apy: 3.75, goal: '', b_amt: 1000, b_fee: 100, b_apr: 4.99, b_mo: 6, b_apy: 3.75, c_amt: 3000, c_apr: 28.49, c_pay: 300 };
@@ -3875,8 +3877,22 @@ ACT.billDot = billDotTap;
 var INTRX = /interest charge|purchase interest|interest charged|finance charge|cash advance interest|interest on (purchases|cash|balance)/i;
 var FEERX = /late fee|late payment fee|annual (membership )?fee|membership fee|overdraft|nsf fee|insufficient funds|atm fee|atm surcharge|foreign trans|intl trans|international trans|service fee|service charge|maintenance fee|monthly fee|returned (payment|item)|cash advance fee|balance transfer fee|wire fee|paper statement/i;
 var XFERRX = /transfer|xfer|from savings|to savings|from checking|to checking|round ?up|payment thank|payment received|credit card pmt|card payment|cash ?out|standard transfer|instant transfer/i;
+/* money moved into investing isn't spending: it's still yours, in a different account */
+var INVRX = /robinhood|fidelity|fid bkg|schwab|vanguard|webull|e\*?trade|etrade|coinbase|acorns|betterment|wealthfront|m1 finance|stash (capital|invest)|public\.com|sofi invest|merrill|td ameritrade|interactive brokers|ibkr|tastytrade|moomoo|kraken|gemini trust|equityzen|forge global|hiive|carta|angellist|titan invest|ally invest|treasurydirect|brokerage|securities/i;
+function notSpendSrc(src) { var a = src && src.indexOf('a:') === 0 ? byId(S.accounts, src.slice(2)) : null; return !!(a && (a.kind === 'invest' || a.kind === 'retire')); }
+function moveKeyOf(desc) { return mkey({ note: cleanDesc(desc) }); }
+function isInvestMove(desc) { return INVRX.test(desc || '') || !!((S.profile.moveRules || {})[moveKeyOf(desc)]); }
+function toMove(x, why) { S.moves = S.moves || []; S.moves.push({ id: 'm' + uid(), ext: x.ext || '', date: x.date, amt: +x.amt, src: x.src, note: x.note || 'Transfer', why: why || 'invest', cat: x.cat || '' }); }
+/* purchases already in Spending that are really money going into investments */
+function sweepMoves() {
+  var n = 0, keep = []; (S.txns || []).forEach(function (x) {
+    var buy = notSpendSrc(x.src), mv = !buy && !x.keepSpend && (x.ext || x.bank) && (INVRX.test(x.bankDesc || x.note || '') || (S.profile.moveRules || {})[mkey(x)]);
+    if (buy || mv) { toMove(x, buy ? 'buy' : 'invest'); n++; } else keep.push(x);
+  });
+  if (n) S.txns = keep; return n;
+}
 var _bankSkip4 = bankSkip;
-bankSkip = function (desc, src) { return isLoanSrc(src) || INTRX.test(desc || '') || FEERX.test(desc || '') || _bankSkip4(desc, src); }; /* loan activity is payments and interest, not purchases */
+bankSkip = function (desc, src) { return isLoanSrc(src) || notSpendSrc(src) || isInvestMove(desc) || INTRX.test(desc || '') || FEERX.test(desc || '') || _bankSkip4(desc, src); }; /* loan activity is payments and interest, not purchases */
 function bankExtras(d) {
   d = d || BANK.data; if (!d || !d.accounts) return 0;
   var mp = BANK.map(), haveC = {}, haveI = {}, n = 0; S.costs = S.costs || []; S.inflows = S.inflows || [];
@@ -3894,12 +3910,25 @@ function bankExtras(d) {
       }
     });
   });
+  /* buys inside an investing account and transfers out to a brokerage: keep a record, but not as spending */
+  S.moves = S.moves || []; var haveM = {}; S.moves.forEach(function (x) { if (x.ext) haveM[x.ext] = 1; }); (S.txns || []).forEach(function (x) { if (x.ext) haveM[x.ext] = 1; });
+  d.accounts.forEach(function (a) {
+    var src = mp[a.id]; if (!src || src.indexOf('a:') !== 0) return; var buy = notSpendSrc(src);
+    (a.txns || []).forEach(function (t) { var key = a.id + ':' + t.id; if (t.amt >= 0 || haveM[key] || isLoanSrc(src)) return; if (buy || (isInvestMove(t.desc) && !INTRX.test(t.desc) && !FEERX.test(t.desc))) { haveM[key] = 1; toMove({ ext: key, date: t.date, amt: r2(-t.amt), src: src, note: cleanDesc(t.desc) }, buy ? 'buy' : 'invest'); n++; } });
+  });
+  sweepMoves();
   /* fees that came in as purchases before this existed: move them over */
   var moved = (S.txns || []).filter(function (x) { return x.ext && haveC[x.ext]; }); if (moved.length) S.txns = S.txns.filter(function (x) { return !(x.ext && haveC[x.ext]); });
   return n;
 }
 var _imp4 = BANK.importTxns;
-BANK.importTxns = function (d0, since0) { try { bankExtras(d0); } catch (e) {} return _imp4.call(this, d0, since0); };
+BANK.importTxns = function (d0, since0) {
+  try { bankExtras(d0); } catch (e) {}
+  var n = _imp4.call(this, d0, since0), inM = {}; (S.moves || []).forEach(function (x) { if (x.ext) inM[x.ext] = 1; });
+  /* anything already filed as money moved stays out of Spending */
+  var before = S.txns.length; S.txns = S.txns.filter(function (x) { return !(x.ext && inM[x.ext]); });
+  return Math.max(0, n - (before - S.txns.length));
+};
 
 function costsIn(from, to, kind) { return (S.costs || []).filter(function (x) { return x.date >= from && x.date <= to && (!kind || x.kind === kind); }); }
 function yearStart(d) { return d.slice(0, 4) + '-01-01'; }
@@ -3975,6 +4004,44 @@ function qaTogQuick(q) {
 }
 ACT.qaTogNow = function () { if (!QA) return; qaKeep(); var a = r2(num(QA.amt)), split = QA.split || 'half', pct = num(QA.pct) || 50; QA.together = true; QA.split = split; var tg = document.getElementById('qa_tog'); if (tg) tg.checked = true; ACT.qaSave(); if (QA) return; $all('.toast').forEach(function (t) { t.remove(); }); toast('Added to Together. ' + shThem().name + ' owes you ' + money(r2(a * (split === 'other' ? 1 : split === 'pct' ? (100 - pct) / 100 : 0.5)), 1) + '.'); };
 ACT.qaTogOff = function () { if (!QA) return; qaKeep(); QA.together = false; var tg = document.getElementById('qa_tog'); if (tg) tg.checked = false; ACT.qaSave(); if (QA) return; $all('.toast').forEach(function (t) { t.remove(); }); toast('Removed from Together.'); };
+
+/* ---------- "this isn't spending": money moved into investments ---------- */
+var _tq6 = qaTogQuick;
+qaTogQuick = function (q) {
+  var h = _tq6(q); if (!q.id || q.shared || q.together) return h;
+  return h + '<button class="togq plain" data-act="qaMove"><span class="tp-tile">' + TP.svg('trend') + '</span><span class="tp-t"><b>Not spending: I invested or moved this</b><span>Takes it out of Spending and your limit. Tally will treat ' + esc(spMerchant(q)) + ' the same way from now on.</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+};
+ACT.qaMove = function () {
+  if (!QA || !QA.id) return; var x = (S.txns || []).filter(function (t) { return t.id === QA.id; })[0]; if (!x) return;
+  var k = mkey(x), name = spMerchant(x); S.profile.moveRules = S.profile.moveRules || {}; if (k) S.profile.moveRules[k] = 1;
+  var n = 0, keep = []; (S.txns || []).forEach(function (t) { if (t === x || (k && !t.shared && !t.keepSpend && mkey(t) === k)) { toMove(t, 'invest'); n++; } else keep.push(t); });
+  S.txns = keep; QA = null; closeSheet(); render._keep = true; save();
+  toast(n > 1 ? 'Moved ' + n + ' ' + name + ' charges out of Spending. New ones will be treated as money you moved.' : 'Moved out of Spending. New ' + name + ' charges will be treated the same way.');
+};
+function movesIn(from, to) { return (S.moves || []).filter(function (x) { return x.date >= from && x.date <= to; }); }
+ACT.movesSheet = function () {
+  var list = (S.moves || []).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }), td = today();
+  sheet(sxHead('Moved to investing') + '<p class="small muted" style="margin-top:0">Buying stock or sending money to a brokerage isn’t spending. You still have it, in a different form. These stay out of Spending and your limit. Your investing balance is what tracks them.</p>' +
+    '<div class="kv"><span>This month</span><b>' + money(sumAmt(movesIn(monthStart(td), td)), 1) + '</b></div><div class="kv"><span>This year</span><b>' + money(sumAmt(movesIn(yearStart(td), td)), 1) + '</b></div>' +
+    (list.length ? '<div class="glass" style="margin-top:10px">' + list.slice(0, 40).map(function (x) { return '<div class="tp-row static">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note) + '</b><span>' + esc(srcName(x.src)) + (x.why === 'buy' ? ' · bought inside the account' : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span><button class="pillbtn sm" data-act="moveBack" data-id="' + x.id + '" aria-label="Count ' + esc(x.note) + ' as spending">Undo</button></div>'; }).join('') + '</div><p class="small muted">Undo puts a charge back in Spending and stops Tally from moving that name again.</p>' : '<p class="small muted">Nothing yet.</p>') +
+    '<div class="acts"><button class="tp-btn" data-act="close">Done</button></div>');
+};
+ACT.moveBack = function (d) {
+  var x = (S.moves || []).filter(function (m) { return m.id === d.id; })[0]; if (!x) return;
+  S.moves = S.moves.filter(function (m) { return m !== x; });
+  if (x.why !== 'buy') { var t = { id: 't' + uid(), ext: x.ext || '', at: x.date + 'T12:00:00', date: x.date, amt: +x.amt, src: x.src, cat: x.cat || 'Other', note: x.note, bank: !!x.ext, keepSpend: true }; S.txns.push(t); var k = mkey(t); if (S.profile.moveRules && k) delete S.profile.moveRules[k]; }
+  save(); ACT.movesSheet(); toast(x.why === 'buy' ? 'Removed.' : 'Back in Spending.');
+};
+var _io6 = inOutCard;
+inOutCard = function () {
+  var h = _io6(), td = today(), mo = sumAmt(movesIn(monthStart(td), td)), yr = sumAmt(movesIn(yearStart(td), td));
+  if (!(S.moves || []).length) return h;
+  return h + '<button class="glass tp-row cta" data-act="movesSheet"><span class="tp-tile">' + TP.svg('trend') + '</span><span class="tp-t"><b>' + money(mo) + ' moved to investing this month</b><span>' + money(yr) + ' this year · not counted as spending</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+};
+var _ctx6 = aiContext;
+aiContext = function () { var c = _ctx6(), td = today(); try { if ((S.moves || []).length) c.movedToInvesting = { note: 'money moved into investments; not spending', thisMonth: Math.round(sumAmt(movesIn(monthStart(td), td))), thisYear: Math.round(sumAmt(movesIn(yearStart(td), td))), recent: (S.moves || []).slice(-8).map(function (x) { return { date: x.date, amount: +x.amt, what: x.note, from: srcName(x.src) }; }) }; } catch (e) {} return c; };
+/* once, on load: clean up what was imported before this existed */
+try { sweepMoves(); } catch (e) {}
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
