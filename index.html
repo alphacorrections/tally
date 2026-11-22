@@ -814,6 +814,8 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .dblrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(0,0,0,.1);font-size:13.5px;line-height:1.45;flex-wrap:wrap}
 .dblcard .pillbtn{background:transparent;color:var(--tp-solid-ink);border-color:rgba(0,0,0,.18)}
 
+.needs .tp-tile svg{width:20px;height:20px}
+
 </style>
 </head>
 <body class="tp-page">
@@ -823,7 +825,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.21.3';
+var APP_VERSION = '2026.11.21.4';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -4177,23 +4179,40 @@ shTouch = function (list, item) {
   var isNew = false; try { isNew = !item.del && !((SH.doc && SH.doc[list]) || []).some(function (x) { return x.id === item.id; }); } catch (e) {}
   _shTouch7(list, item); if (isNew) { try { PUSH.tog(list, item); } catch (e) {} }
 };
-/* the number on the icon: things that need you in the next day or so */
-function badgeCount() {
-  var td = today(), tm = addDays(td, 1), n = 0;
+/* the number on the icon: things that need you in the next day or so. Each one is listed on Home and can be cleared. */
+function badgeItems() {
+  var td = today(), tm = addDays(td, 1), out = [], seen = S.profile.badgeSeen || {};
+  var when = function (d) { return d === td ? 'today' : 'tomorrow'; }, add = function (o) { if (!seen[o.key]) out.push(o); };
   try {
-    S.bills.forEach(function (b) { if (b.off) return; var i = billInfo(b, td); if (i.st === 'due' && i.d && i.d <= tm) n++; else if (i.st === 'other' && i.d && i.d >= td && i.d <= tm) n++; });
-    eventsBetween(td, tm).forEach(function (e) { if (e.type === 'due' && e.st !== 'paid') n++; });
-    if (checkinDue()) n++;
-    n += smartItems().filter(function (x) { return x.tone === 'warn'; }).length;
+    S.bills.forEach(function (b) { if (b.off) return; var i = billInfo(b, td); if (!i.d || i.d < td || i.d > tm || (i.st !== 'due' && i.st !== 'other')) return; add({ key: 'bill:' + b.id + ':' + i.d, icon: 'receipt', title: b.name + ' is due ' + when(i.d), sub: (b.amount ? money(+b.amount) : 'No amount set') + (b.account ? ' · from ' + b.account : ''), act: 'billEdit', id: b.id }); });
+    eventsBetween(td, tm).forEach(function (e) { if (e.type !== 'due' || e.st === 'paid') return; var a = cardDueAmt(e); add({ key: 'card:' + e.card + ':' + e.date, icon: 'card', title: e.title + ' ' + when(e.date), sub: a ? money(a) : 'Add the statement balance on the Cards tab', act: 'go', a: 'cards' }); });
+    if (checkinDue()) add({ key: 'ck:' + td, icon: 'pencil', title: 'Your weekly check-in is due', sub: 'About a minute: confirm balances and plan the week', act: 'checkinStart' });
+    smartItems().forEach(function (x) { if (x.tone === 'warn') add({ key: 'smart:' + x.key, icon: x.icon || 'bell', title: x.title, sub: x.text, act: 'goSmart' }); });
   } catch (e) {}
-  return n;
+  return out;
 }
+function badgeCount() { return badgeItems().length; }
+function badgeCard() {
+  var it = badgeItems(); if (!it.length || PUSH.prefs().badge === false) return '';
+  return '<div class="tp-sect"><span>Needs you · ' + it.length + '</span><span class="sp"></span><button data-act="badgeClear" data-a="all">Clear all</button></div><div class="glass tp-rise needs">' + it.map(function (x) {
+    return '<div class="rowwrap"><button class="tp-row" data-act="' + x.act + '"' + (x.id ? ' data-id="' + esc(x.id) + '"' : '') + (x.a ? ' data-a="' + esc(x.a) + '"' : '') + '><span class="tp-tile cd-due">' + TP.svg(x.icon) + '</span><span class="tp-t"><b>' + esc(x.title) + '</b><span>' + esc(x.sub) + '</span></span></button><button class="ibtn sm rowgear" data-act="badgeClear" data-a="' + esc(x.key) + '" aria-label="Got it: clear ' + esc(x.title) + '">' + TP.svg('check', 2.4) + '</button></div>'; }).join('') +
+    '</div><p class="small muted" style="margin:-4px 2px 12px">This is what the number on your Tally icon is counting. Tap ✓ when you’ve seen one and the number drops.</p>';
+}
+ACT.badgeClear = function (d) {
+  var seen = S.profile.badgeSeen = S.profile.badgeSeen || {}, td = today();
+  (d.a === 'all' ? badgeItems().map(function (x) { return x.key; }) : [d.a]).forEach(function (k) { seen[k] = td; });
+  Object.keys(seen).forEach(function (k) { if (seen[k] < addDays(td, -40)) delete seen[k]; });
+  render._keep = true; save(); setBadge();
+};
+var _home8 = PAGES.home;
+PAGES.home = function () { var h = _home8(), c = badgeCard(); if (!c) return h; var at = h.indexOf('<div class="tp-sect">'); return at >= 0 ? h.slice(0, at) + c + h.slice(at) : h + c; };
 function setBadge() {
   if (!navigator.setAppBadge) return; var n = PUSH.prefs().badge === false ? 0 : badgeCount();
   try { (n > 0 ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(function () {}); } catch (e) {}
 }
 document.addEventListener('visibilitychange', function () { setBadge(); });
 setTimeout(setBadge, 3000);
+var _save8 = save; save = function () { var r = _save8.apply(this, arguments); try { setBadge(); } catch (e) {} return r; };
 ACT.pushOn = function () { PUSH.enable(); };
 ACT.pushOff = function (d, el) { armDelete(el, function () { PUSH.disable(); }); };
 ACT.pushTest = function () { CLOUD.fn('push', { action: 'test' }).then(function (j) { toast(j && j.ok ? 'Sent. It should arrive in a few seconds.' : (j && j.error) || 'Couldn’t send.'); }).catch(function (e) { toast(e.message || 'Offline'); }); };
