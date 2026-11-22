@@ -816,6 +816,15 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 
 .needs .tp-tile svg{width:20px;height:20px}
 
+/* assistant extras */
+.askacts{display:flex;flex-direction:column;gap:6px;margin-top:10px;align-items:flex-start}
+.askacts .tp-btn{text-align:left;justify-content:flex-start;height:auto;white-space:normal}
+.askacts .tp-btn svg,.askdone svg{width:14px;height:14px;flex:none}
+.askdone{display:inline-flex;gap:6px;align-items:center;font-size:13px;font-weight:600;color:var(--ok)}
+.aitext{font-size:14.5px;line-height:1.5} .aitext p{margin:0 0 8px} .aitext ul{padding-left:18px;margin:4px 0 8px}
+.recap summary{cursor:pointer;list-style:none} .recap summary::-webkit-details-marker{display:none} .recap[open] summary{margin-bottom:8px}
+.tp-btn .tp-mk.tp-sm{width:14px;height:14px}
+
 </style>
 </head>
 <body class="tp-page">
@@ -825,7 +834,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.21.4';
+var APP_VERSION = '2026.11.22.1';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -3831,9 +3840,9 @@ function askPage() {
   if (!CLOUD.on()) return h + '<div class="glass pad"><b>Sign in first</b><p class="small muted mb0">The assistant runs through your Tally account. Settings › Your account.</p><button class="tp-btn tp-sm mt" data-act="go" data-a="settings">Go to Settings</button></div>';
   if (!S.profile.aiOk) return h + '<div class="glass hero tp-rise"><span class="label">Ask Tally</span><div class="disp" style="font-size:24px;font-weight:700;line-height:1.25;margin:6px 0 8px">Ask anything about your money.</div><div class="heroSub">“Can I afford it?” “Where did October go?” “How do I cancel this?”</div></div>' +
     '<div class="glass pad"><b>Before you start</b><ul class="small" style="padding-left:18px;margin:8px 0 12px"><li>Your question and a summary of your Tally numbers (balances, bills, goals, recent purchases) go to Claude, an AI made by Anthropic, to write the answer.</li><li>Only your own numbers, plus what’s in Together. Nothing is posted or shared with anyone else.</li><li>It explains and suggests. It isn’t a licensed financial advisor, and it can get things wrong, so check anything important.</li></ul><button class="tp-btn tp-block" data-act="askOk">Turn it on</button></div>';
-  h += '<div class="chat">' + (CHAT.msgs.length ? CHAT.msgs.map(function (m) {
+  h += '<div class="chat">' + (CHAT.msgs.length ? CHAT.msgs.map(function (m, mi) {
     if (m.role === 'user') return '<div class="bub me">' + esc(m.content) + '</div>';
-    return '<div class="bub ai' + (m.err ? ' err' : '') + '">' + mdLite(m.content) + (m.sources && m.sources.length ? '<div class="srcs">Sources: ' + m.sources.map(function (s2) { return '<a href="' + esc(s2.url) + '" target="_blank" rel="noopener">' + esc(s2.title) + '</a>'; }).join(' · ') + '</div>' : '') + '</div>';
+    return '<div class="bub ai' + (m.err ? ' err' : '') + '">' + mdLite(m.content) + (m.sources && m.sources.length ? '<div class="srcs">Sources: ' + m.sources.map(function (s2) { return '<a href="' + esc(s2.url) + '" target="_blank" rel="noopener">' + esc(s2.title) + '</a>'; }).join(' · ') + '</div>' : '') + askActBtns(m, mi) + '</div>';
   }).join('') : '<div class="glass pad"><b>Try one</b><div class="chips" style="margin-top:10px">' + ASK_IDEAS.map(function (q) { return '<button class="chip" data-act="askChip" data-a="' + esc(q) + '">' + esc(q) + '</button>'; }).join('') + '</div></div>') +
     (CHAT.busy ? '<div class="bub ai think"><i></i><i></i><i></i></div>' : '') + '</div>';
   h += '<div class="askbar"><input class="tp-input" id="ask_q" placeholder="Ask about your money" autocomplete="off" enterkeyhint="send" aria-label="Your question"' + (CHAT.busy ? ' disabled' : '') + '><button class="tp-btn" data-act="askSend"' + (CHAT.busy ? ' disabled' : '') + '>Send</button></div>';
@@ -3846,7 +3855,7 @@ function askGo(q) {
   CHAT.msgs.push({ role: 'user', content: q }); CHAT.busy = true; chatKeep(); askPaint();
   var done = function (m) { CHAT.busy = false; CHAT.msgs.push(m); chatKeep(); if (VIEW === 'ask') askPaint(); else toast('Tally answered. Open Ask to read it.'); };
   CLOUD.fn('assistant', { messages: CHAT.msgs.filter(function (m) { return !m.err; }).slice(-12).map(function (m) { return { role: m.role, content: m.content }; }), context: aiContext() })
-    .then(function (j) { if (j && j.left != null) CHAT.left = j.left; if (!j || !j.ok) return done({ role: 'assistant', content: (j && j.error) || 'Something went wrong. Try again.', err: true }); done({ role: 'assistant', content: j.text, sources: j.sources || [] }); })
+    .then(function (j) { if (j && j.left != null) CHAT.left = j.left; if (!j || !j.ok) return done({ role: 'assistant', content: (j && j.error) || 'Something went wrong. Try again.', err: true }); var pa = askActions(j.text); done({ role: 'assistant', content: pa.text, actions: pa.acts, sources: j.sources || [] }); })
     .catch(function (e) { done({ role: 'assistant', content: /Failed to fetch|Load failed|NetworkError/i.test(e.message) ? 'Couldn’t reach the server. Check your connection and try again.' : e.message || 'Something went wrong.', err: true }); });
 }
 function askPaint() { render._keep = true; render(); setTimeout(function () { window.scrollTo(0, document.documentElement.scrollHeight); var i = document.getElementById('ask_q'); if (i && !CHAT.busy && window.innerWidth > 700) i.focus(); }, 30); }
@@ -4240,6 +4249,203 @@ var _settings7 = PAGES.settings;
 PAGES.settings = function () { var h = _settings7(), at = h.indexOf('<div class="tp-sect"><span>Bank connection</span>'); return at >= 0 ? h.slice(0, at) + pushSettings() + h.slice(at) : h + pushSettings(); };
 PUSH.init();
 setTimeout(function () { if (location.hash && /^#[a-z]+$/.test(location.hash)) { var h = location.hash; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} goHash(h); } }, 400);
+
+/* ====================================================================
+   More from the assistant: things Tally can add from chat, trip costs, fare checks,
+   a weekly market note, card offers, weekly insights, and help for the two of you in Together.
+   Every one counts toward the daily question limit. Nothing runs unless you asked or opened the page.
+   ==================================================================== */
+var LS_AI = 'tally.ai', AIC = lsGet(LS_AI) || {}, AIB = {};
+function aiKeep() { lsSet(LS_AI, AIC); }
+function aiTask(task, input, ctx) {
+  return CLOUD.fn('assistant', { task: task, input: input || {}, context: ctx || {} }).then(function (j) {
+    if (j && j.left != null) { CHAT.left = j.left; chatKeep(); }
+    if (!j || !j.ok) throw new Error((j && j.error) || 'Something went wrong. Try again.');
+    return j;
+  }, function (e) { throw new Error(/Failed to fetch|Load failed|NetworkError/i.test(e.message) ? 'Couldn’t reach the server. Check your connection.' : e.message || 'Something went wrong.'); });
+}
+/* the same one-time OK that Ask Tally uses, before anything is sent to Claude */
+function aiGate(run) {
+  if (!CLOUD.on()) { toast('Sign in first: Settings › Your account.'); return; }
+  if (S.profile.aiOk) { run(); return; }
+  aiGate.next = run;
+  sheet(sxHead('Before you start') + '<ul class="small" style="padding-left:18px;margin:4px 0 12px"><li>What you ask, plus the Tally numbers it needs, goes to Claude, an AI made by Anthropic, to write the answer.</li><li>It can look things up on the web, like fares or card offers.</li><li>It explains and estimates. It doesn’t move money, and it isn’t a financial advisor.</li><li>Each use counts toward your daily question limit.</li></ul><div class="acts"><button class="tp-btn tp-ghost" data-act="close">Not now</button><button class="tp-btn" data-act="aiOkGo">OK, go ahead</button></div>');
+}
+ACT.aiOkGo = function () { S.profile.aiOk = true; save(true); closeSheet(); var f = aiGate.next; aiGate.next = null; if (f) f(); };
+function aiBusyBtn(key, label, act, extra) { return '<button class="tp-btn tp-sm' + (extra && extra.ghost ? ' tp-ghost' : '') + '" data-act="' + act + '"' + (extra && extra.id ? ' data-id="' + esc(extra.id) + '"' : '') + (AIB[key] ? ' disabled' : '') + '>' + (AIB[key] ? '<span class="tp-mk tp-sm"></span> Working…' : esc(label)) + '</button>'; }
+function aiSrcs(list) { return list && list.length ? '<div class="srcs">Sources: ' + list.map(function (x) { return '<a href="' + esc(x.url) + '" target="_blank" rel="noopener">' + esc(x.title) + '</a>'; }).join(' · ') + '</div>' : ''; }
+function aiRun(key, p, okFn) { AIB[key] = true; rerender(); p.then(function (j) { AIB[key] = false; okFn(j); }).catch(function (e) { AIB[key] = false; rerender(); toast(e.message); }); }
+
+/* ---------- 1. things Tally can add when you ask in chat ---------- */
+function askActions(text) {
+  var acts = [], t = String(text || '').replace(/```tally-action\s*([\s\S]*?)```/g, function (_, body) { try { var o = JSON.parse(body); if (o && o.type) acts.push(o); } catch (e) {} return ''; }).trim();
+  return { text: t || (acts.length ? 'Here’s what I can add:' : ''), acts: acts.slice(0, 6) };
+}
+function askActLabel(a) {
+  if (a.type === 'add_bill') return 'Add bill: ' + a.name + ' ' + money(num(a.amount)) + (a.day ? ' on the ' + ordinal(+a.day) : '') + (a.freq === 'yearly' ? ', yearly' : '');
+  if (a.type === 'add_goal') return 'Add goal: ' + a.name + ' ' + money(num(a.target)) + (a.monthly ? ', ' + money(num(a.monthly)) + '/mo' : '');
+  if (a.type === 'log_purchase') return 'Log purchase: ' + money(num(a.amount), 1) + (a.note ? ' ' + a.note : '');
+  if (a.type === 'add_shopping') return 'Add to shopping list: ' + (a.items || []).slice(0, 5).join(', ') + ((a.items || []).length > 5 ? '…' : '');
+  if (a.type === 'add_todo') return 'Add to-do: ' + a.text;
+  return '';
+}
+function askActBtns(m, mi) {
+  if (!m.actions || !m.actions.length) return '';
+  return '<div class="askacts">' + m.actions.map(function (a, k) { var l = askActLabel(a); return l ? (a.done ? '<span class="askdone">' + TP.svg('check', 2.6) + esc(l.replace(/^Add |^Log /, 'Added ').replace(/^Added purchase/, 'Logged purchase')) + '</span>' : '<button class="tp-btn tp-sm" data-act="askDo" data-i="' + mi + '" data-k="' + k + '">' + TP.svg('plus', 2.4) + esc(l) + '</button>') : ''; }).join('') + '</div>';
+}
+ACT.askDo = function (d) {
+  var m = CHAT.msgs[+d.i], a = m && m.actions && m.actions[+d.k]; if (!a || a.done) return; var td = today(), tog = typeof SH !== 'undefined' && SH.on() && SH.doc, now = new Date().toISOString();
+  if (a.type === 'add_bill') { if (!a.name) return; S.bills.push({ id: uid(), name: String(a.name).slice(0, 60), amount: r2(num(a.amount)), freq: a.freq === 'yearly' ? 'y' : 'm', day: Math.max(1, Math.min(31, +a.day || 1)), month: a.freq === 'yearly' ? +a.month || '' : '', account: '', off: false }); }
+  else if (a.type === 'add_goal') { if (!a.name) return; S.goals.push({ id: 'g' + uid(), name: String(a.name).slice(0, 60), kind: 'save', target: r2(num(a.target)), acct: '', manual: 0, due: /^\d{4}-\d\d-\d\d$/.test(a.due || '') ? a.due : '', monthly: a.monthly ? r2(num(a.monthly)) : '', note: '' }); }
+  else if (a.type === 'log_purchase') { var src = (S.profile.last || {}).src || ((srcList()[0] || {}).id); if (!src) { toast('Add a card or account first.'); return; } var dt = /^\d{4}-\d\d-\d\d$/.test(a.date || '') ? a.date : td; S.txns = S.txns || []; S.txns.push({ id: 't' + uid(), at: dt === td ? now : dt + 'T12:00:00', date: dt, amt: r2(num(a.amount)), src: src, cat: CATS.indexOf(a.category) >= 0 ? a.category : 'Other', note: String(a.note || '').slice(0, 60) }); }
+  else if (a.type === 'add_shopping' || a.type === 'add_todo') {
+    if (!tog) { toast('Set up Together first. Shopping and to-dos live there.'); return; }
+    if (a.type === 'add_todo') shTouch('todo', { id: 'd' + uid(), text: String(a.text || '').slice(0, 120), who: '', due: '', done: false, by: SH.cfg.me, addedAt: now });
+    else (a.items || []).slice(0, 30).forEach(function (n) { n = String(n).trim(); if (n) shTouch('shop', { id: 'i' + uid(), name: n.slice(0, 60), qty: '', got: false, n: 0, by: SH.cfg.me, addedAt: now, store: '', sec: guessSec(n) }); });
+  } else return;
+  a.done = true; chatKeep(); save(true); askPaint(); toast('Done.');
+};
+
+/* ---------- 2. trip cost estimate that becomes a goal ---------- */
+var TRIPP = null;
+ACT.tripPlan = function () { aiGate(function () {
+  var last = S.goals.filter(function (g) { return g.kind === 'trip' && g.trip && g.trip.from; }).pop(), t = TRIPP || { from: last ? last.trip.from : '', n: typeof SH !== 'undefined' && SH.on() ? 2 : 1, style: 'mid' };
+  sheet(sxHead('Plan a trip') + '<p class="small muted" style="margin-top:0">Tally looks up current flight, lodging and daily costs, then you can save the total as a goal.</p><div class="fgrid">' + textField('tp_to', 'Where to', t.to || '', 'e.g. Lisbon') + textField('tp_from', 'Flying from', t.from || '', 'e.g. Boston') + textField('tp_dep', 'Leave', t.depart || '', '', 'date') + textField('tp_ret', 'Come back', t.ret || '', '', 'date') + '</div>' +
+    '<label class="tp-label">Travelers</label>' + seg('tp_n', [[1, '1'], [2, '2'], [3, '3'], [4, '4']], t.n || 1) + '<label class="tp-label">Style</label>' + seg('tp_style', [['budget', 'Budget'], ['mid', 'Mid-range'], ['nice', 'Treat ourselves']], t.style || 'mid') +
+    '<div id="tp_err"></div><div class="acts"><button class="tp-btn" data-act="tripPlanGo">Estimate the cost</button></div>');
+}); };
+ACT.tripPlanGo = function () {
+  var t = { to: val('tp_to').trim(), from: val('tp_from').trim(), depart: val('tp_dep'), ret: val('tp_ret'), n: +val('tp_n') || 1, style: val('tp_style') || 'mid' }, err = !t.to || !t.from ? 'Say where from and where to.' : !t.depart || !t.ret ? 'Pick both dates.' : t.ret <= t.depart ? 'The return date has to be after you leave.' : t.depart < today() ? 'Pick dates in the future.' : '';
+  if (err) { document.getElementById('tp_err').innerHTML = '<div class="tp-err">' + err + '</div>'; return; }
+  TRIPP = t; sheet(sxHead('Plan a trip') + TP.loading('Looking up prices for ' + t.to + '. This takes about half a minute.'));
+  aiTask('trip', { from: t.from, to: t.to, depart: t.depart, returnDate: t.ret, travelers: t.n, style: t.style }).then(function (j) { TRIPP.res = j.data; TRIPP.sources = j.sources || []; tripPlanShow(); })
+    .catch(function (e) { sheet(sxHead('Plan a trip') + '<div class="tp-err">' + esc(e.message) + '</div><div class="acts"><button class="tp-btn" data-act="tripPlan">Try again</button></div>'); });
+};
+function tripPlanShow() {
+  var t = TRIPP, r = t.res || {}, n = function (v) { return Math.max(0, Math.round(num(v))); }, f = r.flight || {}, l = r.lodging || {}, dy = r.daily || {}, o = r.other || {};
+  var total = n(r.total) || n(f.total) + n(l.total) + n(dy.total) + n(o.total), kv = function (a, b, note) { return b ? '<div class="kv"><span>' + a + (note ? '<br><span class="small muted">' + esc(String(note).slice(0, 140)) + '</span>' : '') + '</span><b>' + money(b) + '</b></div>' : ''; };
+  t.total = total; t.fare = n(f.perPersonLow) || n(f.perPersonTypical);
+  sheet(sxHead(t.to + ', ' + shortDate(t.depart) + ' to ' + shortDate(t.ret)) + (r.summary ? '<p class="small" style="margin-top:0">' + esc(r.summary) + '</p>' : '') +
+    '<div class="glass hero" style="padding:16px"><span class="label">Estimated total for ' + t.n + '</span><div class="big" style="font-size:44px">' + money(total) + '</div>' + (t.n > 1 ? '<div class="small muted">' + money(Math.round(total / t.n)) + ' each</div>' : '') + '</div>' +
+    kv('Flights', n(f.total), f.note) + kv('Lodging' + (n(l.nights) ? ' · ' + n(l.nights) + ' nights' : ''), n(l.total), l.note) + kv('Food, getting around, things to do', n(dy.total), dy.note) + kv('Other', n(o.total), o.note) +
+    ((r.tips || []).length ? '<label class="tp-label">Ways to spend less</label><ul class="small" style="padding-left:18px;margin:4px 0">' + r.tips.slice(0, 3).map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') + (r.whenToBook ? '<p class="small muted">' + esc(r.whenToBook) + '</p>' : '') + aiSrcs(t.sources) +
+    '<p class="small muted">An estimate from prices found online today. Check the real price before you book.</p>' +
+    '<div class="acts">' + (typeof SH !== 'undefined' && SH.on() && SH.doc ? '<button class="tp-btn tp-ghost" data-act="tripSave" data-a="tog">Save as a Together goal</button>' : '') + '<button class="tp-btn" data-act="tripSave" data-a="mine">Save as my goal</button></div>');
+}
+ACT.tripSave = function (d) {
+  var t = TRIPP; if (!t || !t.total) return; var name = 'Trip to ' + t.to;
+  if (d.a === 'tog') { shTouch('goals', { id: 'g' + uid(), name: name, target: t.total, due: t.depart }); toast('Saved to Together. You can both add money to it.'); }
+  else { S.goals.push({ id: 'g' + uid(), name: name, kind: 'trip', target: t.total, acct: '', manual: 0, due: t.depart, note: '', trip: { from: t.from, to: t.to, depart: t.depart, ret: t.ret, fare: t.fare || '', log: t.fare ? [{ d: today(), p: t.fare }] : [] } }); save(true); toast('Saved. It’s under Trips, and Tally will watch the fare.'); }
+  TRIPP = null; closeSheet(); rerender();
+};
+
+/* ---------- 3. fare watch that checks itself ---------- */
+function fareCheck(g, quiet) {
+  var t = g.trip || {}; if (!t.from || !t.to || !t.depart || AIB['fare' + g.id]) return;
+  AIC.fareAt = AIC.fareAt || {}; AIC.fareAt[g.id] = today(); aiKeep(); AIB['fare' + g.id] = true; if (!quiet) rerender();
+  aiTask('fare', { from: t.from, to: t.to, depart: t.depart, returnDate: t.ret || '' }).then(function (j) {
+    AIB['fare' + g.id] = false; var p = r2(num(j.data && j.data.price));
+    if (p > 0) { t.log = t.log || []; t.log.push({ d: today(), p: p, auto: 1 }); g.trip = t; save(true); toast('Lowest fare found for ' + g.name + ': ' + money(p) + (j.data.airline ? ' on ' + j.data.airline : '') + (t.fare && p <= +t.fare ? '. That’s at or under your target.' : '.')); }
+    else if (!quiet) toast((j.data && j.data.note) || 'Couldn’t find a current fare for that route.');
+    if (VIEW === 'explore') rerender();
+  }).catch(function (e) { AIB['fare' + g.id] = false; if (!quiet) toast(e.message); if (VIEW === 'explore') rerender(); });
+}
+ACT.fareCheck = function (d) { var g = byId(S.goals, d.id); if (g) aiGate(function () { fareCheck(g); }); };
+var _tripCard9 = tripCard;
+tripCard = function (g) {
+  var t = g.trip || {}, h = _tripCard9(g); if (!CLOUD.on() || !t.from || !t.to || !t.depart || t.depart < today()) return h;
+  var last = (t.log || []).filter(function (x) { return x.auto; }).pop();
+  return h + '<div class="flex" style="margin:-4px 2px 12px;justify-content:space-between"><span class="small muted">' + (last ? 'Tally last checked ' + shortDate(last.d) + '. It checks weekly when you open Explore.' : 'Tally can look up the fare for you.') + '</span>' + aiBusyBtn('fare' + g.id, 'Check the fare now', 'fareCheck', { id: g.id, ghost: true }) + '</div>';
+};
+
+/* ---------- 4. weekly insights, market note, card offers (Explore) ---------- */
+ACT.insightsGo = function () { aiGate(function () { aiRun('ins', aiTask('insights', {}, aiContext()), function (j) { AIC.insights = { at: today(), items: ((j.data && j.data.items) || []).slice(0, 3) }; aiKeep(); rerender(); }); }); };
+ACT.briefGo = function () { if (!S.watch.length && !S.topics.length) { toast('Add a ticker or a news topic first.'); return; } aiGate(function () { aiRun('brief', aiTask('market', { tickers: S.watch.map(function (w) { return w.sym; }), topics: S.topics }), function (j) { AIC.brief = { at: today(), text: j.text, sources: j.sources || [] }; aiKeep(); rerender(); }); }); };
+ACT.offersGo = function () { aiGate(function () {
+  var td = today(), sp = byKey(spendIn(addDays(td, -90), td), function (x) { return x.cat || 'Other'; }), mo = {}; Object.keys(sp).forEach(function (k) { mo[k] = Math.round(sp[k] / 3); });
+  var ints = {}; costsIn(yearStart(td), td, 'interest').forEach(function (x) { ints[x.src] = r2((ints[x.src] || 0) + +x.amt); });
+  var ls = scoreSnaps(), sc = ls.length ? parseScore(ls[ls.length - 1].score) : null;
+  var input = { cardsTheyHave: S.cards.filter(function (c) { return !c.off; }).map(function (c) { return { name: c.name, earns: c.perk || '' }; }), monthlySpendingByCategory: mo, balancesCostingInterest: S.cards.filter(function (c) { return !c.off && ints['c:' + c.id]; }).map(function (c) { return { card: c.name, balance: Math.round(cardBal(c)), interestPaidThisYear: Math.round(ints['c:' + c.id]) }; }), creditScore: sc ? sc.tu : null };
+  aiRun('offers', aiTask('offers', input), function (j) { AIC.offers = { at: today(), text: j.text, sources: j.sources || [] }; aiKeep(); rerender(); });
+}); };
+var _explore9 = PAGES.explore;
+PAGES.explore = function () {
+  var h = _explore9(), td = today(), ins = AIC.insights, br = AIC.brief, of = AIC.offers, put = function (anchor, add) { var at = h.indexOf(anchor); h = at >= 0 ? h.slice(0, at) + add + h.slice(at) : h + add; };
+  if (!CLOUD.on()) return h;
+  var c1 = '<div class="tp-sect"><span>This week, from your numbers</span><span class="sp"></span>' + (ins ? '<button data-act="insightsGo">' + (AIB.ins ? 'Working…' : 'Refresh') + '</button>' : '') + '</div>' +
+    (ins && ins.items.length ? '<div class="glass">' + ins.items.map(function (x) { return '<div class="tp-row static"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>' + esc(x.title) + '</b><span>' + esc(x.text) + '</span></span></div>'; }).join('') + '</div><p class="small muted" style="margin:-4px 2px 12px">Written ' + shortDate(ins.at) + ' from your own numbers.</p>'
+      : '<div class="glass pad"><p class="small" style="margin-top:0">Three things worth knowing from your spending, bills and goals this week.</p>' + aiBusyBtn('ins', 'Show me', 'insightsGo') + '</div>');
+  put('<div class="tp-sect"><span>Trips', c1);
+  put('<div class="tp-sect"><span>Markets you follow', '<button class="glass tp-row cta" data-act="tripPlan"><span class="tp-tile">' + TP.svg('plane') + '</span><span class="tp-t"><b>Plan a trip</b><span>Get a cost estimate from today’s prices and save it as a goal</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>');
+  var c2 = '<div class="tp-sect"><span>This week in what you follow</span><span class="sp"></span>' + (br ? '<button data-act="briefGo">' + (AIB.brief ? 'Working…' : 'Refresh') + '</button>' : '') + '</div><div class="glass pad">' + (br ? '<div class="aitext">' + mdLite(br.text) + '</div>' + aiSrcs(br.sources) + '<p class="small muted mb0">Written ' + shortDate(br.at) + '.</p>' : '<p class="small" style="margin-top:0">A short note on what moved this week for your tickers and topics, and why.</p>' + aiBusyBtn('brief', 'Write this week’s note', 'briefGo')) + '</div>' +
+    '<div class="tp-sect"><span>Card offers that fit you</span><span class="sp"></span>' + (of ? '<button data-act="offersGo">' + (AIB.offers ? 'Working…' : 'Check again') + '</button>' : '') + '</div><div class="glass pad">' + (of ? '<div class="aitext">' + mdLite(of.text) + '</div>' + aiSrcs(of.sources) + '<p class="small muted mb0">Checked ' + shortDate(of.at) + '. Offers change; confirm on the card’s own site.</p>' : '<p class="small" style="margin-top:0">Looks up current sign-up bonuses and 0% offers that match how you spend, and what moving a balance would save.</p>' + aiBusyBtn('offers', 'Check offers', 'offersGo')) + '</div>';
+  put('<p class="small muted">For following along', c2);
+  /* weekly, and only when you're here: refresh insights and check one trip's fare */
+  if (S.profile.aiOk && !PAGES.explore.auto) { PAGES.explore.auto = true; setTimeout(function () {
+    PAGES.explore.auto = false; if (VIEW !== 'explore') return; var wk = addDays(today(), -7);
+    if (ins && ins.at < wk && !AIB.ins) ACT.insightsGo();
+    var g = S.goals.filter(function (x) { var t = x.kind === 'trip' && x.trip; if (!t || !t.from || !t.to || !t.depart || t.depart < today()) return false; var last = (t.log || []).filter(function (l) { return l.auto; }).pop(); return last && last.d < wk && (AIC.fareAt || {})[x.id] !== today(); })[0];
+    if (g) fareCheck(g, true);
+  }, 1500); }
+  return h;
+};
+
+/* ---------- 5. Together: monthly recap, fair split, shopping help ---------- */
+function togContext(ym) {
+  var me = shMe(), th = shThem(), nm = function (id) { return shPerson(id).name; }, mon = function (m) { return shLive('exp').filter(function (x) { return String(x.date).slice(0, 7) === m; }); };
+  var pm = addMonths(ym + '-01', -1).slice(0, 7), sum = function (l) { var cat = {}, by = {}; l.forEach(function (x) { cat[x.cat || 'Other'] = Math.round((cat[x.cat || 'Other'] || 0) + +x.amt); by[nm(x.payer)] = Math.round((by[nm(x.payer)] || 0) + +x.amt); }); return { total: Math.round(sumAmt(l)), byCategory: cat, paidBy: by, count: l.length }; };
+  var net = shNet();
+  return { people: [me.name, th.name], month: ym, thisMonth: sum(mon(ym)), lastMonth: sum(mon(pm)), biggest: mon(ym).slice().sort(function (a, b) { return b.amt - a.amt; }).slice(0, 6).map(function (x) { return { what: x.note || x.cat, amount: +x.amt, paidBy: nm(x.payer), date: x.date }; }),
+    balanceNow: Math.abs(net) < 0.5 ? 'even' : (net > 0 ? th.name + ' owes ' + me.name : me.name + ' owes ' + th.name) + ' ' + money(Math.abs(net), 1),
+    paybacksThisMonth: shLive('settle').filter(function (x) { return String(x.date).slice(0, 7) === ym; }).map(function (x) { return { from: nm(x.from), amount: +x.amt }; }),
+    sharedGoals: shLive('goals').map(function (g) { var cs = shLive('contrib').filter(function (c) { return c.goal === g.id; }); return { name: g.name, target: +g.target || 0, saved: Math.round(sumAmt(cs)), by: g.due || '', addedThisMonth: Math.round(sumAmt(cs.filter(function (c) { return String(c.date).slice(0, 7) === ym; }))) }; }) };
+}
+ACT.recapGo = function (d) { var ym = d.a || today().slice(0, 7); aiGate(function () { aiRun('recap', aiTask('recap', { month: MONTHS[+ym.slice(5) - 1] + ' ' + ym.slice(0, 4) }, togContext(ym)), function (j) { shTouch('recaps', { id: 'r' + ym, month: ym, text: j.text, by: SH.cfg.me, date: today() }); rerender(); }); }); };
+function fairPct(pid) { var ps = shLive('people'), tot = 0, mine = 0; ps.forEach(function (p) { tot += +p.income || 0; if (p.id === pid) mine = +p.income || 0; }); return tot > 0 && ps.every(function (p) { return +p.income > 0; }) ? Math.round(mine / tot * 100) : null; }
+function fairOn() { var pr = shLive('prefs').filter(function (x) { return x.id === 'split'; })[0]; return !!(pr && pr.on) && fairPct(SH.cfg.me) != null; }
+ACT.fairSplit = function () {
+  var me = shMe(), th = shThem(), p = S.profile.pay || {}, guess = p.amt ? Math.round((+p.amt) * (+p.every === 15 ? 2 : +p.every === 30 ? 1 : 30.44 / (+p.every || 7))) : '';
+  sheet(sxHead('Fair split') + '<p class="small muted" style="margin-top:0">Some couples split shared costs by what each brings home, not down the middle. Type each person’s monthly take-home and Tally works out the shares. Both of you can see these numbers.</p><div class="fgrid">' + moneyField('fs_me', me.name + ' takes home a month', me.income || guess) + moneyField('fs_th', th.name + ' takes home a month', th.income || '') + '</div><div id="fs_out" class="deep small" style="margin-top:10px"></div>' +
+    '<label class="tp-opt mt"><input type="checkbox" id="fs_on" ' + (fairOn() ? 'checked' : '') + '><span><b>Use this for new shared expenses</b><span>New ones start at these shares, not 50/50. You can still change any single expense.</span></span></label><div class="acts"><button class="tp-btn" data-act="fairSave">Save</button></div>');
+  fairLine();
+};
+function fairLine() { var o = document.getElementById('fs_out'); if (!o) return; var a = num(val('fs_me')), b = num(val('fs_th')), me = shMe(), th = shThem(); if (!(a > 0 && b > 0)) { o.textContent = 'Type both amounts to see the shares.'; return; } var pa = Math.round(a / (a + b) * 100); o.innerHTML = '<b>' + esc(me.name) + ' ' + pa + '% · ' + esc(th.name) + ' ' + (100 - pa) + '%</b><br>On a $100 shared bill: ' + esc(me.name) + ' ' + money(pa) + ', ' + esc(th.name) + ' ' + money(100 - pa) + '. Down the middle would be $50 each.'; }
+document.addEventListener('input', function (e) { if (e.target && (e.target.id === 'fs_me' || e.target.id === 'fs_th')) fairLine(); });
+ACT.fairSave = function () { var me = JSON.parse(JSON.stringify(shMe())), th = JSON.parse(JSON.stringify(shThem())); me.income = r2(num(val('fs_me'))) || ''; th.income = r2(num(val('fs_th'))) || ''; shTouch('people', me); if (th.id) shTouch('people', th); shTouch('prefs', { id: 'split', on: checked('fs_on') }); closeSheet(); rerender(); toast('Saved.'); };
+var _shExp9 = ACT.shExp;
+ACT.shExp = function (d) { _shExp9.apply(this, arguments); if (!(d && d.id) && SHX && fairOn()) { SHX.split = 'pct'; SHX.pct = fairPct(SH.cfg.me); shExpSheet(); } };
+var _qaTogNow9 = ACT.qaTogNow;
+ACT.qaTogNow = function () { try { if (fairOn()) { var s1 = document.getElementById('qs_split'), s2 = document.getElementById('qs_pct'); if (s1 && s1.value === 'half') { s1.value = 'pct'; if (s2) s2.value = fairPct(SH.cfg.me); } } } catch (e) {} return _qaTogNow9.apply(this, arguments); };
+var _together9 = togetherPage;
+togetherPage = function () {
+  var h = _together9(); if (!SH.on() || !SH.doc || SHV !== 'money' || !shLive('people').length) return h;
+  var td = today(), ym = td.slice(0, 7), last = addMonths(ym + '-01', -1).slice(0, 7), rc = shLive('recaps').sort(function (a, b) { return a.month < b.month ? 1 : -1; })[0], fp = fairPct(SH.cfg.me), me = shMe(), th = shThem();
+  /* early in the month, offer last month's recap; after that, this month so far */
+  var want = parseD(td).getDate() <= 7 && shLive('exp').some(function (x) { return String(x.date).slice(0, 7) === last; }) ? last : ym, wname = MONTHS[+want.slice(5) - 1];
+  var add = '<div class="tp-sect"><span>Recap</span><span class="sp"></span>' + (CLOUD.on() && rc ? '<button data-act="recapGo" data-a="' + want + '">' + (AIB.recap ? 'Working…' : (rc.month === want ? 'Rewrite ' : 'Write ') + wname) + '</button>' : '') + '</div>' +
+    (rc ? '<details class="glass pad recap"' + (rc.month === want ? ' open' : '') + '><summary><b>' + MONTHS[+rc.month.slice(5) - 1] + ' recap</b><span class="small muted"> · written ' + shortDate(rc.date) + ' by ' + esc(shPerson(rc.by).name) + '</span></summary><div class="aitext">' + mdLite(rc.text) + '</div></details>'
+      : '<div class="glass pad"><p class="small" style="margin-top:0">A short write-up of your shared month: where it went, who paid, what changed, and a suggestion or two. You both see the same one.</p>' + (CLOUD.on() ? '<button class="tp-btn tp-sm" data-act="recapGo" data-a="' + want + '"' + (AIB.recap ? ' disabled' : '') + '>' + (AIB.recap ? 'Working…' : 'Write the ' + wname + ' recap') + '</button><p class="small muted mb0">Uses only what’s in Together, not your own accounts.</p>' : '<p class="small muted mb0">Sign in to use this.</p>') + '</div>') +
+    '<button class="glass tp-row cta" data-act="fairSplit"><span class="tp-tile">' + TP.svg('sliders') + '</span><span class="tp-t"><b>Fair split</b><span>' + (fp != null ? esc(me.name) + ' ' + fp + '% · ' + esc(th.name) + ' ' + (100 - fp) + '%' + (fairOn() ? ' · used for new expenses' : ' · not in use') : 'Split by what each of you takes home, not 50/50') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+  var at = h.indexOf('<div class="tp-sect"><span>Shared goals</span>'); return at >= 0 ? h.slice(0, at) + add + h.slice(at) : h + add;
+};
+PAGES.together = togetherPage;
+var MEAL = null;
+ACT.mealGo = function () { var q = val('sh_meal').trim(); if (!q) { toast('Say what you’re making or planning.'); return; } aiGate(function () {
+  aiRun('meal', aiTask('shop', { request: q, stores: shStores().map(function (s) { return { id: s.id, name: s.name }; }), sections: SECS, alreadyOnList: shLive('shop').filter(function (x) { return !x.got; }).map(function (x) { return x.name; }).slice(0, 60) }), function (j) {
+    MEAL = { q: q, items: ((j.data && j.data.items) || []).filter(function (x) { return x && x.name; }).slice(0, 14) }; if (!MEAL.items.length) { toast('Couldn’t come up with a list for that. Try different words.'); rerender(); return; }
+    var st = {}; shStores().forEach(function (s) { st[s.id] = s.name; });
+    rerender(); sheet(sxHead('For “' + q.slice(0, 40) + '”') + '<p class="small muted" style="margin-top:0">Untick anything you already have.</p><div class="glass">' + MEAL.items.map(function (x, i) { return '<label class="tp-row static" for="ml_' + i + '"><input type="checkbox" class="tick" id="ml_' + i + '" checked><span class="tp-t"><b>' + esc((x.qty ? x.qty + ' ' : '') + x.name) + '</b><span>' + esc([SECS.indexOf(x.section) >= 0 ? x.section : guessSec(x.name), st[x.store] || ''].filter(Boolean).join(' · ')) + '</span></span></label>'; }).join('') + '</div><div class="acts"><button class="tp-btn" data-act="mealAdd">Add to the list</button></div>');
+  });
+}); };
+ACT.mealAdd = function () {
+  if (!MEAL) return; var now = new Date().toISOString(), st = {}, n = 0; shStores().forEach(function (s) { st[s.id] = 1; });
+  MEAL.items.forEach(function (x, i) { if (!checked('ml_' + i)) return; var nm = String(x.name).trim().slice(0, 60), old = shLive('shop').filter(function (y) { return y.name.toLowerCase() === nm.toLowerCase(); })[0];
+    if (old) { old.got = false; old.addedAt = now; old.by = SH.cfg.me; shTouch('shop', old); } else shTouch('shop', { id: 'i' + uid(), name: nm, qty: String(x.qty || '').slice(0, 12), got: false, n: 0, by: SH.cfg.me, addedAt: now, store: st[x.store] ? x.store : '', sec: SECS.indexOf(x.section) >= 0 ? x.section : guessSec(nm) }); n++; });
+  MEAL = null; closeSheet(); rerender(); toast('Added ' + n + ' to the list.');
+};
+var _shopPage9 = shopPage;
+shopPage = function () { var h = _shopPage9(); if (!CLOUD.on()) return h; return h + '<div class="tp-sect"><span>Plan a meal</span></div><div class="glass pad"><div class="addline"><input class="tp-input" id="sh_meal" placeholder="e.g. tacos for 4 on Friday" autocomplete="off" enterkeyhint="go" aria-label="Describe a meal or occasion"><button class="tp-btn" data-act="mealGo"' + (AIB.meal ? ' disabled' : '') + '>' + (AIB.meal ? 'Working…' : 'Suggest') + '</button></div><p class="small muted mb0">Tally suggests what to buy, sorted into your stores and aisles. You pick what goes on the list.</p></div>'; };
+document.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.id === 'sh_meal') { e.preventDefault(); ACT.mealGo(); } });
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
