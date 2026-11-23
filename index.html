@@ -871,6 +871,11 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 :root[data-simple] .tp-wrap{padding-top:22px}
 :root[data-simple] .tp-t>b{font-size:16px}
 
+/* Simple view, app-wide: drop helper paragraphs and secondary detail */
+:root[data-simple] .tp-wrap>p.small.muted:not(.weekempty):not(.keep),:root[data-simple] .morein~p.small.muted{display:none}
+:root[data-simple] .ccard .face>span:not(.top2){display:none}
+:root[data-simple] .billrow .srct,:root[data-simple] .mstrip .lab{display:none}
+
 </style>
 </head>
 <body class="tp-page">
@@ -880,7 +885,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.23.3';
+var APP_VERSION = '2026.11.23.4';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -4147,7 +4152,7 @@ function billsBody(td, ty) {
   var list = sets[BILLV].slice().sort(function (p, q) { var x = p.i.d || '9999', y = q.i.d || '9999'; return x < y ? -1 : x > y ? 1 : String(p.b.name).localeCompare(String(q.b.name)); });
   var total = list.reduce(function (t, r) { return t + (r.i.st === 'other' ? 0 : +r.b.amount || 0); }, 0);
   var head = { all: 'Sorted by due date', due: money(total) + ' still to come this month', paid: money(total) + ' already due this month', other: money(ty / 12) + ' a month set aside for these', paused: 'Kept on the list, left out of totals' }[BILLV];
-  h += '<p class="small muted" style="margin:0 2px 8px">' + head + '</p>';
+  h += '<p class="small muted keep" style="margin:0 2px 8px">' + head + '</p>';
   var empty = { all: 'Rent, car, phone, internet, subscriptions. Add each once.', due: 'Nothing left to pay this month.', paid: 'Nothing has come due yet this month.', other: 'Insurance, registration, haircuts, anything every few weeks or months. Add them and they stop being surprises.', paused: '' }[BILLV];
   h += '<div class="glass">' + (list.length ? list.map(function (r) {
     var b = r.b, i = r.i, st = '';
@@ -4670,9 +4675,9 @@ function pageBlocks(html) {
 function blocksHtml(list) { return list.map(function (b) { return b.els.map(function (e) { return e.outerHTML; }).join(''); }).join(''); }
 function moreBox(inner, label) { return inner ? '<details class="morebox"><summary><span>' + esc(label || 'More') + '</span>' + TP.svg('chev') + '</summary><div class="morein">' + inner + '</div></details>' : ''; }
 
-function togRow() {
+function togRow(nextUp) {
   var on = typeof SH !== 'undefined' && SH.on() && SH.doc && shLive('people').length, me = on ? shMe() : null, th = on ? shThem() : null, net = on ? shNet() : 0;
-  var sub = !on ? 'Share expenses, a calendar and lists with your partner' : Math.abs(net) >= 0.5 ? (net > 0 ? th.name + ' owes you ' : 'You owe ' + th.name + ' ') + money(Math.abs(net), 1) + ' · calendar, shopping, to-dos' : 'Your shared space: money, calendar, shopping, to-dos';
+  var sub = !on ? 'Share expenses, a calendar and lists with your partner' : Math.abs(net) >= 0.5 ? (net > 0 ? th.name + ' owes you ' : 'You owe ' + th.name + ' ') + money(Math.abs(net), 1) + (nextUp ? ' · next: ' + nextUp : ' · calendar, shopping, to-dos') : nextUp ? 'Next: ' + nextUp : 'Your shared space: money, calendar, shopping, to-dos';
   return '<button class="glass tp-row cta togrow" data-act="go" data-a="together"><span class="tp-tile">' + TP.svg('people') + '</span><span class="tp-t"><b>' + esc(on ? me.name + ' & ' + th.name : 'Together') + '</b><span>' + esc(sub) + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
 }
 function searchRow() { return '<button class="searchrow" data-act="search">' + TP.svg('search') + '<span>Search Tally</span></button>'; }
@@ -4680,24 +4685,28 @@ function homeFoot() { return '<div class="flex homefoot"><button class="pillbtn 
 
 var _home11 = PAGES.home;
 PAGES.home = function () {
-  var bl = pageBlocks(_home11()), simple = simpleOn(), get = function (test) { var hit = bl.filter(test); bl = bl.filter(function (b) { return hit.indexOf(b) < 0; }); return hit; }, T = function (re) { return function (b) { return b.key === 'sect' && re.test(b.title); }; }, K = function (k) { return function (b) { return b.key === k; }; };
+  var bl = pageBlocks(_home11()), simple = simpleOn(), nextUp = '';
+  /* the older Together row on Home is replaced by the named one at the top; keep its "what's next" line */
+  bl.forEach(function (b) { b.els = b.els.filter(function (e) { if (e.matches && e.matches('.tp-row[data-a="together"]')) { var sp = e.querySelector('.tp-t > span'); nextUp = sp ? sp.textContent.trim() : ''; return false; } return true; }); });
+  bl = bl.filter(function (b) { return b.els.length; });
+  var get = function (test) { var hit = bl.filter(test); bl = bl.filter(function (b) { return hit.indexOf(b) < 0; }); return hit; }, T = function (re) { return function (b) { return b.key === 'sect' && re.test(b.title); }; }, K = function (k) { return function (b) { return b.key === k; }; };
   var top = get(K('top')), needs = get(T(/^Needs you/)), hero = get(K('hero')), cash = get(K('cash')), ask = get(K('ask')), ck = get(K('ckcta')), next2 = get(T(/^Next 2 weeks/)), runway = get(T(/^Next 30 days/)), noticed = get(T(/^Tally noticed/)), worth = get(T(/^Worth a look/)), setup = get(T(/^Get set up/)), goals = get(T(/^Goals/)), rest = bl;
   /* top bar: Together moves to its own labeled row; simple view keeps only Settings and the guide */
   var topH = blocksHtml(top), tb = document.createElement('div'); tb.innerHTML = topH;
   [].slice.call(tb.querySelectorAll('.top .ibtn[data-a="together"]')).forEach(function (e) { e.remove(); });
-  if (simple) { [].slice.call(tb.querySelectorAll('.top .ibtn[data-a="calendar"], .top .ibtn[data-a="explore"], .dotsrow')).forEach(function (e) { e.remove(); }); var bar = tb.querySelector('.top'), st = bar && bar.querySelector('#syncBtn'); if (bar) { var q = document.createElement('button'); q.className = 'ibtn'; q.setAttribute('data-act', 'guide'); q.setAttribute('aria-label', 'Where things are'); q.innerHTML = TP.svg('help'); bar.insertBefore(q, st || null); } }
+  if (simple) [].slice.call(tb.querySelectorAll('.dotsrow')).forEach(function (e) { e.remove(); });
   /* "Tally noticed" becomes one line; a mostly-done setup list folds away */
   var notH = ''; if (noticed.length) { var m = /·\s*(\d+)/.exec(noticed[0].title), n = m ? +m[1] : 1, first = noticed[0].els[1] && noticed[0].els[1].querySelector('.tp-t b'); notH = '<button class="glass tp-row cta" data-act="goSmart"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>Tally noticed ' + n + (n === 1 ? ' thing' : ' things') + '</b><span>' + esc(first ? first.textContent : 'Price changes, repeat charges, fees') + (n > 1 ? ' and ' + (n - 1) + ' more' : '') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }
   var setH = ''; if (setup.length) { var sm = /(\d+) of (\d+)/.exec(setup[0].title); setH = sm && +sm[1] >= 4 ? '<details class="morebox"><summary><span>Finish setting up · ' + sm[1] + ' of ' + sm[2] + '</span>' + TP.svg('chev') + '</summary><div class="morein">' + setup[0].els.slice(1).map(function (e) { return e.outerHTML; }).join('') + '</div></details>' : blocksHtml(setup); }
   var heroH = blocksHtml(hero); if (simple) heroH = heroH.replace(/<details class="hwhy" open(="")?>/, '<details class="hwhy">');
-  var h = tb.innerHTML + togRow() + searchRow() + blocksHtml(needs) + heroH;
-  if (simple) return h + blocksHtml(next2) + moreBox(blocksHtml(cash) + blocksHtml(ask) + blocksHtml(ck) + blocksHtml(runway) + notH + blocksHtml(worth) + setH + blocksHtml(goals) + blocksHtml(rest), 'More on Home') + homeFoot();
+  var h = tb.innerHTML + togRow(nextUp) + searchRow() + blocksHtml(needs) + heroH;
+  if (simple) return h + blocksHtml(ask) + blocksHtml(next2) + moreBox(blocksHtml(cash) + blocksHtml(ck) + blocksHtml(runway) + notH + blocksHtml(worth) + setH + blocksHtml(goals) + blocksHtml(rest), 'More on Home') + homeFoot();
   return h + blocksHtml(cash) + blocksHtml(ask) + blocksHtml(ck) + blocksHtml(next2) + blocksHtml(runway) + notH + blocksHtml(worth) + setH + blocksHtml(goals) + blocksHtml(rest) + homeFoot();
 };
 /* simple view on the two busiest other pages: keep the essentials, fold the rest */
-function simplePage(html, keep, label) {
+function simplePage(html, keep, label, keepLoose) {
   if (!simpleOn()) return html; var bl = pageBlocks(html), a = [], b = [];
-  bl.forEach(function (x) { (x.key === 'top' || x.key === 'hero' || (x.key === 'sect' && keep.test(x.title)) ? a : b).push(x); });
+  bl.forEach(function (x) { (x.key === 'top' || x.key === 'hero' || (keepLoose && x.key !== 'sect') || (x.key === 'sect' && keep.test(x.title)) ? a : b).push(x); });
   return blocksHtml(a) + moreBox(blocksHtml(b), label);
 }
 var _explore11 = PAGES.explore; PAGES.explore = function () { return simplePage(_explore11(), /^Trips/, 'More in Explore'); };
@@ -4745,6 +4754,25 @@ function findPaint() {
 ACT.search = function () { sheet(sxHead('Search') + '<input class="tp-input" id="find_q" type="search" placeholder="Search bills, purchases, lists, settings" autocomplete="off" enterkeyhint="search" aria-label="Search Tally"><div id="find_out" class="findout"></div>'); findPaint(); setTimeout(function () { var i = document.getElementById('find_q'); if (i) i.focus(); }, 60); };
 document.addEventListener('input', function (e) { if (e.target && e.target.id === 'find_q') findPaint(); });
 ACT.findGo = function (d) { closeSheet(); var p = String(d.a).split(':'); if (p[0] === 'guide') { ACT.guide(); return; } if (p[0] === 'together') { SHV = p[1] || 'money'; if (p[2]) { TCAL.sel = p[2]; TCAL.ym = p[2].slice(0, 7); TCAL.view = 'month'; } VIEW = 'together'; render(); window.scrollTo(0, 0); return; } goHash(p[0]); };
+
+/* Simple view on the other tabs: the main list stays, the analysis folds under "More" */
+(function () {
+  var wrap = function (name, keep, label) { var orig = PAGES[name]; if (!orig) return; PAGES[name] = function () { return simplePage(orig.apply(this, arguments), keep, label, true); }; };
+  wrap('spending', /^By category|^Purchases/, 'More about your spending');
+  wrap('accounts', /^Cash|^Investing|^Owed/, 'More about your accounts');
+  wrap('cards', /^Your cards/, 'More about your cards');
+  var tg = PAGES.together; PAGES.together = function () { var h = tg.apply(this, arguments); return typeof SHV !== 'undefined' && SHV === 'money' ? simplePage(h, /^Recent|^Shared goals/, 'More in Together', true) : h; };
+})();
+
+/* Simple view: every tab's top bar is the guide and Settings, nothing else */
+var _topBar12 = topBar;
+topBar = function () {
+  var h = _topBar12.apply(this, arguments); if (!simpleOn() || h.indexOf('id="syncBtn"') < 0) return h;
+  var box = document.createElement('div'); box.innerHTML = h; var bar = box.querySelector('.top'), st = bar && bar.querySelector('#syncBtn'); if (!bar || !st) return h;
+  [].slice.call(bar.querySelectorAll('.ibtn[data-a="calendar"], .ibtn[data-a="explore"]')).forEach(function (e) { e.remove(); });
+  var q = document.createElement('button'); q.className = 'ibtn'; q.setAttribute('data-act', 'guide'); q.setAttribute('aria-label', 'Where things are'); q.innerHTML = TP.svg('help'); bar.insertBefore(q, st);
+  return box.innerHTML;
+};
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
