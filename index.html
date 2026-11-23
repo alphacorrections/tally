@@ -840,6 +840,19 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .nth button{background:none;border:0;color:var(--tp-ink2);padding:4px;cursor:pointer;font:600 12px var(--tp-font)} .nth button svg{width:14px;height:14px;display:block}
 .ntt{white-space:pre-wrap;word-break:break-word;font-size:14.5px;line-height:1.45}
 
+/* Together calendar and recipes */
+.tdots{display:flex;gap:3px;min-height:6px}
+.tdots i{width:6px;height:6px;border-radius:50%}
+.cd-hol{background:var(--ok)} .calday.sel .cd-hol{background:var(--tp-btn-ink)} .calday.sel .cd-plan{background:var(--tp-btn-ink)}
+.tdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}
+.tp-tile.cd-holt{background:var(--ok-bg);color:var(--ok)}
+.tp-sect.sub.now>span:first-child{color:var(--hi)}
+.weekempty{margin:-4px 2px 10px}
+.rowwrap>.notebtn.rowgear{margin-left:0}
+.recing{padding-left:18px;margin:4px 0 8px;font-size:14px;line-height:1.5}
+.recsteps{padding-left:20px;margin:4px 0 8px;font-size:14.5px;line-height:1.5} .recsteps li{margin-bottom:6px}
+.recipebox{margin-top:12px} .recipebox summary{cursor:pointer;list-style:none} .recipebox summary::-webkit-details-marker{display:none}
+
 </style>
 </head>
 <body class="tp-page">
@@ -849,7 +862,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.22.2';
+var APP_VERSION = '2026.11.23.1';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -3096,15 +3109,15 @@ function plansPage() {
   return h + '<p class="small muted">These also show on your own calendar (the calendar button on Tally’s Home).</p>';
 }
 ACT.planEdit = function (d) {
-  var x = d.id ? shLive('plans').filter(function (p) { return p.id === d.id; })[0] : { date: today(), who: '' }, me = shMe(), th = shThem(); if (!x) return;
+  var x = d.id ? shLive('plans').filter(function (p) { return p.id === d.id; })[0] : { date: (d && d.date) || today(), who: '' }, me = shMe(), th = shThem(); if (!x) return;
   sheet(sxHead(d.id ? 'Edit' : 'Add to the calendar') + textField('pl_title', 'What', x.title || '', 'e.g. Dinner with Sam, flight to Lisbon') + '<div class="fgrid">' + textField('pl_date', 'Date', x.date || today(), '', 'date') + textField('pl_time', 'Time (optional)', x.time || '', '', 'time') + '</div>' +
-    '<label class="tp-label">Who</label>' + seg('pl_who', [['', 'Both'], [me.id, me.name], [th.id, th.name]], x.who || '') + textField('pl_note', 'Note', x.note || '', 'Where, what to bring, confirmation #') + '<div id="pl_err"></div>' +
+    '<label class="tp-label">Who</label>' + seg('pl_who', [['', 'Both'], [me.id, me.name], [th.id, th.name]], x.who || '') + '<label class="tp-label">Repeats</label><div class="kindseg">' + seg('pl_rep', [['', 'Never'], ['w', 'Weekly'], ['2w', 'Every 2 weeks'], ['m', 'Monthly'], ['y', 'Yearly']], x.rep || '') + '</div>' + textField('pl_note', 'Note', x.note || '', 'Where, what to bring, confirmation #') + '<div id="pl_err"></div>' +
     '<div class="acts">' + (d.id ? '<button class="tp-btn tp-danger" data-act="shDel" data-list="plans" data-id="' + x.id + '" data-label="Delete">Delete</button>' : '') + '<button class="tp-btn" data-act="planSave"' + (d.id ? ' data-id="' + x.id + '"' : '') + '>Save</button></div>');
 };
 ACT.planSave = function (d) {
   var t = val('pl_title').trim(), dt = val('pl_date'); if (!t || !dt) { document.getElementById('pl_err').innerHTML = '<div class="tp-err">Add what and when.</div>'; return; }
   var x = d.id ? shLive('plans').filter(function (p) { return p.id === d.id; })[0] : { id: 'p' + uid(), by: SH.cfg.me, addedAt: new Date().toISOString() };
-  x.title = t; x.date = dt; x.time = val('pl_time'); x.who = val('pl_who') || ''; x.note = val('pl_note').trim(); shTouch('plans', x); closeSheet(); rerender();
+  x.title = t; x.date = dt; x.time = val('pl_time'); x.who = val('pl_who') || ''; x.rep = val('pl_rep') || ''; x.note = val('pl_note').trim(); shTouch('plans', x); closeSheet(); rerender();
 };
 /* ---------- shopping by store: each store walks its sections in its own order ---------- */
 var SECS = ['Produce', 'Bakery', 'Deli', 'Meat & seafood', 'Dairy & eggs', 'Frozen', 'Pantry', 'Snacks', 'Drinks', 'Household', 'Personal care', 'Pets', 'Other'];
@@ -4448,19 +4461,20 @@ PAGES.together = togetherPage;
 var MEAL = null;
 ACT.mealGo = function () { var q = val('sh_meal').trim(); if (!q) { toast('Say what you’re making or planning.'); return; } aiGate(function () {
   aiRun('meal', aiTask('shop', { request: q, stores: shStores().map(function (s) { return { id: s.id, name: s.name }; }), sections: SECS, alreadyOnList: shLive('shop').filter(function (x) { return !x.got; }).map(function (x) { return x.name; }).slice(0, 60) }), function (j) {
-    MEAL = { q: q, items: ((j.data && j.data.items) || []).filter(function (x) { return x && x.name; }).slice(0, 14) }; if (!MEAL.items.length) { toast('Couldn’t come up with a list for that. Try different words.'); rerender(); return; }
+    MEAL = { q: q, items: ((j.data && j.data.items) || []).filter(function (x) { return x && x.name; }).slice(0, 14), recipe: recipeClean(j.data && j.data.recipe) }; if (!MEAL.items.length && !MEAL.recipe) { toast('Couldn’t come up with a list for that. Try different words.'); rerender(); return; }
     var st = {}; shStores().forEach(function (s) { st[s.id] = s.name; });
-    rerender(); sheet(sxHead('For “' + q.slice(0, 40) + '”') + '<p class="small muted" style="margin-top:0">Untick anything you already have.</p><div class="glass">' + MEAL.items.map(function (x, i) { return '<label class="tp-row static" for="ml_' + i + '"><input type="checkbox" class="tick" id="ml_' + i + '" checked><span class="tp-t"><b>' + esc((x.qty ? x.qty + ' ' : '') + x.name) + '</b><span>' + esc([SECS.indexOf(x.section) >= 0 ? x.section : guessSec(x.name), st[x.store] || ''].filter(Boolean).join(' · ')) + '</span></span></label>'; }).join('') + '</div><div class="acts"><button class="tp-btn" data-act="mealAdd">Add to the list</button></div>');
+    rerender(); sheet(sxHead('For “' + q.slice(0, 40) + '”') + '<p class="small muted" style="margin-top:0">Untick anything you already have.</p><div class="glass">' + MEAL.items.map(function (x, i) { return '<label class="tp-row static" for="ml_' + i + '"><input type="checkbox" class="tick" id="ml_' + i + '" checked><span class="tp-t"><b>' + esc((x.qty ? x.qty + ' ' : '') + x.name) + '</b><span>' + esc([SECS.indexOf(x.section) >= 0 ? x.section : guessSec(x.name), st[x.store] || ''].filter(Boolean).join(' · ')) + '</span></span></label>'; }).join('') + '</div>' + (MEAL.recipe ? '<details class="glass pad recipebox" open><summary><b>' + esc(MEAL.recipe.title) + '</b><span class="small muted"> · ' + recipeMeta(MEAL.recipe) + '</span></summary>' + recipeBody(MEAL.recipe) + '</details><label class="tp-opt"><input type="checkbox" id="ml_save" checked><span><b>Keep this recipe</b><span>Saves it under Recipes on the Shopping tab for both of you.</span></span></label>' : '') + '<div class="acts"><button class="tp-btn" data-act="mealAdd">' + (MEAL.items.length ? 'Add to the list' : 'Save') + '</button></div>');
   });
 }); };
 ACT.mealAdd = function () {
   if (!MEAL) return; var now = new Date().toISOString(), st = {}, n = 0; shStores().forEach(function (s) { st[s.id] = 1; });
   MEAL.items.forEach(function (x, i) { if (!checked('ml_' + i)) return; var nm = String(x.name).trim().slice(0, 60), old = shLive('shop').filter(function (y) { return y.name.toLowerCase() === nm.toLowerCase(); })[0];
     if (old) { old.got = false; old.addedAt = now; old.by = SH.cfg.me; shTouch('shop', old); } else shTouch('shop', { id: 'i' + uid(), name: nm, qty: String(x.qty || '').slice(0, 12), got: false, n: 0, by: SH.cfg.me, addedAt: now, store: st[x.store] ? x.store : '', sec: SECS.indexOf(x.section) >= 0 ? x.section : guessSec(nm) }); n++; });
-  MEAL = null; closeSheet(); rerender(); toast('Added ' + n + ' to the list.');
+  var kept = MEAL.recipe && checked('ml_save'); if (kept) shTouch('recipes', { id: 'r' + uid(), title: MEAL.recipe.title, serves: MEAL.recipe.serves, minutes: MEAL.recipe.minutes, ingredients: MEAL.recipe.ingredients, steps: MEAL.recipe.steps, by: SH.cfg.me, date: today(), asked: MEAL.q.slice(0, 80) });
+  MEAL = null; closeSheet(); rerender(); toast((n ? 'Added ' + n + ' to the list' : 'Nothing added to the list') + (kept ? ' and saved the recipe.' : '.'));
 };
 var _shopPage9 = shopPage;
-shopPage = function () { var h = _shopPage9(); if (!CLOUD.on()) return h; return h + '<div class="tp-sect"><span>Plan a meal</span></div><div class="glass pad"><div class="addline"><input class="tp-input" id="sh_meal" placeholder="e.g. tacos for 4 on Friday" autocomplete="off" enterkeyhint="go" aria-label="Describe a meal or occasion"><button class="tp-btn" data-act="mealGo"' + (AIB.meal ? ' disabled' : '') + '>' + (AIB.meal ? 'Working…' : 'Suggest') + '</button></div><p class="small muted mb0">Tally suggests what to buy, sorted into your stores and aisles. You pick what goes on the list.</p></div>'; };
+shopPage = function () { var h = _shopPage9(); if (!CLOUD.on()) return h; return h + '<div class="tp-sect"><span>Plan a meal</span></div><div class="glass pad"><div class="addline"><input class="tp-input" id="sh_meal" placeholder="e.g. tacos for 4 on Friday" autocomplete="off" enterkeyhint="go" aria-label="Describe a meal or occasion"><button class="tp-btn" data-act="mealGo"' + (AIB.meal ? ' disabled' : '') + '>' + (AIB.meal ? 'Working…' : 'Suggest') + '</button></div><p class="small muted mb0">Tally suggests what to buy, sorted into your stores and aisles, and writes out the recipe. You pick what goes on the list.</p></div>' + recipesList(); };
 document.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.id === 'sh_meal') { e.preventDefault(); ACT.mealGo(); } });
 
 /* ---------- Together: notes on any item. Each note is its own entry, so two people writing at once both keep theirs. ---------- */
@@ -4474,7 +4488,7 @@ function noteBtn(list, id, title, wide) {
 var NOTEK = '';
 function noteTitle(key) { var i = key.indexOf(':'), list = key.slice(0, i), id = key.slice(i + 1), x = shLive(list).filter(function (y) { return y.id === id; })[0]; return x ? (x.text || x.name || x.title || 'Item') : 'Item'; }
 function notesSheet(key, keepText) {
-  NOTEK = key; var list = notesOn(key), ttl = noteTitle(key), kind = { todo: 'To-do', shop: 'Shopping list', goals: 'Shared goal', plans: 'Calendar' }[key.split(':')[0]] || 'Together';
+  NOTEK = key; var list = notesOn(key), ttl = noteTitle(key), kind = { todo: 'To-do', shop: 'Shopping list', goals: 'Shared goal', plans: 'Calendar', recipes: 'Recipe' }[key.split(':')[0]] || 'Together';
   sheet(sxHead(ttl) + '<p class="small muted" style="margin:-4px 0 10px">' + kind + ' · notes you both see</p>' +
     (list.length ? '<div class="notes">' + list.map(function (n) { var mine = n.by === SH.cfg.me; return '<div class="nt' + (mine ? ' me' : '') + '"><div class="nth"><b>' + esc(mine ? 'You' : shPerson(n.by).name) + '</b><span>' + esc(agoTxt(n.at)) + '</span>' + (mine ? '<button data-act="noteDel" data-id="' + n.id + '" aria-label="Delete this note">' + TP.svg('close', 2.2) + '</button>' : '') + '</div><div class="ntt">' + esc(n.text) + '</div></div>'; }).join('') + '</div>' : '<div class="empty" style="padding:10px 0 14px">No notes yet. Brand, size, a link, who’s doing what, anything the other person should know.</div>') +
     '<textarea class="tp-input" id="nt_text" rows="3" placeholder="Write a note" aria-label="Write a note">' + esc(keepText || '') + '</textarea><div class="acts"><button class="tp-btn" data-act="noteAdd">Add note</button></div>');
@@ -4496,6 +4510,117 @@ ACT.noteDel = function (d, el) { armDelete(el, function () { var n = shLive('not
   var orig = ACT[name], list = { todoEdit: 'todo', shopEdit: 'shop', planEdit: 'plans' }[name]; if (!orig) return;
   ACT[name] = function (d) { orig.apply(this, arguments); var acts = document.querySelector('#sheet .acts'); if (!d || !d.id || !acts || !shLive(list).some(function (x) { return x.id === d.id; })) return; acts.insertAdjacentHTML('beforebegin', '<div style="margin-top:12px">' + noteBtn(list, d.id, '', 1) + '</div>'); };
 });
+
+/* ---------- recipes that come with a meal plan ---------- */
+function recipeClean(r) { if (!r || !r.title || !Array.isArray(r.steps) || !r.steps.length) return null; var S1 = function (x) { return String(x == null ? '' : x).trim().slice(0, 400); }; return { title: S1(r.title).slice(0, 70), serves: Math.round(num(r.serves)) || '', minutes: Math.round(num(r.minutes)) || '', ingredients: (r.ingredients || []).map(S1).filter(Boolean).slice(0, 30), steps: r.steps.map(S1).filter(Boolean).slice(0, 12) }; }
+function recipeMeta(r) { return [r.minutes ? r.minutes + ' min' : '', r.serves ? 'serves ' + r.serves : ''].filter(Boolean).join(' · ') || 'recipe'; }
+function recipeBody(r) { return (r.ingredients.length ? '<label class="tp-label">Ingredients</label><ul class="recing">' + r.ingredients.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') + '<label class="tp-label">Steps</label><ol class="recsteps">' + r.steps.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ol>'; }
+function recipesList() { var l = shLive('recipes').sort(function (a, b) { return (a.date || '') < (b.date || '') ? 1 : -1; }); if (!l.length) return ''; return '<div class="tp-sect"><span>Recipes · ' + l.length + '</span></div><div class="glass">' + l.slice(0, 30).map(function (r) { return '<button class="tp-row" data-act="recipeOpen" data-id="' + r.id + '"><span class="tp-tile">' + TP.svg('note') + '</span><span class="tp-t"><b>' + esc(r.title) + '</b><span>' + esc(recipeMeta(r) + ' · saved ' + shortDate(r.date)) + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }).join('') + '</div>'; }
+ACT.recipeOpen = function (d) { var r = shLive('recipes').filter(function (x) { return x.id === d.id; })[0]; if (!r) return; r.ingredients = r.ingredients || []; r.steps = r.steps || [];
+  sheet(sxHead(r.title) + '<p class="small muted" style="margin:-4px 0 6px">' + recipeMeta(r) + '</p>' + recipeBody(r) + '<div class="flex mt">' + noteBtn('recipes', r.id, r.title, 1) + '<button class="tp-btn tp-ghost tp-sm" data-act="recipeShop" data-id="' + r.id + '">Put ingredients on the list</button></div><div class="acts"><button class="tp-btn tp-danger" data-act="shDel" data-list="recipes" data-id="' + r.id + '" data-label="Delete">Delete</button><button class="tp-btn" data-act="close">Done</button></div>'); };
+ACT.recipeShop = function (d) { var r = shLive('recipes').filter(function (x) { return x.id === d.id; })[0]; if (!r) return; var now = new Date().toISOString(), n = 0;
+  (r.ingredients || []).forEach(function (line) { var m = /^([\d./½¼¾]+(?:\s*(?:lb|lbs|oz|g|kg|cups?|tbsp|tsp|cloves?|cans?|bunch|pinch|ml|l)\b)?)\s+(.+)$/i.exec(line), nm = (m ? m[2] : line).replace(/,.*$/, '').trim().slice(0, 60), qty = m ? m[1].slice(0, 12) : ''; if (!nm || /^(salt|pepper|water|salt and pepper)$/i.test(nm)) return;
+    var old = shLive('shop').filter(function (y) { return y.name.toLowerCase() === nm.toLowerCase(); })[0]; if (old) { if (!old.got) return; old.got = false; old.addedAt = now; old.by = SH.cfg.me; shTouch('shop', old); } else shTouch('shop', { id: 'i' + uid(), name: nm, qty: qty, got: false, n: 0, by: SH.cfg.me, addedAt: now, store: '', sec: guessSec(nm) }); n++; });
+  closeSheet(); rerender(); toast(n ? 'Added ' + n + ' to the list. Take off anything you already have.' : 'Everything is already on the list.'); };
+
+/* ---------- Together calendar: month and week views, repeating dates, holidays, and a planner ---------- */
+var TCAL = { view: 'month', ym: '', sel: '', wk: '' };
+function planDates(x, from, to) {
+  if (!x.rep) return x.date >= from && x.date <= to ? [x.date] : [];
+  var out = [], b = parseD(x.date), n = 0, d = x.date, g = 0;
+  /* jump close to the window first so old weekly dates don't loop for years */
+  if (d < from) { var gap = daysBetween(d, from); n = x.rep === 'w' ? Math.floor(gap / 7) : x.rep === '2w' ? Math.floor(gap / 14) : x.rep === 'm' ? Math.max(0, Math.floor(gap / 31) - 1) : Math.max(0, Math.floor(gap / 366) - 1); }
+  for (; g < 400; g++, n++) { d = x.rep === 'w' ? addDays(x.date, 7 * n) : x.rep === '2w' ? addDays(x.date, 14 * n) : x.rep === 'm' ? ymd(clampDay(b.getFullYear(), b.getMonth() + n, b.getDate())) : ymd(clampDay(b.getFullYear() + n, b.getMonth(), b.getDate())); if (d > to) break; if (d >= from) out.push(d); }
+  return out;
+}
+shAgenda = function (from, to) {
+  var out = []; shLive('plans').forEach(function (x) { planDates(x, from, to).forEach(function (d) { out.push({ k: 'plan', d: d, t: x.time || '', x: x }); }); });
+  return out.sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : (a.t || '99') < (b.t || '99') ? -1 : 1; });
+};
+var REPTXT = { w: 'every week', '2w': 'every 2 weeks', m: 'every month', y: 'every year' };
+function nthDow(y, m, dow, n) { var d = new Date(y, m, 1), off = (dow - d.getDay() + 7) % 7; return ymd(new Date(y, m, 1 + off + 7 * (n - 1))); }
+function lastDow(y, m, dow) { var d = new Date(y, m + 1, 0), off = (d.getDay() - dow + 7) % 7; return ymd(new Date(y, m + 1, -off)); }
+function easter(y) { var a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), mo = Math.floor((h + l - 7 * m + 114) / 31), da = (h + l - 7 * m + 114) % 31 + 1; return ymd(new Date(y, mo - 1, da)); }
+var HOLMEMO = {};
+function holidays(y) {
+  if (HOLMEMO[y]) return HOLMEMO[y]; var f = function (m, d) { return ymd(new Date(y, m, d)); }, o = {};
+  [[f(0, 1), 'New Year’s Day'], [nthDow(y, 0, 1, 3), 'Martin Luther King Jr. Day'], [f(1, 14), 'Valentine’s Day'], [nthDow(y, 1, 1, 3), 'Presidents’ Day'], [easter(y), 'Easter'], [nthDow(y, 4, 0, 2), 'Mother’s Day'], [lastDow(y, 4, 1), 'Memorial Day'], [f(5, 19), 'Juneteenth'], [nthDow(y, 5, 0, 3), 'Father’s Day'], [f(6, 4), 'Independence Day'], [nthDow(y, 8, 1, 1), 'Labor Day'], [f(9, 31), 'Halloween'], [f(10, 11), 'Veterans Day'], [nthDow(y, 10, 4, 4), 'Thanksgiving'], [f(11, 24), 'Christmas Eve'], [f(11, 25), 'Christmas'], [f(11, 31), 'New Year’s Eve']].forEach(function (h) { o[h[0]] = h[1]; });
+  return (HOLMEMO[y] = o);
+}
+function holOn() { var p = shLive('prefs').filter(function (x) { return x.id === 'hol'; })[0]; return !p || p.on !== false; }
+function holName(d) { return holOn() ? holidays(+d.slice(0, 4))[d] || '' : ''; }
+ACT.holToggle = function () { shTouch('prefs', { id: 'hol', on: !holOn() }); rerender(); };
+function tcalWeekStart(d) { var ws = 0, x = parseD(d); return addDays(d, -((x.getDay() - ws + 7) % 7)); }
+function tcalDayRows(d, byDay) {
+  var hn = holName(d), list = byDay[d] || [];
+  return (hn ? '<div class="tp-row static"><span class="tp-tile cd-holt">' + TP.svg('spark') + '</span><span class="tp-t"><b>' + esc(hn) + '</b><span>Holiday</span></span></div>' : '') +
+    list.map(function (e) { var x = e.x; return '<div class="rowwrap"><button class="tp-row" data-act="planEdit" data-id="' + x.id + '"><span class="tp-tile cd-plan">' + TP.svg('calendar') + '</span><span class="tp-t"><b>' + esc(x.title) + '</b><span>' + esc([timeTxt(x.time), x.who ? (x.who === SH.cfg.me ? 'You' : shPerson(x.who).name) : 'Both of you', x.rep ? 'Repeats ' + REPTXT[x.rep] : '', x.note || ''].filter(Boolean).join(' · ')) + '</span></span></button>' + noteBtn('plans', x.id, x.title).replace('class="notebtn', 'class="notebtn rowgear') + '</div>'; }).join('');
+}
+var _plansList10 = plansPage;
+plansPage = function () {
+  var td = today(), v = TCAL.view; if (!TCAL.sel) TCAL.sel = td; if (!TCAL.ym) TCAL.ym = td.slice(0, 7); if (!TCAL.wk) TCAL.wk = tcalWeekStart(td);
+  var h = (CLOUD.on() ? '<div class="glass pad tp-rise"><div class="addline"><input class="tp-input" id="tc_ask" placeholder="e.g. weekend in Montreal, Feb 12 to 15" autocomplete="off" enterkeyhint="go" aria-label="Describe something to plan"><button class="tp-btn" data-act="planIdeas"' + (AIB.plan ? ' disabled' : '') + '>' + (AIB.plan ? 'Working…' : 'Plan it') + '</button></div><p class="small muted mb0">A trip, a visit, a night out. Tally comes back with ideas, a cost, how to save for it, and dates to add.</p></div>' : '') +
+    '<div class="flex" style="flex-wrap:nowrap;margin-bottom:10px"><div class="seg grow" role="tablist">' + [['month', 'Month'], ['week', 'Week'], ['list', 'List']].map(function (t) { return '<button role="tab" aria-selected="' + (v === t[0]) + '" class="' + (v === t[0] ? 'on' : '') + '" data-act="tcalView" data-a="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div><button class="tp-btn tp-sm" data-act="planEdit" data-date="' + TCAL.sel + '" aria-label="Add to the calendar">' + TP.svg('plus', 2.4) + ' Add</button></div>';
+  if (v === 'list') return h + _plansList10().replace('<button class="tp-btn tp-block tp-rise" data-act="planEdit">+ Add to the calendar</button>', '') + tcalFoot();
+  var ws = 0, names = [0, 1, 2, 3, 4, 5, 6].map(function (i) { return DOW[(ws + i) % 7]; });
+  if (v === 'month') {
+    var first = TCAL.ym + '-01', start = tcalWeekStart(first), end = addDays(tcalWeekStart(monthEnd(first)), 6), byDay = {}, fd = parseD(first);
+    shAgenda(start, end).forEach(function (e) { (byDay[e.d] = byDay[e.d] || []).push(e); });
+    h += '<div class="flex calnav" style="justify-content:space-between"><button class="ibtn sm" data-act="tcalNav" data-a="-1" aria-label="Earlier month">' + TP.svg('back') + '</button><b class="disp" style="font-size:18px">' + MONTHS[fd.getMonth()] + ' ' + fd.getFullYear() + '</b><span class="flex" style="gap:6px;flex-wrap:nowrap">' + (TCAL.ym !== td.slice(0, 7) ? '<button class="pillbtn sm" data-act="tcalNav" data-a="0">Today</button>' : '') + '<button class="ibtn sm" data-act="tcalNav" data-a="1" aria-label="Later month">' + TP.svg('chev') + '</button></span></div>';
+    h += '<div class="glass cal"><div class="calhead">' + names.map(function (n) { return '<span>' + n + '</span>'; }).join('') + '</div>';
+    for (var wk = start; wk <= end; wk = addDays(wk, 7)) { h += '<div class="calrow">'; for (var i = 0; i < 7; i++) { var d = addDays(wk, i), l = byDay[d] || [], hn = holName(d);
+      h += '<button class="calday' + (d.slice(0, 7) !== TCAL.ym ? ' out' : '') + (d === td ? ' today' : '') + (d === TCAL.sel ? ' sel' : '') + (d < td ? ' past' : '') + '" data-act="tcalDay" data-a="' + d + '" aria-label="' + esc(dowDate(d) + (l.length ? ', ' + l.length + ' on the calendar' : '') + (hn ? ', ' + hn : '')) + '"><b>' + (+d.slice(8)) + '</b><span class="tdots">' + (hn ? '<i class="cd-hol"></i>' : '') + l.slice(0, 3).map(function () { return '<i class="cd-plan"></i>'; }).join('') + '</span></button>'; } h += '</div>'; }
+    h += '</div>';
+    var rows = tcalDayRows(TCAL.sel, byDay), n = daysBetween(td, TCAL.sel);
+    h += '<div class="tp-sect"><span>' + esc(n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : dowDate(TCAL.sel)) + '</span><span class="sp"></span><button data-act="planEdit" data-date="' + TCAL.sel + '">+ Add here</button></div><div class="glass">' + (rows || '<div class="empty">Nothing on this day.</div>') + '</div>';
+  } else {
+    var w0 = TCAL.wk, w6 = addDays(w0, 6), byW = {}; shAgenda(w0, w6).forEach(function (e) { (byW[e.d] = byW[e.d] || []).push(e); });
+    h += '<div class="flex calnav" style="justify-content:space-between"><button class="ibtn sm" data-act="tcalNav" data-a="-1" aria-label="Earlier week">' + TP.svg('back') + '</button><b class="disp" style="font-size:18px">' + shortDate(w0) + ' to ' + shortDate(w6) + '</b><span class="flex" style="gap:6px;flex-wrap:nowrap">' + (w0 !== tcalWeekStart(td) ? '<button class="pillbtn sm" data-act="tcalNav" data-a="0">This week</button>' : '') + '<button class="ibtn sm" data-act="tcalNav" data-a="1" aria-label="Later week">' + TP.svg('chev') + '</button></span></div>';
+    for (var k = 0; k < 7; k++) { var dd = addDays(w0, k), rr = tcalDayRows(dd, byW), nn = daysBetween(td, dd);
+      h += '<div class="tp-sect sub' + (dd === td ? ' now' : '') + '"><span>' + esc(nn === 0 ? 'Today · ' + shortDate(dd) : dowDate(dd)) + '</span><span class="sp"></span><button data-act="planEdit" data-date="' + dd + '" aria-label="Add on ' + esc(dowDate(dd)) + '">+ Add</button></div>' + (rr ? '<div class="glass">' + rr + '</div>' : '<p class="small muted weekempty">Nothing planned</p>'); }
+  }
+  return h + tcalFoot();
+};
+function tcalFoot() { return '<div class="flex" style="justify-content:space-between;margin-top:6px"><span class="small muted">' + (holOn() ? '<i class="cd-hol tdot"></i>US holidays shown' : 'Holidays hidden') + '</span><button class="pillbtn sm" data-act="holToggle">' + (holOn() ? 'Hide holidays' : 'Show holidays') + '</button></div><p class="small muted">Dates that repeat (birthdays, anniversaries, a weekly class) are set with “Repeats” when you add one. These also show on your own calendar on Tally’s Home.</p>'; }
+ACT.tcalView = function (d) { TCAL.view = d.a; if (d.a === 'week') TCAL.wk = tcalWeekStart(TCAL.sel || today()); if (d.a === 'month') TCAL.ym = (TCAL.sel || today()).slice(0, 7); render._keep = true; render(); };
+ACT.tcalDay = function (d) { TCAL.sel = d.a; TCAL.ym = d.a.slice(0, 7); render._keep = true; render(); };
+ACT.tcalNav = function (d) { var td = today(), n = +d.a;
+  if (TCAL.view === 'week') { TCAL.wk = n ? addDays(TCAL.wk, 7 * n) : tcalWeekStart(td); TCAL.sel = n ? TCAL.wk : td; }
+  else { TCAL.ym = n ? addMonths(TCAL.ym + '-01', n).slice(0, 7) : td.slice(0, 7); TCAL.sel = TCAL.ym === td.slice(0, 7) ? td : TCAL.ym + '-01'; }
+  render._keep = true; render(); };
+document.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target.id === 'tc_ask') { e.preventDefault(); ACT.planIdeas(); } });
+
+/* the planner: ask for a trip or an outing, get ideas, a cost, a way to save, and dates to add */
+var PLANR = null;
+ACT.planIdeas = function () { var q = val('tc_ask').trim(); if (!q) { toast('Say what you’d like to plan, and roughly when.'); return; } aiGate(function () {
+  var lastTrip = S.goals.filter(function (g) { return g.kind === 'trip' && g.trip && g.trip.from; }).pop();
+  aiRun('plan', aiTask('plan', { request: q, people: [shMe().name, shThem().name], travelers: 2, leavingFrom: lastTrip ? lastTrip.trip.from : '', alreadyOnCalendar: shAgenda(today(), addDays(today(), 120)).slice(0, 12).map(function (e) { return e.d + ' ' + e.x.title; }) }), function (j) {
+    var r = j.data || {}, okD = function (x) { return /^\d{4}-\d\d-\d\d$/.test(x || '') ? x : ''; }, L = function (a, n) { return (Array.isArray(a) ? a : []).map(function (x) { return String(x).trim().slice(0, 240); }).filter(Boolean).slice(0, n); };
+    PLANR = { q: q, title: String(r.title || q).slice(0, 60), start: okD(r.start), end: okD(r.end), summary: String(r.summary || '').slice(0, 400), ideas: L(r.ideas, 6), travel: L(r.travel, 4), total: Math.max(0, Math.round(num(r.cost && r.cost.total))), items: ((r.cost && r.cost.items) || []).filter(function (x) { return x && x.label && num(x.amount) > 0; }).slice(0, 8).map(function (x) { return { label: String(x.label).slice(0, 40), amount: Math.round(num(x.amount)) }; }), costNote: String((r.cost && r.cost.note) || '').slice(0, 240), saving: String(r.saving || '').slice(0, 400),
+      events: (r.events || []).filter(function (e) { return e && e.title && okD(e.date); }).slice(0, 6).map(function (e) { return { title: String(e.title).slice(0, 70), date: e.date, time: /^\d\d:\d\d$/.test(e.time || '') ? e.time : '', note: String(e.note || '').slice(0, 200) }; }), sources: j.sources || [] };
+    rerender(); planIdeasShow();
+  });
+}); };
+function planIdeasShow() {
+  var p = PLANR; if (!p) return; var ul = function (a) { return '<ul class="small" style="padding-left:18px;margin:4px 0 8px">' + a.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>'; };
+  sheet(sxHead(p.title) + (p.start ? '<p class="small muted" style="margin:-4px 0 8px">' + shortDate(p.start) + (p.end && p.end !== p.start ? ' to ' + shortDate(p.end) : '') + '</p>' : '') + (p.summary ? '<p class="small" style="margin-top:0">' + esc(p.summary) + '</p>' : '') +
+    (p.total ? '<div class="glass hero" style="padding:16px"><span class="label">About, for the two of you</span><div class="big" style="font-size:40px">' + money(p.total) + '</div></div>' + p.items.map(function (x) { return '<div class="kv"><span>' + esc(x.label) + '</span><b>' + money(x.amount) + '</b></div>'; }).join('') + (p.costNote ? '<p class="small muted">' + esc(p.costNote) + '</p>' : '') : '') +
+    (p.saving ? '<div class="solid" style="margin-top:10px"><b>Saving for it.</b> ' + esc(p.saving) + '</div>' : '') +
+    (p.ideas.length ? '<label class="tp-label">Ideas</label>' + ul(p.ideas) : '') + (p.travel.length ? '<label class="tp-label">Getting there and around</label>' + ul(p.travel) : '') +
+    (p.events.length ? '<label class="tp-label">Add to your calendar</label><div class="glass">' + p.events.map(function (e, i) { return '<label class="tp-row static" for="pe_' + i + '"><input type="checkbox" class="tick" id="pe_' + i + '" checked><span class="tp-t"><b>' + esc(e.title) + '</b><span>' + esc([dowDate(e.date), timeTxt(e.time), e.note].filter(Boolean).join(' · ')) + '</span></span></label>'; }).join('') + '</div>' : '') + aiSrcs(p.sources) +
+    '<p class="small muted">Prices and what’s on come from a web search today. Check before you book.</p>' +
+    '<div class="acts">' + (p.total ? '<button class="tp-btn tp-ghost" data-act="planIdeasGoal">Save as a shared goal</button>' : '') + (p.events.length ? '<button class="tp-btn" data-act="planIdeasAdd">Add to calendar</button>' : '<button class="tp-btn" data-act="close">Done</button>') + '</div>');
+}
+ACT.planIdeasGoal = function (d, el) { var p = PLANR; if (!p || !p.total || p.goal) return; shTouch('goals', { id: 'g' + uid(), name: p.title, target: p.total, due: p.start || '' }); p.goal = true; if (el) { el.disabled = true; el.textContent = 'Saved as a goal'; } toast('Saved under Shared goals. You can both add money to it.'); };
+ACT.planIdeasAdd = function () {
+  var p = PLANR; if (!p) return; var now = new Date().toISOString(), first = null, n = 0;
+  p.events.forEach(function (e, i) { if (!checked('pe_' + i)) return; var x = { id: 'p' + uid(), by: SH.cfg.me, addedAt: now, title: e.title, date: e.date, time: e.time, who: '', rep: '', note: e.note }; shTouch('plans', x); if (!first) first = x; n++; });
+  if (!n) { toast('Tick at least one date.'); return; }
+  /* keep the write-up with the first date, as a shared note */
+  var txt = [p.summary, p.total ? 'About ' + money(p.total) + ' for two.' + (p.items.length ? ' ' + p.items.map(function (x) { return x.label + ' ' + money(x.amount); }).join(', ') + '.' : '') : '', p.saving, p.ideas.length ? 'Ideas:\n- ' + p.ideas.join('\n- ') : '', p.travel.length ? 'Getting there:\n- ' + p.travel.join('\n- ') : ''].filter(Boolean).join('\n\n').slice(0, 1000);
+  if (txt) shTouch('notes', { id: 'n' + uid(), on: 'plans:' + first.id, by: SH.cfg.me, at: now, text: txt, ttl: first.title.slice(0, 40) });
+  TCAL.sel = first.date; TCAL.ym = first.date.slice(0, 7); TCAL.wk = tcalWeekStart(first.date); PLANR = null; closeSheet(); rerender(); toast('Added ' + n + ' to the calendar. The ideas are saved as a note on “' + first.title + '”.');
+};
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
