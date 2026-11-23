@@ -848,7 +848,8 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .tp-tile.cd-holt{background:var(--ok-bg);color:var(--ok)}
 .tp-sect.sub.now>span:first-child{color:var(--hi)}
 .weekempty{margin:-4px 2px 10px}
-.rowwrap>.notebtn.rowgear{margin-left:0}
+.rowwrap>.notebtn.rowgear{position:absolute;right:10px;top:50%;transform:translateY(-50%);margin-left:0;z-index:2}
+.rowwrap>.notebtn.rowgear em{top:-6px;right:-6px}
 .recing{padding-left:18px;margin:4px 0 8px;font-size:14px;line-height:1.5}
 .recsteps{padding-left:20px;margin:4px 0 8px;font-size:14.5px;line-height:1.5} .recsteps li{margin-bottom:6px}
 .recipebox{margin-top:12px} .recipebox summary{cursor:pointer;list-style:none} .recipebox summary::-webkit-details-marker{display:none}
@@ -862,7 +863,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.23.1';
+var APP_VERSION = '2026.11.23.2';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
