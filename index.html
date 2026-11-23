@@ -853,6 +853,23 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .recing{padding-left:18px;margin:4px 0 8px;font-size:14px;line-height:1.5}
 .recsteps{padding-left:20px;margin:4px 0 8px;font-size:14.5px;line-height:1.5} .recsteps li{margin-bottom:6px}
 .recipebox{margin-top:12px} .recipebox summary{cursor:pointer;list-style:none} .recipebox summary::-webkit-details-marker{display:none}
+/* finding your way: Together row, search, More, Simple view */
+.togrow{margin-bottom:10px;border-color:var(--hi)}
+.searchrow{display:flex;align-items:center;gap:10px;width:100%;min-height:46px;padding:0 14px;margin-bottom:14px;border-radius:14px;background:var(--well,var(--tp-input));border:1px solid var(--tp-line2);color:var(--tp-ink2);font:500 15px var(--tp-font);cursor:pointer;text-align:left}
+.searchrow svg{width:18px;height:18px;flex:none}
+.morebox{margin:6px 0 12px}
+.morebox>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;padding:0 16px;border-radius:var(--tp-r);background:var(--tp-card);border:1px solid var(--tp-line);font-weight:600;cursor:pointer;list-style:none}
+.morebox>summary::-webkit-details-marker{display:none}
+.morebox>summary svg{width:18px;height:18px;transition:transform .2s;color:var(--tp-ink2)}
+.morebox[open]>summary svg{transform:rotate(90deg)}
+.morebox[open]>summary{margin-bottom:12px}
+.homefoot{justify-content:center;margin:14px 0 4px}
+.homefoot .pillbtn svg,.pillbtn[data-act=guide] svg{width:15px;height:15px;vertical-align:-3px;margin-right:4px}
+.findout{margin-top:6px;max-height:58vh;overflow-y:auto}
+/* Simple view: fewer small facts on each row, no legends */
+:root[data-simple] .srcleg,:root[data-simple] .covnote,:root[data-simple] .billrow .bl+.bl,:root[data-simple] .needs+p.small,:root[data-simple] .heroMath{display:none}
+:root[data-simple] .tp-wrap{padding-top:22px}
+:root[data-simple] .tp-t>b{font-size:16px}
 
 </style>
 </head>
@@ -863,7 +880,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.23.2';
+var APP_VERSION = '2026.11.23.3';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -4622,6 +4639,112 @@ ACT.planIdeasAdd = function () {
   if (txt) shTouch('notes', { id: 'n' + uid(), on: 'plans:' + first.id, by: SH.cfg.me, at: now, text: txt, ttl: first.title.slice(0, 40) });
   TCAL.sel = first.date; TCAL.ym = first.date.slice(0, 7); TCAL.wk = tcalWeekStart(first.date); PLANR = null; closeSheet(); rerender(); toast('Added ' + n + ' to the calendar. The ideas are saved as a note on “' + first.title + '”.');
 };
+
+/* ====================================================================
+   Easier to find your way: a labeled way in to Together, search, a shorter Home,
+   a Simple view (per person), and a "where things are" guide.
+   ==================================================================== */
+TP.icons.search = '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>';
+TP.icons.help = '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.6 2.2c-.8.5-1.2 1-1.2 2M12 17h.01"/>';
+function simpleOn() { return !!S.profile.simple; }
+var _render11 = render;
+render = function () { try { document.documentElement.toggleAttribute('data-simple', simpleOn()); } catch (e) {} return _render11.apply(this, arguments); };
+ACT.simpleSet = function (d) { S.profile.simple = d.a === '1'; save(true); render._keep = true; render(); toast(S.profile.simple ? 'Simple view is on. Everything is still here, under “More”.' : 'Full view is on.'); };
+
+/* split a page into blocks: each section header plus what follows it */
+function pageBlocks(html) {
+  var box = document.createElement('div'); box.innerHTML = html; var out = [], cur = null;
+  [].slice.call(box.children).forEach(function (el) {
+    var c = ' ' + el.className + ' ', txt = el.textContent.trim(), key = '';
+    if (c.indexOf(' top ') >= 0 || c.indexOf(' dotsrow ') >= 0) key = 'top';
+    else if (c.indexOf(' hero ') >= 0) key = 'hero';
+    else if (c.indexOf(' cashchk ') >= 0) key = 'cash';
+    else if (c.indexOf(' askrow ') >= 0) key = 'ask';
+    else if (c.indexOf(' cta ') >= 0 && /^Time to check in/.test(txt)) key = 'ckcta';
+    else if (c.indexOf(' tp-sect ') >= 0) { cur = { key: 'sect', title: (el.firstElementChild ? el.firstElementChild.textContent : txt).trim(), els: [el] }; out.push(cur); return; }
+    if (key) { out.push({ key: key, title: '', els: [el] }); if (key !== 'top') cur = null; return; }
+    if (cur) cur.els.push(el); else out.push({ key: 'misc', title: '', els: [el] });
+  });
+  return out;
+}
+function blocksHtml(list) { return list.map(function (b) { return b.els.map(function (e) { return e.outerHTML; }).join(''); }).join(''); }
+function moreBox(inner, label) { return inner ? '<details class="morebox"><summary><span>' + esc(label || 'More') + '</span>' + TP.svg('chev') + '</summary><div class="morein">' + inner + '</div></details>' : ''; }
+
+function togRow() {
+  var on = typeof SH !== 'undefined' && SH.on() && SH.doc && shLive('people').length, me = on ? shMe() : null, th = on ? shThem() : null, net = on ? shNet() : 0;
+  var sub = !on ? 'Share expenses, a calendar and lists with your partner' : Math.abs(net) >= 0.5 ? (net > 0 ? th.name + ' owes you ' : 'You owe ' + th.name + ' ') + money(Math.abs(net), 1) + ' · calendar, shopping, to-dos' : 'Your shared space: money, calendar, shopping, to-dos';
+  return '<button class="glass tp-row cta togrow" data-act="go" data-a="together"><span class="tp-tile">' + TP.svg('people') + '</span><span class="tp-t"><b>' + esc(on ? me.name + ' & ' + th.name : 'Together') + '</b><span>' + esc(sub) + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+}
+function searchRow() { return '<button class="searchrow" data-act="search">' + TP.svg('search') + '<span>Search Tally</span></button>'; }
+function homeFoot() { return '<div class="flex homefoot"><button class="pillbtn sm" data-act="guide">' + TP.svg('help') + ' Where things are</button><button class="pillbtn sm" data-act="simpleSet" data-a="' + (simpleOn() ? '0' : '1') + '">' + (simpleOn() ? 'Switch to full view' : 'Switch to simple view') + '</button></div>'; }
+
+var _home11 = PAGES.home;
+PAGES.home = function () {
+  var bl = pageBlocks(_home11()), simple = simpleOn(), get = function (test) { var hit = bl.filter(test); bl = bl.filter(function (b) { return hit.indexOf(b) < 0; }); return hit; }, T = function (re) { return function (b) { return b.key === 'sect' && re.test(b.title); }; }, K = function (k) { return function (b) { return b.key === k; }; };
+  var top = get(K('top')), needs = get(T(/^Needs you/)), hero = get(K('hero')), cash = get(K('cash')), ask = get(K('ask')), ck = get(K('ckcta')), next2 = get(T(/^Next 2 weeks/)), runway = get(T(/^Next 30 days/)), noticed = get(T(/^Tally noticed/)), worth = get(T(/^Worth a look/)), setup = get(T(/^Get set up/)), goals = get(T(/^Goals/)), rest = bl;
+  /* top bar: Together moves to its own labeled row; simple view keeps only Settings and the guide */
+  var topH = blocksHtml(top), tb = document.createElement('div'); tb.innerHTML = topH;
+  [].slice.call(tb.querySelectorAll('.top .ibtn[data-a="together"]')).forEach(function (e) { e.remove(); });
+  if (simple) { [].slice.call(tb.querySelectorAll('.top .ibtn[data-a="calendar"], .top .ibtn[data-a="explore"], .dotsrow')).forEach(function (e) { e.remove(); }); var bar = tb.querySelector('.top'), st = bar && bar.querySelector('#syncBtn'); if (bar) { var q = document.createElement('button'); q.className = 'ibtn'; q.setAttribute('data-act', 'guide'); q.setAttribute('aria-label', 'Where things are'); q.innerHTML = TP.svg('help'); bar.insertBefore(q, st || null); } }
+  /* "Tally noticed" becomes one line; a mostly-done setup list folds away */
+  var notH = ''; if (noticed.length) { var m = /·\s*(\d+)/.exec(noticed[0].title), n = m ? +m[1] : 1, first = noticed[0].els[1] && noticed[0].els[1].querySelector('.tp-t b'); notH = '<button class="glass tp-row cta" data-act="goSmart"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>Tally noticed ' + n + (n === 1 ? ' thing' : ' things') + '</b><span>' + esc(first ? first.textContent : 'Price changes, repeat charges, fees') + (n > 1 ? ' and ' + (n - 1) + ' more' : '') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }
+  var setH = ''; if (setup.length) { var sm = /(\d+) of (\d+)/.exec(setup[0].title); setH = sm && +sm[1] >= 4 ? '<details class="morebox"><summary><span>Finish setting up · ' + sm[1] + ' of ' + sm[2] + '</span>' + TP.svg('chev') + '</summary><div class="morein">' + setup[0].els.slice(1).map(function (e) { return e.outerHTML; }).join('') + '</div></details>' : blocksHtml(setup); }
+  var heroH = blocksHtml(hero); if (simple) heroH = heroH.replace(/<details class="hwhy" open(="")?>/, '<details class="hwhy">');
+  var h = tb.innerHTML + togRow() + searchRow() + blocksHtml(needs) + heroH;
+  if (simple) return h + blocksHtml(next2) + moreBox(blocksHtml(cash) + blocksHtml(ask) + blocksHtml(ck) + blocksHtml(runway) + notH + blocksHtml(worth) + setH + blocksHtml(goals) + blocksHtml(rest), 'More on Home') + homeFoot();
+  return h + blocksHtml(cash) + blocksHtml(ask) + blocksHtml(ck) + blocksHtml(next2) + blocksHtml(runway) + notH + blocksHtml(worth) + setH + blocksHtml(goals) + blocksHtml(rest) + homeFoot();
+};
+/* simple view on the two busiest other pages: keep the essentials, fold the rest */
+function simplePage(html, keep, label) {
+  if (!simpleOn()) return html; var bl = pageBlocks(html), a = [], b = [];
+  bl.forEach(function (x) { (x.key === 'top' || x.key === 'hero' || (x.key === 'sect' && keep.test(x.title)) ? a : b).push(x); });
+  return blocksHtml(a) + moreBox(blocksHtml(b), label);
+}
+var _explore11 = PAGES.explore; PAGES.explore = function () { return simplePage(_explore11(), /^Trips/, 'More in Explore'); };
+var _settings11 = PAGES.settings;
+PAGES.settings = function () {
+  var h = _settings11(), box = '<div class="tp-sect"><span>How much Tally shows</span></div><div class="glass pad"><div class="seg">' + [['0', 'Full'], ['1', 'Simple']].map(function (o) { return '<button data-act="simpleSet" data-a="' + o[0] + '" class="' + ((simpleOn() ? '1' : '0') === o[0] ? 'on' : '') + '">' + o[1] + '</button>'; }).join('') + '</div><p class="small muted mb0">Simple keeps each screen to the essentials and tucks the rest under “More”. Nothing is removed. It’s your own setting; your partner picks theirs.</p><button class="pillbtn sm" style="margin-top:10px" data-act="guide">' + TP.svg('help') + ' Where things are</button></div>';
+  var at = h.indexOf('<div class="tp-sect">'); h = at >= 0 ? h.slice(0, at) + box + h.slice(at) : h + box;
+  return simplePage(h, /^How much Tally shows|^Your account|^Look|^Notifications/, 'More settings');
+};
+
+/* ---------- where things are ---------- */
+var GUIDE = [['home', 'home', 'Home', 'What needs you today, what you’ve spent, what’s due next.'], ['together', 'people', 'Together', 'Your shared space: who owes whom, the calendar, the shopping list, to-dos, recipes.'], ['spending', 'chart', 'Spending', 'Every purchase, by category and by month. Tap one to fix its category or split it.'], ['accounts', 'bank', 'Accounts', 'Balances for checking, savings, investing and loans, and your net worth.'], ['cards', 'card', 'Cards', 'Each card’s balance, due date, and which card to use for what.'], ['bills', 'receipt', 'Bills', 'Everything that repeats, by due date. Still due, paid, and not monthly.'], ['+', 'plus', 'The + button', 'Log a purchase by hand. At the right end of the bottom bar.'], ['checkin', 'pencil', 'Weekly check-in', 'About a minute a week: confirm balances and plan the days ahead.'], ['calendar', 'calendar', 'Calendar', 'Your own bills, paydays and card dates on a month view.'], ['ask', 'spark', 'Ask Tally', 'Type a question about your money, or ask it to add a bill or a list item.'], ['smart', 'bulb', 'Tally noticed', 'Price increases, fees, double charges and repeat charges it found.'], ['explore', 'compass', 'Explore', 'Trip planning, fare checks, market news and card offers.'], ['goals', 'target', 'Goals', 'What you’re saving for or paying off, and how far along you are.'], ['settings', 'gear', 'Settings', 'Your account, colors, notifications, bank connection, simple or full view.']];
+ACT.guide = function () {
+  sheet(sxHead('Where things are') + '<p class="small muted" style="margin:-4px 0 10px">Tap any line to go there. The five tabs at the bottom are always one tap away.</p><div class="glass">' + GUIDE.filter(function (g) { return g[0] === '+' || g[0] === 'checkin' || PAGES[g[0]]; }).map(function (g) { return '<button class="tp-row" data-act="guideGo" data-a="' + g[0] + '"><span class="tp-tile">' + TP.svg(g[1]) + '</span><span class="tp-t"><b>' + g[2] + '</b><span>' + g[3] + '</span></span></button>'; }).join('') + '</div><div class="acts"><button class="tp-btn" data-act="close">Done</button></div>');
+};
+ACT.guideGo = function (d) { closeSheet(); if (d.a === '+') { if (ACT.quickAdd) ACT.quickAdd({}); else toast('Tap the + at the right end of the bottom bar.'); return; } goHash(d.a); };
+
+/* ---------- search ---------- */
+var FINDX = [['Notifications and the icon badge', 'notifications badge alerts reminders push', 'settings'], ['Bank connection', 'bank simplefin link refresh connect chime', 'settings'], ['Colors and light or dark', 'theme look color dark light palette', 'settings'], ['Payday and income', 'pay payday paycheck income salary', 'settings'], ['Simple or full view', 'simple full view less more overwhelming', 'settings'], ['Weekly check-in', 'check in checkin balances weekly', 'checkin'], ['Shopping list', 'shopping groceries list store costco shaws', 'together:shop'], ['To-do list', 'todo to-do chores tasks', 'together:todo'], ['Shared calendar', 'calendar dates plans holidays birthday', 'together:plans'], ['Recipes and meal plans', 'recipe recipes meal dinner cook', 'together:shop'], ['Who owes whom', 'owe owes split payback settle shared expense fair', 'together:money'], ['Plan a trip', 'trip travel flight fare vacation', 'explore'], ['Card offers and market news', 'offers market stocks tickers news', 'explore'], ['Ask Tally', 'ask question chat assistant ai', 'ask'], ['Interest and fees', 'interest fees late overdraft', 'cards'], ['Net worth', 'net worth total', 'accounts'], ['Money moved to investing', 'invest investing transfer brokerage', 'spending'], ['Price changes and repeat charges', 'smart noticed subscription price cancel', 'smart'], ['Goals', 'goal goals saving payoff', 'goals'], ['Where things are', 'help guide where find lost', 'guide']];
+function findAll(q) {
+  q = String(q || '').toLowerCase().trim(); if (q.length < 2) return [];
+  var out = [], has = function (s) { return String(s || '').toLowerCase().indexOf(q) >= 0; }, add = function (g, icon, title, sub, act, attrs) { out.push({ g: g, icon: icon, title: title, sub: sub, act: act, attrs: attrs || '' }); };
+  FINDX.forEach(function (f) { if (has(f[0]) || f[1].split(' ').some(function (w) { return w.indexOf(q) === 0 || q.indexOf(w) === 0; })) add('Places', 'compass', f[0], 'Go there', 'findGo', ' data-a="' + f[2] + '"'); });
+  GUIDE.forEach(function (g) { if (has(g[2]) && PAGES[g[0]] && !out.some(function (o) { return o.title === g[2]; })) add('Places', g[1], g[2], g[3], 'findGo', ' data-a="' + g[0] + '"'); });
+  S.bills.forEach(function (b) { if (has(b.name)) add('Bills', 'receipt', b.name, (b.amount ? money(+b.amount) : 'No amount') + (b.day ? ' · due the ' + ordinal(+b.day) : '') + (b.off ? ' · paused' : ''), 'billEdit', ' data-id="' + esc(b.id) + '"'); });
+  S.cards.forEach(function (c) { if (!c.off && has(c.name)) add('Cards and accounts', 'card', c.name, 'Card · ' + money(cardBal(c)), 'srcTx', ' data-a="c:' + esc(c.id) + '"'); });
+  S.accounts.forEach(function (a) { if (!a.closed && has(a.name)) add('Cards and accounts', 'bank', a.name, KIND_NAME[a.kind] + ' · ' + money(acctBal(a.id)), 'srcTx', ' data-a="a:' + esc(a.id) + '"'); });
+  S.goals.forEach(function (g) { if (has(g.name)) add('Goals', 'target', g.name, money(goalNow(g)) + ' of ' + money(+g.target || 0), 'goalEdit', ' data-id="' + esc(g.id) + '"'); });
+  if (typeof SH !== 'undefined' && SH.on() && SH.doc) {
+    shLive('todo').forEach(function (x) { if (!x.done && has(x.text)) add('Together', 'check', x.text, 'To-do', 'findGo', ' data-a="together:todo"'); });
+    shLive('shop').forEach(function (x) { if (!x.got && has(x.name)) add('Together', 'receipt', x.name, 'On the shopping list', 'findGo', ' data-a="together:shop"'); });
+    shLive('plans').forEach(function (x) { if (has(x.title)) add('Together', 'calendar', x.title, 'Calendar · ' + shortDate(x.date), 'findGo', ' data-a="together:plans:' + esc(x.date) + '"'); });
+    shLive('recipes').forEach(function (x) { if (has(x.title)) add('Together', 'note', x.title, 'Recipe', 'recipeOpen', ' data-id="' + esc(x.id) + '"'); });
+    shLive('goals').forEach(function (x) { if (has(x.name)) add('Together', 'target', x.name, 'Shared goal', 'findGo', ' data-a="together:money"'); });
+  }
+  (S.txns || []).filter(function (x) { return has(x.note) || has(x.cat); }).sort(function (a, b) { return a.date < b.date ? 1 : -1; }).slice(0, 8).forEach(function (x) { add('Purchases', 'chart', x.note || x.cat || 'Purchase', shortDate(x.date) + ' · ' + money(+x.amt, 1) + ' · ' + srcName(x.src), 'qaEdit', ' data-id="' + esc(x.id) + '"'); });
+  return out.slice(0, 40);
+}
+function findPaint() {
+  var box = document.getElementById('find_out'), q = val('find_q'); if (!box) return; var r = findAll(q), g = '', h = '';
+  if (!r.length) { box.innerHTML = '<div class="empty" style="padding:14px 0">' + (q.trim().length < 2 ? 'Type a bill, a store, a card, or what you’re trying to do. Try “rent”, “Costco” or “notifications”.' : 'Nothing found for “' + esc(q) + '”. Try a shorter word.') + '</div>'; return; }
+  r.forEach(function (x) { if (x.g !== g) { h += (g ? '</div>' : '') + '<label class="tp-label">' + x.g + '</label><div class="glass">'; g = x.g; } h += '<button class="tp-row" data-act="' + x.act + '"' + x.attrs + '><span class="tp-tile">' + TP.svg(x.icon) + '</span><span class="tp-t"><b>' + esc(x.title) + '</b><span>' + esc(x.sub) + '</span></span></button>'; });
+  box.innerHTML = h + '</div>';
+}
+ACT.search = function () { sheet(sxHead('Search') + '<input class="tp-input" id="find_q" type="search" placeholder="Search bills, purchases, lists, settings" autocomplete="off" enterkeyhint="search" aria-label="Search Tally"><div id="find_out" class="findout"></div>'); findPaint(); setTimeout(function () { var i = document.getElementById('find_q'); if (i) i.focus(); }, 60); };
+document.addEventListener('input', function (e) { if (e.target && e.target.id === 'find_q') findPaint(); });
+ACT.findGo = function (d) { closeSheet(); var p = String(d.a).split(':'); if (p[0] === 'guide') { ACT.guide(); return; } if (p[0] === 'together') { SHV = p[1] || 'money'; if (p[2]) { TCAL.sel = p[2]; TCAL.ym = p[2].slice(0, 7); TCAL.view = 'month'; } VIEW = 'together'; render(); window.scrollTo(0, 0); return; } goHash(p[0]); };
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
