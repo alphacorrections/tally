@@ -885,7 +885,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.23.4';
+var APP_VERSION = '2026.11.26.1';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1963,9 +1963,10 @@ function spendingPage() {
     h += '<div class="tp-sect"><span>Top places</span></div><div class="glass pad">' + top.map(function (m) { return '<div class="kv"><span>' + esc(m) + ' <em class="muted">· ' + mc[m] + '×</em></span><b>' + money(mm[m]) + '</b></div>'; }).join('') + '</div>';
   }
   /* purchases */
+  if (SPV.sort === 'big') cur = cur.slice().sort(function (a, b) { return (+b.amt || 0) - (+a.amt || 0); });
   var shown = cur.slice(0, 60 + SPV.more * 100);
-  h += '<div class="tp-sect"><span>Purchases</span><span class="sp"></span><span class="small muted">' + cur.length + '</span></div><div class="glass">' + (shown.length ? shown.map(function (x) {
-    return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc((x.cat || 'Other') + ' · ' + srcName(x.src)) + (x.ext || x.bank ? ' · <i class="bkdot" title="From your bank"></i>bank' : '') + (x.shared ? ' · <span class="togtag">Together</span>' : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>';
+  h += '<div class="tp-sect"><span>Purchases · ' + cur.length + '</span><span class="sp"></span><button data-act="spSort">' + (SPV.sort === 'big' ? 'Newest first' : 'Biggest first') + '</button></div><div class="glass">' + (shown.length ? shown.map(function (x) {
+    return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc((x.cat || 'Other') + ' · ' + srcName(x.src)) + (x.ext || x.bank ? ' · <i class="bkdot" title="From your bank"></i>bank' : '') + (x.shared ? ' · <span class="togtag">Together</span>' : '') + (x.refund ? ' · <span class="togtag">refund</span>' : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>';
   }).join('') : '<div class="empty">Nothing here for this filter.</div>') + '</div>';
   if (cur.length > shown.length) h += '<button class="tp-btn tp-ghost tp-block" data-act="spMore">Show more</button>';
   h += '<p class="small muted">Categories are guesses for bank purchases. Tap one to change it; Tally keeps your choice.</p>';
@@ -4018,7 +4019,7 @@ PAGES.cards = function () {
 
 /* money in vs out, by month: bank deposits against everything spent */
 function inOut(n) {
-  var td = today(), inf = S.inflows || []; if (!inf.length) return [];
+  var td = today(), inf = (S.inflows || []).filter(function (x) { return !x.xfer; }); if (!inf.length) return [];
   var first = inf.reduce(function (m, x) { return !m || x.date < m ? x.date : m; }, ''), bf = bankFrom() || first, from = first < bf ? first : bf;
   return monthsBack(td, n || 6).map(function (m) {
     m = monthStart(m); var end = m === monthStart(td) ? td : monthEnd(m); if (end < from) return null;
@@ -4773,6 +4774,109 @@ topBar = function () {
   var q = document.createElement('button'); q.className = 'ibtn'; q.setAttribute('data-act', 'guide'); q.setAttribute('aria-label', 'Where things are'); q.innerHTML = TP.svg('help'); bar.insertBefore(q, st);
   return box.innerHTML;
 };
+
+/* ====================================================================
+   What counts as spending. Money that only changes pockets is not spending:
+   a transfer between your own accounts, a payment to your own credit card (the purchases on the
+   card were already counted), or money sent to investments. Refunds on a card come off spending.
+   ==================================================================== */
+var CARDPAY_A = /\b(amex|american express|discover|barclay\w*|synchrony|comenity|capital one|apple ?card|applecard|jetblue|cardmember|citi ?card)\b.*\b(e-?pay\w*|pymt|pmt|payment|autopay|auto pay)\b/i;
+var CARDPAY_B = /\b(credit ?c(a?r)?d|crd|card|visa|mastercard)\b.*\b(e-?pay\w*|pymt|pmt|payment|autopay)\b|\b(e-?payment|pymt|pmt|payment|autopay)\b.*\b(credit ?c(a?r)?d|crd|card|visa|mastercard)\b/i;
+var CARDPAY_C = /crcardpmt|cardmember serv|card services|credit (payment|pymt|pmt)\b|creditcard/i;
+var BUYISH = /\b(debit|purchase|pos|checkcard|check card|recurring)\b/i;
+var XFER2 = /\b(online|mobile|internet|ach|funds?|instant|external|scheduled|bank)\s+(transfer|xfer|trnsfr|tfr)\b|\btransfer (to|from)\b|\bto (share|savings|checking|acct|account)\b|\bsave ?when\b|keep the change|\bsavings? (transfer|goal|vault|pod|bucket)\b|\bmoney moved\b|\bmove money\b/i;
+var OWNSTOP = { bank: 1, credit: 1, union: 1, federal: 1, digital: 1, national: 1, first: 1, capital: 1, american: 1, express: 1, united: 1, community: 1, savings: 1, saving: 1, checking: 1, financial: 1, card: 1, cards: 1, services: 1, account: 1, rewards: 1, prime: 1, visa: 1, free: 1, primary: 1, bill: 1, auto: 1, used: 1, money: 1, market: 1, share: 1, trust: 1, state: 1, city: 1, home: 1, cash: 1, plus: 1, gold: 1, blue: 1, platinum: 1, preferred: 1, everyday: 1, signature: 1, amazon: 1, costco: 1, apple: 1, target: 1, world: 1, online: 1, mobile: 1, north: 1, south: 1, east: 1, west: 1 };
+/* words that name each of your other banks, so "CHIME" on a DCU statement reads as "to my Chime account" */
+function ownWords(src) {
+  var d = BANK.data, mp = BANK.map(), out = [], mine = {}; if (!d || !d.accounts) return out;
+  var words = function (s) { return String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 4 && !OWNSTOP[w] && !/^\d+$/.test(w); }); };
+  d.accounts.forEach(function (a) { if (mp[a.id] === src) words(a.conn).forEach(function (w) { mine[w] = 1; }); });
+  d.accounts.forEach(function (a) { var t = mp[a.id]; if (!t || t === src || t.indexOf('new:') === 0) return; words(a.conn).forEach(function (w) { if (!mine[w]) out.push({ w: w, to: t }); }); });
+  return out;
+}
+function moveKind(to) { if (!to) return 'transfer'; if (to.indexOf('c:') === 0) return 'cardpay'; var a = byId(S.accounts, to.slice(2)); return !a ? 'transfer' : a.kind === 'invest' || a.kind === 'retire' ? 'invest' : a.kind === 'loan' ? '' : 'transfer'; }
+/* '' = ordinary spending. Otherwise why it isn't: transfer, cardpay, invest */
+function descMove(desc, src) {
+  var d = String(desc || ''); if (!d || !src || src.indexOf('a:') !== 0) return '';
+  if (INTRX.test(d) || FEERX.test(d)) return '';
+  if (CARDPAY_A.test(d) || CARDPAY_C.test(d) || (CARDPAY_B.test(d) && !BUYISH.test(d))) return 'cardpay';
+  if (XFER2.test(d)) return 'transfer';
+  if (INVRX.test(d)) return 'invest';
+  var ow = ownWords(src), low = d.toLowerCase();
+  for (var i = 0; i < ow.length; i++) if (new RegExp('\\b' + ow[i].w + '\\b').test(low)) return moveKind(ow[i].to) || '';
+  return '';
+}
+var _bankSkip13 = bankSkip;
+bankSkip = function (desc, src) { return _bankSkip13(desc, src) || !!descMove(desc, src); };
+var PAYBACK = /payment|pymt|\bpmt\b|thank you|autopay|auto pay|e-?pay|directpay|full balance|credit balance|balance transfer|\bach\b|transfer/i, PERK = /reward|cash ?back|statement credit|points|bonus|promo/i;
+function classifyRaw(d) {
+  d = d || BANK.data; if (!d || !d.accounts) return 0;
+  var mp = BANK.map(), n = 0, haveM = {}, keep = {}, haveT = {}, credits = [];
+  S.moves = S.moves || []; S.txns = S.txns || []; S.moves.forEach(function (x) { if (x.ext) haveM[x.ext] = 1; }); S.txns.forEach(function (x) { if (x.ext) { haveT[x.ext] = 1; if (x.keepSpend) keep[x.ext] = 1; } });
+  d.accounts.forEach(function (a) { var src = mp[a.id]; if (!src || src.indexOf('new:') === 0) return; (a.txns || []).forEach(function (t) { if (t.amt > 0) credits.push({ key: a.id + ':' + t.id, src: src, date: t.date, amt: r2(t.amt), desc: String(t.desc || ''), used: false }); }); });
+  var drop = {};
+  d.accounts.forEach(function (a) {
+    var src = mp[a.id]; if (!src || src.indexOf('a:') !== 0) return; var acct = byId(S.accounts, src.slice(2)); if (!acct || (acct.kind !== 'spend' && acct.kind !== 'save')) return;
+    (a.txns || []).forEach(function (t) {
+      var key = a.id + ':' + t.id; if (!(t.amt < 0) || haveM[key] || keep[key]) return; var amt = r2(-t.amt), why = '';
+      /* the same amount arriving in another of your accounts within a few days */
+      var hit = credits.filter(function (c) { if (c.used || c.src === src || Math.abs(c.amt - amt) > 0.005) return false; var g = daysBetween(t.date, c.date); return g >= -2 && g <= 5; }).sort(function (p, q) { return Math.abs(daysBetween(t.date, p.date)) - Math.abs(daysBetween(t.date, q.date)); })[0];
+      if (hit) { hit.used = true; why = moveKind(hit.src); (S.inflows || []).forEach(function (i) { if (i.ext === hit.key) i.xfer = true; }); if (!why) return; } else why = descMove(t.desc, src);
+      if (!why) return;
+      haveM[key] = 1; drop[key] = 1; toMove({ ext: key, date: t.date, amt: amt, src: src, note: cleanDesc(t.desc) }, why); n++;
+    });
+  });
+  if (Object.keys(drop).length) S.txns = S.txns.filter(function (x) { return !(x.ext && drop[x.ext]); });
+  /* money back on a card: a return or a reversed charge. Small ones only; a large unexplained credit is more likely a payment. */
+  credits.forEach(function (c) {
+    if (c.used || c.src.indexOf('c:') !== 0 || haveT[c.key] || haveM[c.key] || c.amt > 500 || PAYBACK.test(c.desc) || PERK.test(c.desc)) return;
+    haveT[c.key] = 1; S.txns.push({ id: 't' + uid(), ext: c.key, at: c.date + 'T12:00:00', date: c.date, amt: -c.amt, src: c.src, cat: guessCat(c.desc), note: cleanDesc(c.desc), bank: true, refund: true }); n++;
+  });
+  return n;
+}
+/* purchases already saved before these rules existed */
+function sweepMoves2() {
+  var n = 0, keepL = [], inf = (S.inflows || []).map(function (i) { return { src: i.src, date: i.date, amt: +i.amt, used: false }; });
+  (S.txns || []).forEach(function (x) {
+    var why = ''; if ((x.ext || x.bank) && !x.keepSpend && !x.refund && +x.amt > 0 && x.src && x.src.indexOf('a:') === 0) {
+      why = descMove(x.bankDesc || x.note, x.src);
+      if (!why) { var hit = inf.filter(function (c) { if (c.used || c.src === x.src || Math.abs(c.amt - +x.amt) > 0.005) return false; var g = daysBetween(x.date, c.date); return g >= -2 && g <= 5; })[0]; if (hit) { hit.used = true; why = moveKind(hit.src); } }
+    }
+    if (why) { toMove(x, why); n++; } else keepL.push(x);
+  });
+  if (n) S.txns = keepL; return n;
+}
+var _bankExtras13 = bankExtras;
+bankExtras = function (d) { var n = _bankExtras13(d); try { n += classifyRaw(d); n += sweepMoves2(); } catch (e) {} return n; };
+try { sweepMoves2(); } catch (e) {}
+
+/* ---------- showing what was left out, and letting you overrule it ---------- */
+var MOVEWHY = { transfer: 'Moved between your accounts', cardpay: 'Card payments', invest: 'Moved to investing', buy: 'Moved to investing', yours: 'Marked by you' };
+function moveGroup(x) { return x.why === 'buy' ? 'invest' : MOVEWHY[x.why] ? x.why : 'invest'; }
+ACT.qaMove = function () {
+  if (!QA || !QA.id) return; var x = (S.txns || []).filter(function (t) { return t.id === QA.id; })[0]; if (!x) return;
+  var k = mkey(x), name = spMerchant(x); S.profile.moveRules = S.profile.moveRules || {}; if (k) S.profile.moveRules[k] = 1;
+  var n = 0, keep = []; (S.txns || []).forEach(function (t) { if (t === x || (k && !t.shared && !t.keepSpend && !t.refund && mkey(t) === k)) { toMove(t, 'yours'); n++; } else keep.push(t); });
+  S.txns = keep; QA = null; closeSheet(); render._keep = true; save();
+  toast(n > 1 ? 'Took ' + n + ' ' + name + ' charges out of Spending. New ones will be left out too.' : 'Taken out of Spending. New ' + name + ' charges will be left out too.');
+};
+var _tq13 = qaTogQuick;
+qaTogQuick = function (q) { return _tq13(q).replace('Not spending: I invested or moved this', 'Not spending: a transfer, card payment or investment'); };
+ACT.movesSheet = function () {
+  var td = today(), list = (S.moves || []).slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }), mo = movesIn(monthStart(td), td), by = {}, order = ['cardpay', 'transfer', 'invest', 'yours'];
+  mo.forEach(function (x) { var g = moveGroup(x); by[g] = r2((by[g] || 0) + +x.amt); });
+  sheet(sxHead('Not counted as spending') + '<p class="small muted" style="margin-top:0">Money that only changed pockets. A card payment isn’t new spending: what you bought on the card was already counted when you bought it. A transfer to your own savings or to investments is still yours.</p>' +
+    order.filter(function (g) { return by[g]; }).map(function (g) { return '<div class="kv"><span>' + MOVEWHY[g] + ' · this month</span><b>' + money(by[g], 1) + '</b></div>'; }).join('') + (mo.length ? '' : '<div class="kv"><span>This month</span><b>' + money(0, 1) + '</b></div>') +
+    (list.length ? '<div class="glass" style="margin-top:10px">' + list.slice(0, 60).map(function (x) { return '<div class="tp-row static">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note) + '</b><span>' + esc(MOVEWHY[moveGroup(x)].replace(/s$/, '') + ' · from ' + srcName(x.src)) + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span><button class="pillbtn sm" data-act="moveBack" data-id="' + x.id + '" aria-label="Count ' + esc(x.note) + ' as spending">Undo</button></div>'; }).join('') + '</div>' + (list.length > 60 ? '<p class="small muted">Showing the latest 60 of ' + list.length + '.</p>' : '') + '<p class="small muted">Undo puts one back in Spending and keeps it there.</p>' : '<p class="small muted">Nothing yet.</p>') +
+    '<div class="acts"><button class="tp-btn" data-act="close">Done</button></div>');
+};
+inOutCard = function () {
+  var h = _io6(), td = today(), mo = movesIn(monthStart(td), td); if (!(S.moves || []).length) return h; var by = {}; mo.forEach(function (x) { var g = moveGroup(x); by[g] = r2((by[g] || 0) + +x.amt); });
+  var parts = [by.cardpay ? 'card payments ' + money(by.cardpay) : '', by.transfer ? 'transfers ' + money(by.transfer) : '', by.invest ? 'investing ' + money(by.invest) : '', by.yours ? 'marked by you ' + money(by.yours) : ''].filter(Boolean);
+  return h + '<button class="glass tp-row cta" data-act="movesSheet"><span class="tp-tile">' + TP.svg('trend') + '</span><span class="tp-t"><b>' + money(sumAmt(mo)) + ' this month isn’t counted as spending</b><span>' + (parts.length ? parts.join(' · ') : 'Card payments, transfers and investing') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+};
+/* Spending: a way to see what makes up a big total */
+ACT.spSort = function () { SPV.sort = SPV.sort === 'big' ? '' : 'big'; SPV.more = 0; render._keep = true; render(); };
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };

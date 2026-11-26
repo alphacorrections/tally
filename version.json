@@ -1,1 +1,1 @@
-{"version": "2026.11.23.4", "note": "Simple view now applies across the app: Spending, Accounts, Cards and Together fold their extras under More"}
+{"version": "2026.11.26.1", "note": "Spending no longer counts card payments or transfers between your own accounts; refunds come off; sort purchases by biggest"}
