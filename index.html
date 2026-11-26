@@ -885,7 +885,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.26.1';
+var APP_VERSION = '2026.11.26.2';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -4019,7 +4019,7 @@ PAGES.cards = function () {
 
 /* money in vs out, by month: bank deposits against everything spent */
 function inOut(n) {
-  var td = today(), inf = (S.inflows || []).filter(function (x) { return !x.xfer; }); if (!inf.length) return [];
+  var td = today(), inf = (S.inflows || []).filter(function (x) { return !x.xfer && !BTRX.test(x.note || '') && !XFER2.test(x.note || ''); }); if (!inf.length) return [];
   var first = inf.reduce(function (m, x) { return !m || x.date < m ? x.date : m; }, ''), bf = bankFrom() || first, from = first < bf ? first : bf;
   return monthsBack(td, n || 6).map(function (m) {
     m = monthStart(m); var end = m === monthStart(td) ? td : monthEnd(m); if (end < from) return null;
@@ -4784,7 +4784,9 @@ var CARDPAY_A = /\b(amex|american express|discover|barclay\w*|synchrony|comenity
 var CARDPAY_B = /\b(credit ?c(a?r)?d|crd|card|visa|mastercard)\b.*\b(e-?pay\w*|pymt|pmt|payment|autopay)\b|\b(e-?payment|pymt|pmt|payment|autopay)\b.*\b(credit ?c(a?r)?d|crd|card|visa|mastercard)\b/i;
 var CARDPAY_C = /crcardpmt|cardmember serv|card services|credit (payment|pymt|pmt)\b|creditcard/i;
 var BUYISH = /\b(debit|purchase|pos|checkcard|check card|recurring)\b/i;
-var XFER2 = /\b(online|mobile|internet|ach|funds?|instant|external|scheduled|bank)\s+(transfer|xfer|trnsfr|tfr)\b|\btransfer (to|from)\b|\bto (share|savings|checking|acct|account)\b|\bsave ?when\b|keep the change|\bsavings? (transfer|goal|vault|pod|bucket)\b|\bmoney moved\b|\bmove money\b/i;
+var XFER2 = /\b(online|mobile|internet|ach|funds?|instant|external|scheduled|bank)\s+(transfer|xfer|trnsfr|tfr)\b|\btransfer (to|from)\b|\bto (share|savings|checking|acct|account)\b|\bsave ?when\b|keep the change|\bsavings? (transfer|goal|vault|pod|bucket)\b|\bmoney moved\b|\bmove money\b|\bmoved? (to|from)\b[^.]{0,40}\b(savings?|checking|acct|account)\b|\b(to|from) [\w ]{0,24}\b(savings?|checking) (acct|account)\b/i;
+/* a balance transfer or cash advance: the card lent you money that went to your bank. Borrowing, not buying. */
+var BTRX = /\bbt (to|from)\b|\bbalance (transfer|xfer|trnsfr)\b|\bbal(ance)? ?tra?ns?fe?r\b|\bcash advance\b|\bconvenience check\b/i;
 var OWNSTOP = { bank: 1, credit: 1, union: 1, federal: 1, digital: 1, national: 1, first: 1, capital: 1, american: 1, express: 1, united: 1, community: 1, savings: 1, saving: 1, checking: 1, financial: 1, card: 1, cards: 1, services: 1, account: 1, rewards: 1, prime: 1, visa: 1, free: 1, primary: 1, bill: 1, auto: 1, used: 1, money: 1, market: 1, share: 1, trust: 1, state: 1, city: 1, home: 1, cash: 1, plus: 1, gold: 1, blue: 1, platinum: 1, preferred: 1, everyday: 1, signature: 1, amazon: 1, costco: 1, apple: 1, target: 1, world: 1, online: 1, mobile: 1, north: 1, south: 1, east: 1, west: 1 };
 /* words that name each of your other banks, so "CHIME" on a DCU statement reads as "to my Chime account" */
 function ownWords(src) {
@@ -4797,8 +4799,10 @@ function ownWords(src) {
 function moveKind(to) { if (!to) return 'transfer'; if (to.indexOf('c:') === 0) return 'cardpay'; var a = byId(S.accounts, to.slice(2)); return !a ? 'transfer' : a.kind === 'invest' || a.kind === 'retire' ? 'invest' : a.kind === 'loan' ? '' : 'transfer'; }
 /* '' = ordinary spending. Otherwise why it isn't: transfer, cardpay, invest */
 function descMove(desc, src) {
-  var d = String(desc || ''); if (!d || !src || src.indexOf('a:') !== 0) return '';
+  var d = String(desc || ''); if (!d || !src) return '';
   if (INTRX.test(d) || FEERX.test(d)) return '';
+  if (BTRX.test(d)) return 'transfer';
+  if (src.indexOf('a:') !== 0) return '';
   if (CARDPAY_A.test(d) || CARDPAY_C.test(d) || (CARDPAY_B.test(d) && !BUYISH.test(d))) return 'cardpay';
   if (XFER2.test(d)) return 'transfer';
   if (INVRX.test(d)) return 'invest';
@@ -4826,6 +4830,8 @@ function classifyRaw(d) {
       haveM[key] = 1; drop[key] = 1; toMove({ ext: key, date: t.date, amt: amt, src: src, note: cleanDesc(t.desc) }, why); n++;
     });
   });
+  /* on a card: a balance transfer or cash advance paid out to you */
+  d.accounts.forEach(function (a) { var src = mp[a.id]; if (!src || src.indexOf('c:') !== 0) return; (a.txns || []).forEach(function (t) { var key = a.id + ':' + t.id; if (!(t.amt < 0) || haveM[key] || keep[key] || descMove(t.desc, src) !== 'transfer') return; haveM[key] = 1; drop[key] = 1; toMove({ ext: key, date: t.date, amt: r2(-t.amt), src: src, note: cleanDesc(t.desc) }, 'transfer'); n++; }); });
   if (Object.keys(drop).length) S.txns = S.txns.filter(function (x) { return !(x.ext && drop[x.ext]); });
   /* money back on a card: a return or a reversed charge. Small ones only; a large unexplained credit is more likely a payment. */
   credits.forEach(function (c) {
@@ -4838,9 +4844,9 @@ function classifyRaw(d) {
 function sweepMoves2() {
   var n = 0, keepL = [], inf = (S.inflows || []).map(function (i) { return { src: i.src, date: i.date, amt: +i.amt, used: false }; });
   (S.txns || []).forEach(function (x) {
-    var why = ''; if ((x.ext || x.bank) && !x.keepSpend && !x.refund && +x.amt > 0 && x.src && x.src.indexOf('a:') === 0) {
+    var why = ''; if ((x.ext || x.bank) && !x.keepSpend && !x.refund && +x.amt > 0 && x.src) {
       why = descMove(x.bankDesc || x.note, x.src);
-      if (!why) { var hit = inf.filter(function (c) { if (c.used || c.src === x.src || Math.abs(c.amt - +x.amt) > 0.005) return false; var g = daysBetween(x.date, c.date); return g >= -2 && g <= 5; })[0]; if (hit) { hit.used = true; why = moveKind(hit.src); } }
+      if (!why && x.src.indexOf('a:') === 0) { var hit = inf.filter(function (c) { if (c.used || c.src === x.src || Math.abs(c.amt - +x.amt) > 0.005) return false; var g = daysBetween(x.date, c.date); return g >= -2 && g <= 5; })[0]; if (hit) { hit.used = true; why = moveKind(hit.src); } }
     }
     if (why) { toMove(x, why); n++; } else keepL.push(x);
   });

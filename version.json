@@ -1,1 +1,1 @@
-{"version": "2026.11.26.1", "note": "Spending no longer counts card payments or transfers between your own accounts; refunds come off; sort purchases by biggest"}
+{"version": "2026.11.26.2", "note": "Spending now leaves out balance transfers and money moved to savings at the same bank"}
