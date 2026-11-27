@@ -901,7 +901,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.26.3';
+var APP_VERSION = '2026.11.27.1';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -2732,7 +2732,7 @@ var ACT = {
     S.profile.last = { src: x.src, cat: x.cat };
     if (typeof SH !== 'undefined' && SH.on() && SH.doc && (QA.together || x.shared)) {
       var ex = x.shared ? (SH.doc.exp || []).filter(function (e) { return e.id === x.shared; })[0] : null;
-      if (QA.together) { var se = ex ? JSON.parse(JSON.stringify(ex)) : { id: 'e' + uid(), payer: SH.cfg.me, by: SH.cfg.me }; delete se.del; se.amt = a; se.note = x.note || x.cat; se.cat = x.cat; se.date = x.date; se.split = QA.split || 'half'; se.pct = se.split === 'pct' ? Math.max(0, Math.min(100, num(QA.pct))) : ''; shTouch('exp', se); x.shared = se.id; }
+      if (QA.together) { var se = ex ? JSON.parse(JSON.stringify(ex)) : { id: 'e' + uid(), payer: (typeof jointPayerFor === 'function' ? jointPayerFor(x.src) : SH.cfg.me), by: SH.cfg.me }; delete se.del; se.amt = a; se.note = x.note || x.cat; se.cat = x.cat; se.date = x.date; se.split = QA.split || 'half'; se.pct = se.split === 'pct' ? Math.max(0, Math.min(100, num(QA.pct))) : ''; shTouch('exp', se); x.shared = se.id; }
       else if (ex) { ex.del = true; shTouch('exp', ex); x.shared = ''; }
     }
     var where = ''; if (x.src.indexOf('c:') === 0) { var c = byId(S.cards, x.src.slice(2)), cy = c && cardCycleFor(c, x.date); where = c ? 'Added to ' + c.name + (cy && cy.due ? '. Due ' + shortDate(cy.due) + '.' : '.') : ''; } else { var ac = byId(S.accounts, x.src.slice(2)); where = ac ? 'Out of ' + ac.name + '. ' + money(acctBal(ac.id) - (QA.id ? 0 : 0)) + ' left.' : ''; }
@@ -3041,11 +3041,11 @@ function shMerge(a, b) {
   return out;
 }
 function shLive(k) { return SH.doc ? (SH.doc[k] || []).filter(function (x) { return !x.del; }) : []; }
-function shPerson(id) { return shLive('people').filter(function (p) { return p.id === id; })[0] || { id: id, name: '?' }; }
+function shPerson(id) { if (id === 'joint') return { id: 'joint', name: typeof jointName === 'function' ? jointName() : 'Shared card' }; return shLive('people').filter(function (p) { return p.id === id; })[0] || { id: id, name: '?' }; }
 function shMe() { return shPerson(SH.cfg.me); }
 function shThem() { return shLive('people').filter(function (p) { return p.id !== SH.cfg.me; })[0] || { id: '', name: 'Partner' }; }
 function shTouch(list, item) { item.upd = new Date().toISOString(); var arr = SH.doc[list] = SH.doc[list] || []; var i = arr.map(function (x) { return x.id; }).indexOf(item.id); if (i >= 0) arr[i] = item; else arr.push(item); SH.keep(); SH.sync(); }
-function payerShare(x) { return x.split === 'pct' ? Math.max(0, Math.min(100, +x.pct || 0)) / 100 : x.split === 'other' ? 0 : x.split === 'solo' ? 1 : 0.5; }
+function payerShare(x) { if (x.payer === 'joint') return 1; /* paid from the shared card: nobody owes */ return x.split === 'pct' ? Math.max(0, Math.min(100, +x.pct || 0)) / 100 : x.split === 'other' ? 0 : x.split === 'solo' ? 1 : 0.5; }
 /* positive: they owe me. negative: I owe them */
 function shNet() {
   var me = SH.cfg.me, n = 0;
@@ -3074,7 +3074,7 @@ function togetherPage() {
   /* this month */
   var ym = td.slice(0, 7), mx = shLive('exp').filter(function (x) { return x.date.slice(0, 7) === ym && x.split !== 'solo'; }), tot = sumAmt(mx);
   if (mx.length) { var paid = {}; mx.forEach(function (x) { paid[x.payer] = (paid[x.payer] || 0) + (+x.amt || 0); });
-    h += '<div class="glass pad"><div class="flex" style="justify-content:space-between"><b>' + MONTHS[parseD(td).getMonth()] + ' shared spending</b><b class="disp">' + money(tot) + '</b></div><div class="split" style="margin-top:10px">' + [me, them].filter(function (p) { return paid[p.id]; }).map(function (p, i) { return '<i style="flex:' + paid[p.id] + ';background:' + (i ? 'var(--c2)' : 'var(--c1)') + '"></i>'; }).join('') + '</div><div class="legend4">' + [me, them].map(function (p, i) { return '<span><i style="background:' + (i ? 'var(--c2)' : 'var(--c1)') + '"></i>' + esc(p.name) + ' paid<b>' + money(paid[p.id] || 0) + '</b></span>'; }).join('') + '</div></div>'; }
+    h += '<div class="glass pad"><div class="flex" style="justify-content:space-between"><b>' + MONTHS[parseD(td).getMonth()] + ' shared spending</b><b class="disp">' + money(tot) + '</b></div><div class="split" style="margin-top:10px">' + [me, them].filter(function (p) { return paid[p.id]; }).map(function (p, i) { return '<i style="flex:' + paid[p.id] + ';background:' + (i ? 'var(--c2)' : 'var(--c1)') + '"></i>'; }).join('') + '</div><div class="legend4">' + [me, them].map(function (p, i) { return '<span><i style="background:' + (i ? 'var(--c2)' : 'var(--c1)') + '"></i>' + esc(p.name) + ' paid<b>' + money(paid[p.id] || 0) + '</b></span>'; }).join('') + (paid.joint ? '<span><i style="background:var(--tp-ink3)"></i>' + esc(shPerson('joint').name) + '<b>' + money(paid.joint) + '</b></span>' : '') + '</div></div>'; }
   /* bills */
   var bills = shLive('bills').slice().sort(function (a, b) { return (shBillDue(a, td) || '9') < (shBillDue(b, td) || '9') ? -1 : 1; });
   h += '<div class="tp-sect"><span>Shared bills</span><span class="sp"></span><button data-act="shBill">+ Add</button></div><div class="glass">' + (bills.length ? bills.map(function (b) {
@@ -3099,7 +3099,7 @@ function togetherPage() {
     if (r.t === 's') return '<button class="tp-row" data-act="shSettle" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(shPerson(x.from).name) + ' paid back ' + esc(shPerson(x.to).name) + '</b><span>' + esc(x.note || 'Payback') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>';
     if (r.t === 'c') { var g = shLive('goals').filter(function (gg) { return gg.id === x.goal; })[0]; return '<button class="tp-row" data-act="shContrib" data-cid="' + x.id + '" data-id="' + x.goal + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(shPerson(x.who).name) + ' added to ' + esc(g ? g.name : 'a goal') + '</b><span>Shared goal</span></span><span class="amt up">+' + money(+x.amt, 1) + '</span></button>'; }
     var other = r2((+x.amt || 0) * (1 - payerShare(x)));
-    return '<button class="tp-row" data-act="shExp" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Shared expense') + '</b><span>' + esc(shPerson(x.payer).name) + ' paid · ' + splitLabel(x) + (other ? ' · ' + (x.payer === SH.cfg.me ? shThem().name + ' owes ' : 'you owe ') + money(other, 1) : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>';
+    return '<button class="tp-row" data-act="shExp" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Shared expense') + '</b><span>' + (x.payer === 'joint' ? 'Paid from ' + esc(shPerson('joint').name) + ' · shared, nobody owes' : esc(shPerson(x.payer).name) + ' paid · ' + splitLabel(x)) + (other ? ' · ' + (x.payer === SH.cfg.me ? shThem().name + ' owes ' : 'you owe ') + money(other, 1) : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>';
   }).join('') : '<div class="empty">Shared expenses and paybacks show up here for both of you.</div>') + '</div>';
   /* invite / settings */
   if (!SH.cloud() && CLOUD.on()) h += '<div class="glass pad"><b>Move Together to your account</b><p class="small muted">Right now this space lives in your Google Sheet. Moving it keeps everything here and gives you an invite code for ' + esc(them.name) + ' to join with her own account.</p><div id="sh_err"></div><button class="tp-btn tp-sm" data-act="shMove">Move it</button></div>';
@@ -3291,7 +3291,7 @@ function shExpSheet() {
   var x = SHX, me = shMe(), them = shThem(), srcs = srcList();
   sheet(sxHead(x.id ? 'Edit shared expense' : 'Shared expense') + '<div class="money qamt"><input class="tp-input" id="sx_amt" inputmode="decimal" placeholder="0.00" value="' + esc(x.amt || '') + '" aria-label="Amount"></div>' +
     textField('sx_note', 'What for', x.note || '', 'e.g. Groceries, Dinner out') +
-    '<label class="tp-label">Who paid</label>' + seg('sx_payer', [[me.id, me.name], [them.id, them.name]], x.payer || me.id) + shSplitFields(x) +
+    '<label class="tp-label">Who paid</label>' + seg('sx_payer', [[me.id, me.name], [them.id, them.name]].concat((typeof jointOn === 'function' && jointOn()) || x.payer === 'joint' ? [['joint', shPerson('joint').name]] : []), x.payer || me.id) + shSplitFields(x) +
     '<label class="tp-label">Category</label><div class="chips">' + CATS.map(function (c) { return '<button class="chip' + (x.cat === c ? ' on' : '') + '" data-act="sxCat" data-a="' + esc(c) + '">' + c + '</button>'; }).join('') + '</div>' +
     textField('sx_date', 'Date', x.date || today(), '', 'date') +
     (!x.id && srcs.length ? '<div id="sx_mine"' + ((x.payer || me.id) === me.id ? '' : ' hidden') + '><label class="tp-opt mt"><input type="checkbox" id="sx_log" checked><span><b>Also add it to my spending</b><span>Takes the full amount off the card or account you used.</span></span></label><div class="chips qsrc">' + srcs.map(function (o) { return '<button class="chip' + (x.src === o.id ? ' on' : '') + '" data-act="sxSrc" data-a="' + o.id + '"><i style="background:' + o.dot + '"></i>' + esc(o.name) + '</button>'; }).join('') + '</div></div>' : '') +
@@ -3302,7 +3302,8 @@ function shKeepForm() { if (!SHX) return; ['amt', 'note', 'date', 'pct'].forEach
 function shHint() {
   var el = document.getElementById('sx_hint'); if (!el) return;
   var a = num(val('sx_amt')), payer = val('sx_payer'), x = { split: val('sx_split'), pct: val('sx_pct') }, owed = r2(a * (1 - payerShare(x))), other = payer === SH.cfg.me ? shThem() : shMe();
-  el.textContent = a ? (owed ? other.name + ' owes ' + shPerson(payer).name + ' ' + money(owed, 1) + '.' : 'Nobody owes anything on this one.') : '';
+  el.textContent = payer === 'joint' ? 'Paid from ' + shPerson('joint').name + '. It counts toward your shared spending, and nobody owes anything.' : a ? (owed ? other.name + ' owes ' + shPerson(payer).name + ' ' + money(owed, 1) + '.' : 'Nobody owes anything on this one.') : '';
+  var sf = document.getElementById('sx_split'); if (sf) { var sg = document.querySelector('[data-seg="sx_split"]'), lb = sg && sg.previousElementSibling; if (sg) sg.hidden = payer === 'joint'; if (lb && lb.classList.contains('tp-label')) lb.hidden = payer === 'joint'; }
   var pb = document.getElementById('sx_pctbox'); if (pb) pb.hidden = x.split !== 'pct';
   var mine = document.getElementById('sx_mine'); if (mine) mine.hidden = payer !== SH.cfg.me;
 }
@@ -4464,7 +4465,7 @@ function togContext(ym) {
   var me = shMe(), th = shThem(), nm = function (id) { return shPerson(id).name; }, mon = function (m) { return shLive('exp').filter(function (x) { return String(x.date).slice(0, 7) === m; }); };
   var pm = addMonths(ym + '-01', -1).slice(0, 7), sum = function (l) { var cat = {}, by = {}; l.forEach(function (x) { cat[x.cat || 'Other'] = Math.round((cat[x.cat || 'Other'] || 0) + +x.amt); by[nm(x.payer)] = Math.round((by[nm(x.payer)] || 0) + +x.amt); }); return { total: Math.round(sumAmt(l)), byCategory: cat, paidBy: by, count: l.length }; };
   var net = shNet();
-  return { people: [me.name, th.name], month: ym, thisMonth: sum(mon(ym)), lastMonth: sum(mon(pm)), biggest: mon(ym).slice().sort(function (a, b) { return b.amt - a.amt; }).slice(0, 6).map(function (x) { return { what: x.note || x.cat, amount: +x.amt, paidBy: nm(x.payer), date: x.date }; }),
+  return { people: [me.name, th.name], howTheyPay: howWePay(), month: ym, thisMonth: sum(mon(ym)), lastMonth: sum(mon(pm)), biggest: mon(ym).slice().sort(function (a, b) { return b.amt - a.amt; }).slice(0, 6).map(function (x) { return { what: x.note || x.cat, amount: +x.amt, paidBy: nm(x.payer), date: x.date }; }),
     balanceNow: Math.abs(net) < 0.5 ? 'even' : (net > 0 ? th.name + ' owes ' + me.name : me.name + ' owes ' + th.name) + ' ' + money(Math.abs(net), 1),
     paybacksThisMonth: shLive('settle').filter(function (x) { return String(x.date).slice(0, 7) === ym; }).map(function (x) { return { from: nm(x.from), amount: +x.amt }; }),
     sharedGoals: shLive('goals').map(function (g) { var cs = shLive('contrib').filter(function (c) { return c.goal === g.id; }); return { name: g.name, target: +g.target || 0, saved: Math.round(sumAmt(cs)), by: g.due || '', addedThisMonth: Math.round(sumAmt(cs.filter(function (c) { return String(c.date).slice(0, 7) === ym; }))) }; }) };
@@ -4926,6 +4927,53 @@ ACT.badgeClear = function () { var open = !!document.getElementById('bellpop'); 
 /* choosing an item in the list closes it */
 document.addEventListener('click', function (e) { var p = document.getElementById('bellpop'); if (!p || !e.target.closest) return; var el = e.target.closest('#bellpop [data-act]'); if (el && el.getAttribute('data-act') !== 'badgeClear') bellClose(); }, true);
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') bellClose(); });
+
+/* ---------- Together: how the two of you pay ----------
+   Some couples each pay and settle up. Others put shared costs on one card or account they both use.
+   With a shared card there is no "who paid": nobody owes, and Tally shouldn't suggest evening it out. */
+function payPref() { return shLive('prefs').filter(function (x) { return x.id === 'pay'; })[0] || {}; }
+function jointOn() { return typeof SH !== 'undefined' && SH.on() && !!SH.doc && payPref().mode === 'joint'; }
+function jointName() { return String(payPref().name || '').trim() || 'Shared card'; }
+function jointPayerFor(src) { return jointOn() && (!S.profile.jointSrc || S.profile.jointSrc === src) ? 'joint' : SH.cfg.me; }
+function howWePay() { var p = payPref(); return { how: p.mode === 'joint' ? 'Shared costs go on one card or account they both use and pay off together: ' + jointName() + '. Who "paid" a shared expense is not meaningful. Do not compare who paid more, and do not suggest that either person pay more often or take turns.' : 'Each person pays for things, then they settle up.', theirNotes: String(p.note || '').slice(0, 400) }; }
+ACT.howWePay = function () {
+  var p = payPref(), srcs = srcList(), mine = S.profile.jointSrc || '';
+  sheet(sxHead('How you two pay') + '<p class="small muted" style="margin-top:0">Tell Tally your system so it tracks and suggests the right things. You both see this.</p>' +
+    '<label class="tp-label">Shared costs are paid</label><div class="kindseg">' + seg('hp_mode', [['split', 'By each of us, then we settle up'], ['joint', 'From one card or account we share']], p.mode === 'joint' ? 'joint' : 'split') + '</div>' +
+    '<div id="hp_joint"' + (p.mode === 'joint' ? '' : ' hidden') + '>' + textField('hp_name', 'What you call it', p.name || '', 'e.g. Amex Gold') +
+    (srcs.length ? '<label class="tp-label" for="hp_src">Which of your cards or accounts in Tally is it?</label><select class="tp-input" id="hp_src"><option value="">Not in my Tally</option>' + srcs.map(function (o) { return '<option value="' + esc(o.id) + '"' + (mine === o.id ? ' selected' : '') + '>' + esc(o.name) + '</option>'; }).join('') + '</select><p class="small muted" style="margin:3px 0 0">This part is yours alone. When you mark a purchase from it as a Together payment, Tally files it as paid from the shared card.</p>' : '') +
+    '<label class="tp-opt mt"><input type="checkbox" id="hp_past"><span><b>Apply to past shared expenses too</b><span>Changes every shared expense so far to “paid from the shared card”, so nobody owes for them.</span></span></label></div>' +
+    '<label class="tp-label" for="hp_note">Anything else Tally should know</label><textarea class="tp-input" id="hp_note" rows="3" placeholder="e.g. We pay the card off together on the 5th. Fernanda covers groceries from her own account.">' + esc(p.note || '') + '</textarea>' +
+    '<p class="small muted">Tally uses this in the monthly recap, the planner and Ask Tally.</p><div class="acts"><button class="tp-btn" data-act="howWePaySave">Save</button></div>');
+};
+document.addEventListener('click', function (e) { var b = e.target.closest && e.target.closest('[data-seg="hp_mode"] button'); if (b) setTimeout(function () { var j = document.getElementById('hp_joint'); if (j) j.hidden = val('hp_mode') !== 'joint'; }, 0); });
+ACT.howWePaySave = function () {
+  var mode = val('hp_mode') === 'joint' ? 'joint' : 'split', n = 0;
+  shTouch('prefs', { id: 'pay', mode: mode, name: val('hp_name').trim().slice(0, 30), note: val('hp_note').trim().slice(0, 400) });
+  if (mode === 'joint') {
+    var el = document.getElementById('hp_src'); if (el) S.profile.jointSrc = el.value || '';
+    var all = checked('hp_past'), linked = {}; (S.txns || []).forEach(function (t) { if (t.shared && S.profile.jointSrc && t.src === S.profile.jointSrc) linked[t.shared] = 1; });
+    shLive('exp').forEach(function (x) { if (x.payer !== 'joint' && (all || linked[x.id])) { var c = JSON.parse(JSON.stringify(x)); c.payer = 'joint'; shTouch('exp', c); n++; } });
+  }
+  save(true); closeSheet(); rerender(); toast(mode === 'joint' ? 'Saved. Shared-card expenses won’t count as anyone owing' + (n ? '. Updated ' + n + ' past expense' + (n > 1 ? 's' : '') : '') + '.' : 'Saved.');
+};
+/* new shared expenses start as "paid from the shared card" when that's your system */
+var _shExp15 = ACT.shExp;
+ACT.shExp = function (d) { _shExp15.apply(this, arguments); if (!(d && d.id) && SHX && jointOn()) { SHX.payer = 'joint'; SHX.split = 'half'; shExpSheet(); } };
+var _tq15 = qaTogQuick;
+qaTogQuick = function (q) { var h = _tq15(q); if (!q.id || !jointOn() || jointPayerFor(q.src) !== 'joint') return h; return h.replace(/Splits it 50\/50 with [^<]*?Change the split below\./, 'Adds it to Together as paid from ' + esc(jointName()) + '. Nobody owes.').replace(/<span>[^<]* owes you [^<]*<\/span>/, '<span>Paid from ' + esc(jointName()) + ' · nobody owes</span>'); };
+var _qaTogNow15 = ACT.qaTogNow;
+ACT.qaTogNow = function () { var joint = QA && jointOn() && jointPayerFor(QA.src) === 'joint', r = _qaTogNow15.apply(this, arguments); if (joint && !QA) { $all('.toast').forEach(function (t) { t.remove(); }); toast('Added to Together as paid from ' + jointName() + '.'); } return r; };
+var _together15 = PAGES.together;
+PAGES.together = function () {
+  var h = _together15.apply(this, arguments); if (typeof SHV === 'undefined' || SHV !== 'money' || !SH.on() || !SH.doc || !shLive('people').length) return h;
+  var row = '<button class="glass tp-row cta" data-act="howWePay"><span class="tp-tile">' + TP.svg('card') + '</span><span class="tp-t"><b>How you two pay</b><span>' + esc(jointOn() ? 'From a shared card: ' + jointName() + ' · nobody owes on those' : 'Each of you pays, then you settle up · tap if you share a card') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+  var at = h.indexOf('<button class="glass tp-row cta" data-act="fairSplit">'); if (at < 0) at = h.indexOf('<div class="tp-sect"><span>Shared goals</span>'); return at >= 0 ? h.slice(0, at) + row + h.slice(at) : h + row;
+};
+var _ctx15 = aiContext;
+aiContext = function () { var c = _ctx15(); try { if (typeof SH !== 'undefined' && SH.on() && SH.doc && shLive('people').length) c.togetherHowTheyPay = howWePay(); } catch (e) {} return c; };
+var _planIdeas15 = aiTask;
+aiTask = function (task, input, ctx) { try { if ((task === 'plan' || task === 'shop') && input && typeof SH !== 'undefined' && SH.on() && SH.doc) input.howTheyPay = howWePay(); } catch (e) {} return _planIdeas15(task, input, ctx); };
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
