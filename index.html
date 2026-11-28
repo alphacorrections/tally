@@ -113,9 +113,8 @@ h3{margin:0 0 4px;font-size:16.5px;letter-spacing:-.2px}
   margin-bottom:12px;overflow:hidden;box-shadow:var(--tp-shadow)}
 .tp-card.tp-pad,.glass.pad{padding:16px}
 .deep{background:var(--tp-deep);border:1px solid var(--tp-line);border-radius:var(--tp-r);padding:16px;margin-bottom:12px;backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
-.solid{background:var(--tp-solid);color:var(--tp-solid-ink);border-radius:var(--tp-r);padding:14px 16px;margin-bottom:12px;font-size:14.5px;line-height:1.45}
-.solid .muted{color:var(--tp-solid-ink2)}
-.solid .tp-btn{background:var(--tp-btn-ink);color:#FFFFFF}
+.solid{background:var(--tp-card);color:var(--tp-ink);border:1px solid var(--tp-line);border-radius:var(--tp-r);padding:14px 16px;margin-bottom:12px;font-size:15px;line-height:1.5;backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
+.solid .muted{color:var(--tp-ink2)}
 :root[data-theme="light"] .solid{border:1px solid var(--tp-line)}
 .hero{position:relative;padding:22px 20px;border-radius:26px;background:var(--tp-card2)}
 .hero .label{font-size:12px;font-weight:600;letter-spacing:.8px;color:var(--tp-ink2);text-transform:uppercase}
@@ -312,8 +311,9 @@ input[type=range]{width:100%;accent-color:var(--hi);height:32px}
 .pal .sw i{position:absolute;right:10px;bottom:-9px;width:22px;height:22px;border-radius:50%;border:3px solid rgba(255,255,255,.9)}
 .pal b{display:block;padding:12px 12px 10px;font-size:14px}
 
-.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--tp-solid);color:var(--tp-solid-ink);
-  padding:10px 16px;border-radius:99px;font-size:14px;z-index:95;box-shadow:0 8px 24px rgba(0,0,0,.25);animation:tp-rise .3s both;max-width:92vw;text-align:center}
+.toast{position:fixed;left:0;right:0;margin:0 auto;bottom:calc(96px + env(safe-area-inset-bottom));
+  padding:12px 16px;border-radius:16px;font-size:15px;line-height:1.45;z-index:400;box-shadow:0 12px 32px rgba(0,0,0,.4);animation:tp-rise .3s both;width:fit-content;max-width:min(calc(100vw - 32px),440px);box-sizing:border-box;text-align:left;cursor:pointer}
+.toast{background:var(--g1);color:var(--tp-ink);border:1px solid var(--tp-line2)}
 .empty{padding:22px 16px;text-align:center;color:var(--tp-ink2);font-size:14.5px}
 .empty .tp-btn{margin-top:12px}
 .bigsum{font-family:var(--tp-display);font-size:32px;font-weight:700;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
@@ -355,10 +355,7 @@ input[type=range]{width:100%;accent-color:var(--hi);height:32px}
 .tp-sect.sub{margin-top:6px}
 .mstrip .lab.now{color:var(--tp-ink);font-weight:700}
 .tipcard{display:flex;gap:12px}
-.tipcard .tp-tile{background:var(--ok-bg);color:var(--tp-solid-ink);flex:none}
-.tipcard .pillbtn{background:transparent;color:var(--tp-solid-ink);border-color:rgba(0,0,0,.18)}
-.solid .chip{background:transparent;color:var(--tp-solid-ink);border-color:rgba(0,0,0,.2)}
-.solid .chip.on{background:var(--tp-btn-ink);color:#FFFFFF;border-color:var(--tp-btn-ink)}
+.tipcard .tp-tile{flex:none}
 .tick{width:22px;height:22px;flex:none;accent-color:var(--hi);margin:0;cursor:pointer}
 label.tp-t{cursor:pointer}
 details.hist{margin-bottom:12px}
@@ -812,7 +809,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .bst svg{width:11px;height:11px;vertical-align:-1px;margin-right:3px}
 .bst.ok{color:var(--ok);font-weight:600} .bst.warn{color:var(--warn);font-weight:600}
 .dblrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(0,0,0,.1);font-size:13.5px;line-height:1.45;flex-wrap:wrap}
-.dblcard .pillbtn{background:transparent;color:var(--tp-solid-ink);border-color:rgba(0,0,0,.18)}
+
 
 .needs .tp-tile svg{width:20px;height:20px}
 
@@ -901,7 +898,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.27.1';
+var APP_VERSION = '2026.11.27.3';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1708,7 +1705,7 @@ var KIND_NAME = { spend: 'Spending', save: 'Savings', invest: 'Investing', retir
 /* ---------- helpers ---------- */
 function val(id) { var e = document.getElementById(id); return e ? e.value : ''; }
 function checked(id) { var e = document.getElementById(id); return !!(e && e.checked); }
-function toast(msg) { var t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = msg; document.body.appendChild(t); setTimeout(function () { t.remove(); }, 2800); }
+function toast(msg) { $all('.toast').forEach(function (o) { o.remove(); }); var t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = msg; document.body.appendChild(t); t.addEventListener('click', function () { t.remove(); }); setTimeout(function () { t.remove(); }, Math.max(2800, Math.min(12000, String(msg || '').length * 70))); }
 function byId(list, id) { return list.filter(function (x) { return x.id === id; })[0] || null; }
 function moneyField(id, label, v, hint) {
   return '<div><label class="tp-label" for="' + id + '">' + esc(label) + '</label><div class="money"><input class="tp-input" id="' + id + '" inputmode="decimal" autocomplete="off" value="' + (v || v === 0 ? esc(v) : '') + '" placeholder="0"></div>' + (hint ? '<div class="small muted" style="margin-top:3px">' + esc(hint) + '</div>' : '') + '</div>';
@@ -1941,17 +1938,17 @@ function spendingPage() {
   var all = S.txns || [], cur = spFilter(spendIn(R.from, R.to)).sort(function (a, b) { return (b.at || b.date) < (a.at || a.date) ? -1 : 1; }), prev = spFilter(spendIn(R.pf, R.pt)), tot = sumAmt(cur), ptot = sumAmt(prev);
   /* controls */
   h += '<div class="chips spchips">' + [['month', 'This month'], ['last', 'Last month'], ['m3', '3 months'], ['m6', '6 months'], ['y', 'Year']].map(function (x) { return '<button class="chip' + (SPV.range === x[0] ? ' on' : '') + '" data-act="spSet" data-k="range" data-a="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>';
-  var yr = spendIn(monthStart(addMonths(td, -11)), td), srcs = byKey(yr, function (x) { return x.src; }), sids = Object.keys(srcs).sort(function (a, b) { return srcs[b] - srcs[a]; });
+  var yr = spendIn(monthStart(addMonths(td, -11)), td), srcs = byKey(yr, function (x) { return x.backOf ? x.psrc : x.src; }), sids = Object.keys(srcs).sort(function (a, b) { return srcs[b] - srcs[a]; });
   var bankSrc = {}; yr.forEach(function (x) { if (x.ext || x.bank) bankSrc[x.src] = 1; });
   if (sids.length > 1) h += '<div class="chips spchips scrollx">' + [['all', 'All accounts']].concat(sids.map(function (s) { return [s, srcName(s)]; })).map(function (x) { return '<button class="chip' + (SPV.src === x[0] ? ' on' : '') + '" data-act="spSet" data-k="src" data-a="' + esc(x[0]) + '">' + (bankSrc[x[0]] ? '<span class="bkdot" title="Linked bank"></span>' : '') + esc(x[1]) + '</button>'; }).join('') + '</div>';
   if (SPV.cat) h += '<div class="flex" style="margin:-2px 0 10px"><span class="tp-pill">' + esc(SPV.cat) + '</span><button class="chip" data-act="spSet" data-k="cat" data-a="">Show all categories</button></div>';
   /* hero */
-  var days = Math.max(1, daysBetween(R.from, R.to < td ? R.to : td) + 1), nBank = cur.filter(function (x) { return x.ext || x.bank; }).length;
+  var days = Math.max(1, daysBetween(R.from, R.to < td ? R.to : td) + 1), nBank = cur.filter(function (x) { return x.ext || x.bank; }).length, nP = cur.filter(function (x) { return !x.backOf; }).length;
   var cov = bankFrom(), prevPartial = cov && cov > R.pf, curPartial = cov && cov > R.from;
   if (prevPartial) ptot = 0;
   h += '<div class="glass hero tp-rise"><span class="label">' + esc(R.name) + (SPV.cat ? ' · ' + esc(SPV.cat) : '') + (SPV.src !== 'all' ? ' · ' + esc(srcName(SPV.src)) : '') + '</span><div class="big" style="font-size:52px" data-count="' + tot + '">' + money(tot) + '</div>' +
     '<div class="heroSub">' + (!prevPartial && (ptot || tot) ? deltaTxt(tot, ptot) + ' vs ' + esc(R.vs) + ' · ' : '') + 'about ' + money(tot / days * 7) + ' a week</div>' +
-    (SPV.range === 'month' && SPV.src === 'all' && !SPV.cat && spendLimit().ok ? (function () { var L = spendLimit(), sp = sumAmt(everyday(R.from, R.to)); return '<div class="pmeter"><span class="bar"><i style="width:' + Math.min(100, sp / L.month * 100).toFixed(1) + '%' + (sp > L.month ? ';background:var(--bad)' : '') + '"></i></span><div class="pm"><span>Not counting bills: <b>' + money(sp) + '</b></span><span>Limit ' + money(L.month) + '</span></div></div>'; })() : '') + '<div class="heroMath">' + cur.length + ' purchase' + (cur.length === 1 ? '' : 's') + (nBank ? ' · ' + nBank + ' from your bank' + (cur.length - nBank ? ', ' + (cur.length - nBank) + ' logged by you' : '') : '') + '. Card payments and transfers aren’t counted.</div>' +
+    (SPV.range === 'month' && SPV.src === 'all' && !SPV.cat && spendLimit().ok ? (function () { var L = spendLimit(), sp = sumAmt(everyday(R.from, R.to)); return '<div class="pmeter"><span class="bar"><i style="width:' + Math.min(100, sp / L.month * 100).toFixed(1) + '%' + (sp > L.month ? ';background:var(--bad)' : '') + '"></i></span><div class="pm"><span>Not counting bills: <b>' + money(sp) + '</b></span><span>Limit ' + money(L.month) + '</span></div></div>'; })() : '') + '<div class="heroMath">' + nP + ' purchase' + (nP === 1 ? '' : 's') + (nBank ? ' · ' + nBank + ' from your bank' + (nP - nBank ? ', ' + (nP - nBank) + ' logged by you' : '') : '') + '. Card payments and transfers aren’t counted.</div>' +
     (curPartial || prevPartial ? '<div class="covnote">Bank purchases start ' + shortDate(cov) + ' ' + parseD(cov).getFullYear() + '. Before that, only what you logged' + (prevPartial ? ', so there’s no fair comparison yet' : '') + '.' + (CLOUD.on() && BANK.on() && !(S.profile.bank || {}).histFrom ? ' <button class="pillbtn sm" data-act="bankHistory">Bring in older history</button>' : '') + '</div>' : '') + '</div>';
   if (!all.length) return h + '<div class="glass"><div class="empty">Connect your bank in Settings, or tap <b>+</b> when you buy something. This fills in as purchases come in.</div></div>';
   /* over time */
@@ -1974,15 +1971,15 @@ function spendingPage() {
   }
   /* where it went */
   if (cur.length) {
-    var mm = {}, mc = {}; cur.forEach(function (x) { var m = spMerchant(x); mm[m] = (mm[m] || 0) + (+x.amt || 0); mc[m] = (mc[m] || 0) + 1; });
+    var mm = {}, mc = {}; cur.forEach(function (x) { var m = spMerchant(x); mm[m] = (mm[m] || 0) + (+x.amt || 0); mc[m] = (mc[m] || 0) + (x.backOf ? 0 : 1); });
     var top = Object.keys(mm).sort(function (a, b) { return mm[b] - mm[a]; }).slice(0, 6);
     h += '<div class="tp-sect"><span>Top places</span></div><div class="glass pad">' + top.map(function (m) { return '<div class="kv"><span>' + esc(m) + ' <em class="muted">· ' + mc[m] + '×</em></span><b>' + money(mm[m]) + '</b></div>'; }).join('') + '</div>';
   }
   /* purchases */
-  if (SPV.sort === 'big') cur = cur.slice().sort(function (a, b) { return (+b.amt || 0) - (+a.amt || 0); });
+  cur = cur.filter(function (x) { return !x.backOf; }); if (SPV.sort === 'big') cur = cur.slice().sort(function (a, b) { return backNet(b) - backNet(a); });
   var shown = cur.slice(0, 60 + SPV.more * 100);
   h += '<div class="tp-sect"><span>Purchases · ' + cur.length + '</span><span class="sp"></span><button data-act="spSort">' + (SPV.sort === 'big' ? 'Newest first' : 'Biggest first') + '</button></div><div class="glass">' + (shown.length ? shown.map(function (x) {
-    return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc((x.cat || 'Other') + ' · ' + srcName(x.src)) + (x.ext || x.bank ? ' · <i class="bkdot" title="From your bank"></i>bank' : '') + (x.shared ? ' · <span class="togtag">Together</span>' : '') + (x.refund ? ' · <span class="togtag">refund</span>' : '') + '</span></span><span class="amt">' + money(+x.amt, 1) + '</span></button>';
+    return '<button class="tp-row" data-act="qaEdit" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(x.note || x.cat || 'Purchase') + '</b><span>' + esc((x.cat || 'Other') + ' · ' + srcName(x.src)) + (x.ext || x.bank ? ' · <i class="bkdot" title="From your bank"></i>bank' : '') + (x.shared ? ' · <span class="togtag">Together</span>' : '') + (x.refund ? ' · <span class="togtag">refund</span>' : '') + backTag(x) + '</span></span><span class="amt">' + money(backNet(x), 1) + '</span></button>';
   }).join('') : '<div class="empty">Nothing here for this filter.</div>') + '</div>';
   if (cur.length > shown.length) h += '<button class="tp-btn tp-ghost tp-block" data-act="spMore">Show more</button>';
   h += '<p class="small muted">Categories are guesses for bank purchases. Tap one to change it; Tally keeps your choice.</p>';
@@ -3988,8 +3985,8 @@ function bankExtras(d) {
       if (t.amt < 0) {
         var kind = INTRX.test(desc) ? 'interest' : FEERX.test(desc) ? 'fee' : ''; if (!kind || haveC[key]) return;
         haveC[key] = 1; S.costs.push({ id: 'k' + uid(), ext: key, date: t.date, amt: r2(-t.amt), src: src, kind: kind, note: cleanDesc(desc) }); n++;
-      } else if (t.amt > 0 && acct && (acct.kind === 'spend' || acct.kind === 'save') && !haveI[key] && !XFERRX.test(desc)) {
-        haveI[key] = 1; S.inflows.push({ id: 'i' + uid(), ext: key, date: t.date, amt: r2(t.amt), src: src, note: cleanDesc(desc) }); n++;
+      } else if (t.amt > 0 && acct && (acct.kind === 'spend' || acct.kind === 'save') && !haveI[key] && (!XFERRX.test(desc) || P2PRX.test(desc))) {
+        haveI[key] = 1; var inf0 = { id: 'i' + uid(), ext: key, date: t.date, amt: r2(t.amt), src: src, note: cleanDesc(desc) }; if (XFERRX.test(desc)) inf0.wasX = 1; S.inflows.push(inf0); n++;
       }
     });
   });
@@ -4036,7 +4033,7 @@ PAGES.cards = function () {
 
 /* money in vs out, by month: bank deposits against everything spent */
 function inOut(n) {
-  var td = today(), inf = (S.inflows || []).filter(function (x) { return !x.xfer && !BTRX.test(x.note || '') && !XFER2.test(x.note || ''); }); if (!inf.length) return [];
+  var td = today(), inf = (S.inflows || []).filter(function (x) { return !x.xfer && (isP2P(x) ? inAmt(x) > 0 : !BTRX.test(x.note || '') && !XFER2.test(x.note || '')); }).map(function (x) { return isP2P(x) ? { date: x.date, amt: inAmt(x), src: x.src, note: x.note } : x; }); if (!inf.length) return [];
   var first = inf.reduce(function (m, x) { return !m || x.date < m ? x.date : m; }, ''), bf = bankFrom() || first, from = first < bf ? first : bf;
   return monthsBack(td, n || 6).map(function (m) {
     m = monthStart(m); var end = m === monthStart(td) ? td : monthEnd(m); if (end < from) return null;
@@ -4415,8 +4412,8 @@ function fareCheck(g, quiet) {
   AIC.fareAt = AIC.fareAt || {}; AIC.fareAt[g.id] = today(); aiKeep(); AIB['fare' + g.id] = true; if (!quiet) rerender();
   aiTask('fare', { from: t.from, to: t.to, depart: t.depart, returnDate: t.ret || '' }).then(function (j) {
     AIB['fare' + g.id] = false; var p = r2(num(j.data && j.data.price));
-    if (p > 0) { t.log = t.log || []; t.log.push({ d: today(), p: p, auto: 1 }); g.trip = t; save(true); toast('Lowest fare found for ' + g.name + ': ' + money(p) + (j.data.airline ? ' on ' + j.data.airline : '') + (t.fare && p <= +t.fare ? '. That’s at or under your target.' : '.')); }
-    else if (!quiet) toast((j.data && j.data.note) || 'Couldn’t find a current fare for that route.');
+    if (p > 0) { delete t.note; t.log = t.log || []; t.log.push({ d: today(), p: p, auto: 1 }); g.trip = t; save(true); toast('Lowest fare found for ' + g.name + ': ' + money(p) + (j.data.airline ? ' on ' + j.data.airline : '') + (t.fare && p <= +t.fare ? '. That’s at or under your target.' : '.')); }
+    else { t.note = { d: today(), t: String((j.data && j.data.note) || 'Couldn’t find a current fare for that route.').slice(0, 300) }; g.trip = t; save(true); if (!quiet) toast('No fare found for those dates. Details are under the trip.'); }
     if (VIEW === 'explore') rerender();
   }).catch(function (e) { AIB['fare' + g.id] = false; if (!quiet) toast(e.message); if (VIEW === 'explore') rerender(); });
 }
@@ -4425,7 +4422,7 @@ var _tripCard9 = tripCard;
 tripCard = function (g) {
   var t = g.trip || {}, h = _tripCard9(g); if (!CLOUD.on() || !t.from || !t.to || !t.depart || t.depart < today()) return h;
   var last = (t.log || []).filter(function (x) { return x.auto; }).pop();
-  return h + '<div class="flex" style="margin:-4px 2px 12px;justify-content:space-between"><span class="small muted">' + (last ? 'Tally last checked ' + shortDate(last.d) + '. It checks weekly when you open Explore.' : 'Tally can look up the fare for you.') + '</span>' + aiBusyBtn('fare' + g.id, 'Check the fare now', 'fareCheck', { id: g.id, ghost: true }) + '</div>';
+  return h + '<div class="flex" style="margin:-4px 2px 12px;justify-content:space-between"><span class="small muted">' + (last ? 'Tally last checked ' + shortDate(last.d) + '. It checks weekly when you open Explore.' : 'Tally can look up the fare for you.') + (g.trip && g.trip.note ? '<br>Checked ' + shortDate(g.trip.note.d) + ': ' + esc(g.trip.note.t) : '') + '</span>' + aiBusyBtn('fare' + g.id, 'Check the fare now', 'fareCheck', { id: g.id, ghost: true }) + '</div>';
 };
 
 /* ---------- 4. weekly insights, market note, card offers (Explore) ---------- */
@@ -4974,6 +4971,138 @@ var _ctx15 = aiContext;
 aiContext = function () { var c = _ctx15(); try { if (typeof SH !== 'undefined' && SH.on() && SH.doc && shLive('people').length) c.togetherHowTheyPay = howWePay(); } catch (e) {} return c; };
 var _planIdeas15 = aiTask;
 aiTask = function (task, input, ctx) { try { if ((task === 'plan' || task === 'shop') && input && typeof SH !== 'undefined' && SH.on() && SH.doc) input.howTheyPay = howWePay(); } catch (e) {} return _planIdeas15(task, input, ctx); };
+
+/* ---------- paid back: you covered a purchase and other people repaid you ----------
+   Only your share is spending. The repayment is kept as a hidden negative line tied to the purchase
+   (backOf), on its own source so the card's balance math still sees the full charge. */
+var P2PRX = /venmo|zelle|cash ?app|paypal|apple cash/i, BACKSRC = 'p:back', BK = null;
+function txnById(id) { return (S.txns || []).filter(function (t) { return t.id === id; })[0] || null; }
+function backKid(id) { return (S.txns || []).filter(function (t) { return t.backOf === id; })[0] || null; }
+function backPaid(id) { var k = backKid(id); return k ? r2(-k.amt) : 0; }
+function backNet(x) { return x.backOf ? +x.amt : r2((+x.amt || 0) - backPaid(x.id)); }
+function backOwed(x) { return Math.max(0, r2((+x.owed || 0) - backPaid(x.id))); }
+function backSync(x, k) { k.date = x.date; k.at = x.at || x.date + 'T12:00:00'; k.cat = x.cat; k.note = x.note || ''; k.src = BACKSRC; k.psrc = x.src; if (-k.amt > +x.amt) k.amt = -r2(+x.amt); }
+function backSet(x, paid) {
+  paid = Math.max(0, Math.min(r2(paid), r2(+x.amt))); var k = backKid(x.id); S.txns = S.txns || [];
+  if (!(paid > 0)) { if (k) S.txns = S.txns.filter(function (t) { return t !== k; }); return; }
+  if (!k) { k = { id: 't' + uid(), backOf: x.id }; S.txns.push(k); }
+  k.amt = -paid; backSync(x, k);
+}
+function backSweep() {
+  var tx = S.txns || []; if (!tx.some(function (t) { return t.backOf; })) return;
+  var by = {}; tx.forEach(function (t) { if (!t.backOf) by[t.id] = t; });
+  S.txns = tx.filter(function (t) { if (!t.backOf) return true; var p = by[t.backOf]; if (!p || !(+p.amt > 0)) return false; backSync(p, t); return true; });
+}
+function backUnlink(id) { (S.inflows || []).forEach(function (i) { if (!i.links) return; var keep = []; i.links.forEach(function (l) { if (l.id === id) i.backAmt = Math.max(0, r2((i.backAmt || 0) - l.amt)); else keep.push(l); }); i.links = keep; if (!(i.backAmt > 0) && !keep.length && i.pb === 'yes') { delete i.pb; delete i.backAmt; } }); }
+var _save16 = save;
+save = function () { try { backSweep(); } catch (e) {} return _save16.apply(this, arguments); };
+var _srcName16 = srcName;
+srcName = function (id) { return id === BACKSRC ? 'Paid back' : _srcName16(id); };
+var _isBill16 = isBillTxn;
+isBillTxn = function (x) { if (x && x.backOf) { var p = txnById(x.backOf); return p ? _isBill16(p) : false; } return _isBill16(x); };
+spFilter = function (list) { return list.filter(function (x) { return (SPV.src === 'all' || (x.backOf ? x.psrc : x.src) === SPV.src) && (!SPV.cat || (x.cat || 'Other') === SPV.cat); }); };
+function backTag(x) {
+  if (x.backOf) return ''; var p = backPaid(x.id), o = backOwed(x);
+  return (p > 0 ? ' · <span class="togtag">paid back ' + money(p, 1) + ' of ' + money(+x.amt, 1) + '</span>' : '') + (o > 0 ? ' · <span class="togtag">' + money(o, 1) + ' still owed</span>' : '');
+}
+/* tapping a hidden repayment line anywhere opens its purchase */
+var _qaEdit16 = ACT.qaEdit;
+ACT.qaEdit = function (d) { var x = txnById(d && d.id); if (x && x.backOf) return _qaEdit16.call(this, { id: x.backOf }); return _qaEdit16.apply(this, arguments); };
+var _qaDel16 = ACT.qaDel;
+ACT.qaDel = function (d) { var id = d && d.id, r = _qaDel16.apply(this, arguments); return r; };
+
+/* the row on a purchase */
+var _tq16 = qaTogQuick;
+qaTogQuick = function (q) {
+  var h = _tq16(q); if (!q.id || q.backOf || q.refund || !(num(q.amt) > 0)) return h;
+  var x = txnById(q.id); if (!x) return h; var p = backPaid(x.id), o = backOwed(x);
+  if (p > 0 || o > 0) return h + '<div class="togq on"><span class="tp-tile">' + TP.svg('people') + '</span><span class="tp-t"><b>' + (p > 0 ? 'Paid back ' + money(p, 1) : 'Waiting to be paid back') + '</b><span>Counts as ' + money(backNet(x), 1) + ' of your spending' + (o > 0 ? '. ' + money(o, 1) + ' still owed to you' : '') + '.</span></span><button class="pillbtn sm" data-act="backSheet">Change</button></div>';
+  return h + '<button class="togq plain" data-act="backSheet"><span class="tp-tile">' + TP.svg('people') + '</span><span class="tp-t"><b>I got paid back for part of this</b><span>Covered a group and they Venmo’d you? Only your share counts as spending.</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+};
+function backSheetFor(id) {
+  var x = txnById(id); if (!x) return; BK = id; var p = backPaid(id), o = backOwed(x);
+  sheet(sxHead('Paid back') + '<p class="muted small">' + esc(spMerchant(x)) + ' · ' + money(+x.amt, 1) + ' on ' + shortDate(x.date) + '. What you were paid back comes off your spending. The charge on ' + esc(srcName(x.src)) + ' stays the full amount.</p>' +
+    '<div class="fgrid"><div><label class="tp-label" for="bk_paid">Paid back so far</label><input class="tp-input" id="bk_paid" inputmode="decimal" value="' + esc(p || '') + '" placeholder="e.g. 380"></div><div><label class="tp-label" for="bk_wait">Still waiting on (optional)</label><input class="tp-input" id="bk_wait" inputmode="decimal" value="' + esc(o || '') + '" placeholder="0"></div></div>' +
+    '<p class="small muted" style="margin-top:8px">Money you’re still waiting on keeps counting as your spending until it comes in, and shows under Still owed to you.</p><div id="bk_err"></div>' +
+    '<div class="acts">' + (p > 0 || o > 0 ? '<button class="tp-btn tp-ghost" data-act="backSave" data-a="clear">Remove</button>' : '') + '<button class="tp-btn" data-act="backSave">Save</button></div>');
+}
+ACT.backSheet = function () { if (!QA || !QA.id) return; var id = QA.id; QA = null; backSheetFor(id); };
+ACT.backOpen = function (d) { backSheetFor(d.id); };
+ACT.backSave = function (d) {
+  var x = txnById(BK); if (!x) { closeSheet(); return; }
+  var clear = d && d.a === 'clear', p = clear ? 0 : r2(num(val('bk_paid'))), w = clear ? 0 : r2(num(val('bk_wait'))), err = document.getElementById('bk_err');
+  if (p < 0 || w < 0 || p + w > +x.amt + 0.004) { if (err) err.innerHTML = '<div class="tp-err">That adds up to more than the ' + money(+x.amt, 1) + ' you paid.</div>'; return; }
+  if (!clear && !(p > 0) && !(w > 0)) { if (err) err.innerHTML = '<div class="tp-err">Type what you were paid back, or what you’re waiting on.</div>'; return; }
+  if (p < backPaid(x.id)) backUnlink(x.id);
+  backSet(x, p); if (p + w > 0) x.owed = r2(p + w); else delete x.owed;
+  BK = null; closeSheet(); render._keep = true; save();
+  toast(clear ? 'Removed. It counts as ' + money(+x.amt, 1) + ' again.' : spMerchant(x) + ' now counts as ' + money(backNet(x), 1) + ' of spending.' + (w > 0 ? ' ' + money(w, 1) + ' still owed.' : ''));
+};
+
+/* still owed to you */
+function owedList() { return (S.txns || []).filter(function (x) { return !x.backOf && backOwed(x) > 0; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; }); }
+function owedCard() {
+  var l = owedList(); if (!l.length) return '';
+  return '<div class="tp-sect"><span>Still owed to you · ' + money(sumAmt(l.map(function (x) { return { amt: backOwed(x) }; })), 1) + '</span></div><div class="glass">' + l.map(function (x) {
+    var p = backPaid(x.id); return '<button class="tp-row" data-act="backOpen" data-id="' + x.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(spMerchant(x)) + '</b><span>' + (p > 0 ? 'Paid back ' + money(p, 1) + ' of ' + money(+x.owed, 1) : 'Nothing back yet') + ' · you paid ' + money(+x.amt, 1) + '</span></span><span class="amt">' + money(backOwed(x), 1) + '</span></button>'; }).join('') + '</div>';
+}
+var _spend16 = PAGES.spending;
+PAGES.spending = function () { var h = _spend16(), c = p2pCard() + owedCard(); if (!c) return h; var at = h.indexOf('<div class="tp-sect"><span>By month</span>'); return at >= 0 ? h.slice(0, at) + c + h.slice(at) : h + c; };
+
+/* a Venmo, Zelle or Cash App deposit: ask what it was, never assume */
+function isP2P(i) { return P2PRX.test(i.note || ''); }
+function inAmt(i) {
+  if (!isP2P(i)) return +i.amt;
+  var x = i.wasX || XFER2.test(i.note || '') || BTRX.test(i.note || '');
+  if (i.pb === 'no') return +i.amt;
+  if (i.pb) return x && !i.restIn ? 0 : Math.max(0, r2(+i.amt - (i.backAmt || 0)));
+  return x ? 0 : +i.amt;
+}
+function p2pAsks() { var from = addDays(today(), -21); return (S.inflows || []).filter(function (i) { return isP2P(i) && !i.pb && !i.xfer && i.date >= from && +i.amt >= 5; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; }); }
+function p2pWho(i) { var m = P2PRX.exec(i.note || ''); return m ? m[0].charAt(0).toUpperCase() + m[0].slice(1).toLowerCase() : 'A deposit'; }
+function p2pCard() {
+  var l = p2pAsks(); if (!l.length) return '';
+  return '<div class="tp-sect"><span>Was this paying you back?</span></div><div class="glass">' + l.slice(0, 4).map(function (i) { return '<button class="tp-row" data-act="backAsk" data-id="' + i.id + '">' + dateBox(i.date) + '<span class="tp-t"><b>' + esc(i.note || p2pWho(i)) + '</b><span>Into ' + esc(srcName(i.src)) + ' · tap to say what it was</span></span><span class="amt">' + money(+i.amt, 1) + '</span></button>'; }).join('') + '</div>';
+}
+/* a deposit pays what's still owed; if you already marked it paid, it just matches up; otherwise it comes off the purchase */
+function pickUse(x, left) { var p = backPaid(x.id), o = backOwed(x); if (o > 0) return { use: r2(Math.min(left, o)), mark: 0 }; if (p > 0) return { use: 0, mark: r2(Math.min(left, p)) }; return { use: r2(Math.min(left, +x.amt)), mark: 0 }; }
+function backAskSheet(i) {
+  var left = r2(+i.amt - (i.backAmt || 0)), from = addDays(i.date, -60);
+  var cands = (S.txns || []).filter(function (x) { return !x.backOf && !x.refund && +x.amt > 0 && x.date >= from && x.date <= addDays(i.date, 3); });
+  var rank = function (x) { return backOwed(x) > 0 ? 0 : backPaid(x.id) > 0 ? 1 : +x.amt >= left ? 2 : 3; };
+  cands.sort(function (a, b) { return rank(a) - rank(b) || (a.date < b.date ? 1 : -1); }); cands = cands.slice(0, 12);
+  sheet(sxHead('Was this paying you back?') + '<p class="muted small">' + esc(i.note || p2pWho(i)) + ' · ' + money(+i.amt, 1) + ' into ' + esc(srcName(i.src)) + ' on ' + shortDate(i.date) + '.' + (i.backAmt > 0 ? ' ' + money(left, 1) + ' of it is left to place.' : '') + ' If friends were paying you back, pick the purchase and it comes off your spending.</p>' +
+    (cands.length ? '<div class="glass" style="margin:8px 0">' + cands.map(function (x) { var u = pickUse(x, left); return '<button class="tp-row" data-act="backPick" data-id="' + x.id + '" data-a="' + i.id + '">' + dateBox(x.date) + '<span class="tp-t"><b>' + esc(spMerchant(x)) + '</b><span>' + (backOwed(x) > 0 ? money(backOwed(x), 1) + ' still owed · ' : '') + (u.mark ? 'already marked paid back ' + money(backPaid(x.id), 1) : 'takes ' + money(u.use, 1) + ' off') + '</span></span><span class="amt">' + money(backNet(x), 1) + '</span></button>'; }).join('') + '</div>' : '<p class="small muted">No recent purchases to match it to.</p>') +
+    '<div class="acts" style="flex-wrap:wrap"><button class="tp-btn tp-ghost" data-act="backAskDone" data-id="' + i.id + '" data-a="same">A payback I already marked</button><button class="tp-btn tp-ghost" data-act="backAskDone" data-id="' + i.id + '" data-a="no">' + (i.backAmt > 0 ? 'The rest is money in' : 'No, it’s money in') + '</button></div>');
+}
+ACT.backAsk = function (d) { var i = byId(S.inflows || [], d.id); if (i) backAskSheet(i); };
+ACT.backPick = function (d) {
+  var x = txnById(d.id), i = byId(S.inflows || [], d.a); if (!x || !i) return;
+  var left = r2(+i.amt - (i.backAmt || 0)), u = pickUse(x, left), use = u.use; if (!(use > 0) && !(u.mark > 0)) return;
+  if (use > 0) { backSet(x, backPaid(x.id) + use); if (!(+x.owed >= backPaid(x.id))) x.owed = backPaid(x.id); i.links = (i.links || []).concat([{ id: x.id, amt: use }]); }
+  i.backAmt = r2((i.backAmt || 0) + use + u.mark); i.pb = 'yes';
+  render._keep = true; save(); left = r2(left - use - u.mark);
+  if (!(use > 0)) { if (left > 0.004) { backAskSheet(i); toast('Matched to ' + spMerchant(x) + '. ' + money(left, 1) + ' left to place.'); } else { closeSheet(); toast('Matched to ' + spMerchant(x) + '. Not counted as money in.'); } return; }
+  if (left > 0.004) { backAskSheet(i); toast(money(use, 1) + ' off ' + spMerchant(x) + '. ' + money(left, 1) + ' left to place.'); }
+  else { closeSheet(); toast(spMerchant(x) + ' now counts as ' + money(backNet(x), 1) + ' of spending.'); }
+};
+ACT.backAskDone = function (d) {
+  var i = byId(S.inflows || [], d.id); if (!i) return;
+  if (d.a === 'same') { i.pb = 'yes'; i.backAmt = r2(+i.amt); } else if (i.backAmt > 0) { i.pb = 'yes'; i.restIn = 1; } else { i.pb = 'no'; delete i.backAmt; }
+  closeSheet(); render._keep = true; save(); toast(d.a === 'same' ? 'Got it. Not counted as money in.' : 'Counted as money in.');
+};
+/* both show up under the bell */
+var _badge16 = badgeItems;
+badgeItems = function () {
+  var out = _badge16(), seen = S.profile.badgeSeen || {}, td = today();
+  try {
+    p2pAsks().forEach(function (i) { var k = 'p2p:' + i.id; if (!seen[k]) out.push({ key: k, icon: 'people', title: p2pWho(i) + ' sent you ' + money(+i.amt, 1), sub: shortDate(i.date) + ' into ' + srcName(i.src) + '. Was it paying you back for something?', act: 'backAsk', id: i.id }); });
+    owedList().forEach(function (x) { var k = 'owed:' + x.id; if (!seen[k] && x.date <= addDays(td, -7)) out.push({ key: k, icon: 'people', title: money(backOwed(x), 1) + ' still owed to you', sub: spMerchant(x) + ' on ' + shortDate(x.date) + '. Tap when it comes in, or to let it go.', act: 'backOpen', id: x.id }); });
+  } catch (e) {}
+  return out;
+};
+var _ctx16 = aiContext;
+aiContext = function () { var c = _ctx16(); try { var o = owedList(); if (o.length) c.stillOwedToUser = o.map(function (x) { return { what: spMerchant(x), date: x.date, owed: backOwed(x) }; }); if ((S.txns || []).some(function (t) { return t.backOf; })) c.noteOnPaybacks = 'Negative purchase lines are friends paying the user back for a group purchase; only the net is their spending.'; } catch (e) {} return c; };
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
