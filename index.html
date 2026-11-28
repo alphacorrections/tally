@@ -905,7 +905,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.27.4';
+var APP_VERSION = '2026.11.27.5';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -2315,7 +2315,7 @@ function tripCard(g) {
     '<div class="kv mt"><span>Trip fund</span><b>' + money(goalNow(g)) + ' of ' + money(+g.target || 0) + '</b></div><span class="bar thin"><i style="width:' + goalPct(g).toFixed(1) + '%"></i></span>' +
     (low != null && low !== lastP ? '<div class="small muted" style="margin-top:6px">Lowest you’ve seen: ' + money(low) + '</div>' : '') + (t.points ? '<div class="small muted" style="margin-top:6px">Points you could use: ' + (+t.points).toLocaleString() + '</div>' : '') +
     '<div class="flex mt" style="flex-wrap:nowrap"><div class="money grow"><input class="tp-input" id="fare_' + g.id + '" inputmode="decimal" placeholder="Fare you see today" aria-label="Fare you see today"></div><button class="tp-btn tp-sm" data-act="fareLog" data-id="' + g.id + '">Log</button></div>' +
-    '<div class="flex mt"><a class="tp-btn tp-ghost tp-sm" target="_blank" rel="noopener" href="https://www.google.com/travel/flights?q=' + encodeURIComponent(q) + '">Google Flights</a><button class="tp-btn tp-ghost tp-sm" data-act="goalEdit" data-id="' + g.id + '">Edit trip</button></div>' +
+    '<div class="flex mt"><a class="tp-btn tp-ghost tp-sm" target="_blank" rel="noopener" href="https://www.google.com/travel/flights?q=' + encodeURIComponent(q) + '">Google Flights</a><button class="tp-btn tp-ghost tp-sm" data-act="goalEdit" data-id="' + g.id + '">Edit trip</button>' + (g.trip && g.trip.plan ? tripBtn(g, 'mine') : '') + '</div>' +
     '<p class="small muted mb0">Turn on “Track prices” on Google Flights and Google emails you when the fare moves.</p></div>';
 }
 function marketOffline() {
@@ -2879,7 +2879,7 @@ var ACT = {
     var g = byId(S.goals, val('g_id')); if (!g) { g = { id: uid() }; S.goals.push(g); }
     g.name = name; g.kind = val('g_kind') || 'save'; g.target = r2(num(val('g_target'))); g.acct = g.kind === 'payoff' ? '' : val('g_acct'); g.manual = r2(num(val('g_manual'))); g.due = val('g_due'); g.note = val('g_note').trim(); g.monthly = r2(num(val('g_monthly'))) || '';
     var ta = val('g_acct'); g.card = ta.indexOf('c:') === 0 ? ta.slice(2) : ''; if (g.card) { g.kind = 'payoff'; g.acct = ''; }
-    if (g.kind === 'trip') { var old = g.trip || {}; g.trip = { from: val('t_from').trim().toUpperCase(), to: val('t_to').trim().toUpperCase(), depart: val('t_dep'), ret: val('t_ret'), fare: r2(num(val('t_fare'))) || '', points: Math.round(num(val('t_pts'))) || '', log: old.log || [] }; }
+    if (g.kind === 'trip') { var old = g.trip || {}; g.trip = { from: val('t_from').trim().toUpperCase(), to: val('t_to').trim().toUpperCase(), depart: val('t_dep'), ret: val('t_ret'), fare: r2(num(val('t_fare'))) || '', points: Math.round(num(val('t_pts'))) || '', log: old.log || [], plan: old.plan, note: old.note }; }
     closeSheet(); render._keep = true; save();
   },
   goalDel: function (d, el) { armDelete(el, function () { S.goals = S.goals.filter(function (g) { return g.id !== d.id; }); closeSheet(); save(); }); },
@@ -3094,7 +3094,7 @@ function togetherPage() {
       '<div class="split" style="margin:8px 0 4px">' + [me, them].filter(function (p) { return by[p.id]; }).map(function (p, i) { return '<i style="flex:' + by[p.id] + ';background:' + (p.id === me.id ? 'var(--c1)' : 'var(--c2)') + '"></i>'; }).join('') + (g.target > have ? '<i style="flex:' + (g.target - have) + ';background:var(--tp-line2)"></i>' : '') + '</div>' +
       '<div class="legend4">' + [me, them].map(function (p) { return '<span><i style="background:' + (p.id === me.id ? 'var(--c1)' : 'var(--c2)') + '"></i>' + esc(p.name) + '<b>' + money(by[p.id] || 0) + '</b></span>'; }).join('') + '</div>' +
       (g.due && have < g.target ? '<p class="small muted mb0">' + money((g.target - have) / Math.max(1, monthsUntil(g.due))) + ' a month between you makes ' + MON[parseD(g.due).getMonth()] + ' ' + parseD(g.due).getFullYear() + ' (' + money((g.target - have) / Math.max(1, monthsUntil(g.due)) / 2) + ' each).</p>' : '') +
-      '<div class="flex mt"><button class="tp-btn tp-sm" data-act="shContrib" data-id="' + g.id + '">Add money</button><button class="tp-btn tp-ghost tp-sm" data-act="shGoal" data-id="' + g.id + '">Edit</button>' + noteBtn('goals', g.id, g.name, 1) + '</div></div>';
+      '<div class="flex mt"><button class="tp-btn tp-sm" data-act="shContrib" data-id="' + g.id + '">Add money</button><button class="tp-btn tp-ghost tp-sm" data-act="shGoal" data-id="' + g.id + '">Edit</button>' + tripBtn(g, 'tog') + noteBtn('goals', g.id, g.name, 1) + '</div>' + tripLine(g) + '</div>';
   }).join('') : '<div class="glass"><div class="empty">A trip, furniture, a move. Each of you adds money and you both see the progress.</div></div>';
   /* history */
   var hist = shLive('exp').map(function (x) { return { t: 'e', x: x, d: x.date }; }).concat(shLive('settle').map(function (x) { return { t: 's', x: x, d: x.date }; }), shLive('contrib').map(function (x) { return { t: 'c', x: x, d: x.date }; })).sort(function (a, b) { return a.d < b.d ? 1 : -1; }).slice(0, 40);
@@ -4721,7 +4721,7 @@ PAGES.home = function () {
   var notH = ''; if (noticed.length) { var m = /·\s*(\d+)/.exec(noticed[0].title), n = m ? +m[1] : 1, first = noticed[0].els[1] && noticed[0].els[1].querySelector('.tp-t b'); notH = '<button class="glass tp-row cta star" data-act="goSmart"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>Tally noticed ' + n + (n === 1 ? ' thing' : ' things') + '</b><span>' + esc(first ? first.textContent : 'Price changes, repeat charges, fees') + (n > 1 ? ' and ' + (n - 1) + ' more' : '') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }
   var setH = ''; if (setup.length) { var sm = /(\d+) of (\d+)/.exec(setup[0].title); setH = sm && +sm[1] >= 4 ? '<details class="morebox"><summary><span>Finish setting up · ' + sm[1] + ' of ' + sm[2] + '</span>' + TP.svg('chev') + '</summary><div class="morein">' + setup[0].els.slice(1).map(function (e) { return e.outerHTML; }).join('') + '</div></details>' : blocksHtml(setup); }
   var heroH = blocksHtml(hero); if (simple) heroH = heroH.replace(/<details class="hwhy" open(="")?>/, '<details class="hwhy">');
-  var h = tb.innerHTML + togRow(nextUp) + searchRow() + heroH; /* "Needs you" now lives behind the bell in the top bar */
+  var h = tb.innerHTML + togRow(nextUp) + (simpleOn() ? '' : exploreRow()) + searchRow() + heroH; /* "Needs you" now lives behind the bell in the top bar */
   if (simple) return h + blocksHtml(ask) + blocksHtml(next2) + moreBox(blocksHtml(cash) + blocksHtml(ck) + blocksHtml(runway) + notH + blocksHtml(worth) + setH + blocksHtml(goals) + blocksHtml(rest), 'More on Home') + homeFoot();
   return h + blocksHtml(cash) + blocksHtml(ask) + blocksHtml(ck) + blocksHtml(next2) + blocksHtml(runway) + notH + blocksHtml(worth) + setH + blocksHtml(goals) + blocksHtml(rest) + homeFoot();
 };
@@ -5110,6 +5110,67 @@ badgeItems = function () {
 };
 var _ctx16 = aiContext;
 aiContext = function () { var c = _ctx16(); try { var o = owedList(); if (o.length) c.stillOwedToUser = o.map(function (x) { return { what: spMerchant(x), date: x.date, owed: backOwed(x) }; }); if ((S.txns || []).some(function (t) { return t.backOf; })) c.noteOnPaybacks = 'Negative purchase lines are friends paying the user back for a group purchase; only the net is their spending.'; } catch (e) {} return c; };
+
+/* ---------- a trip estimate stays with its goal, mine or Together ----------
+   Saving a plan used to keep only the total. Now the breakdown, tips and sources are saved on the goal,
+   with the fare check and flight search one tap away from the goal itself. */
+function tripGoal(id, where) { return where === 'tog' ? (typeof SH !== 'undefined' && SH.doc ? shLive('goals').filter(function (x) { return x.id === id; })[0] : null) : byId(S.goals, id); }
+function tripKeep(g, where) { if (where === 'tog') shTouch('goals', g); else save(true); }
+function tripPack(t) { var r = t.res || {}, c = function (o) { o = o || {}; return { total: Math.max(0, Math.round(num(o.total))), note: String(o.note || '').slice(0, 200), nights: Math.round(num(o.nights)) || 0 }; };
+  return { at: today(), n: t.n, style: t.style, total: t.total, summary: String(r.summary || '').slice(0, 400), flight: c(r.flight), lodging: c(r.lodging), daily: c(r.daily), other: c(r.other), tips: (r.tips || []).slice(0, 3).map(function (x) { return String(x).slice(0, 220); }), when: String(r.whenToBook || '').slice(0, 260), sources: (t.sources || []).slice(0, 5).map(function (s) { return { title: String(s.title || '').slice(0, 80), url: s.url }; }) }; }
+function tripBody(p) {
+  var kv = function (a, b, note) { return b ? '<div class="kv"><span>' + a + (note ? '<br><span class="small muted">' + esc(String(note).slice(0, 140)) + '</span>' : '') + '</span><b>' + money(b) + '</b></div>' : ''; };
+  return (p.summary ? '<p class="small" style="margin-top:0">' + esc(p.summary) + '</p>' : '') + '<div class="glass hero" style="padding:16px"><span class="label">Estimated total for ' + (p.n || 1) + '</span><div class="big" style="font-size:44px">' + money(p.total) + '</div>' + (p.n > 1 ? '<div class="small muted">' + money(Math.round(p.total / p.n)) + ' each</div>' : '') + '</div>' +
+    kv('Flights', p.flight.total, p.flight.note) + kv('Lodging' + (p.lodging.nights ? ' · ' + p.lodging.nights + ' nights' : ''), p.lodging.total, p.lodging.note) + kv('Food, getting around, things to do', p.daily.total, p.daily.note) + kv('Other', p.other.total, p.other.note) +
+    (p.tips.length ? '<label class="tp-label">Ways to spend less</label><ul class="small" style="padding-left:18px;margin:4px 0">' + p.tips.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') + (p.when ? '<p class="small muted">' + esc(p.when) + '</p>' : '') + aiSrcs(p.sources);
+}
+function tripLooks(g) { return !!(g.trip && (g.trip.plan || g.trip.to)) || /\b(trip|vacation|flight|getaway|honeymoon|travel)\b/i.test(g.name || ''); }
+function tripBtn(g, where) { if (!tripLooks(g)) return ''; var has = g.trip && g.trip.plan; return '<button class="tp-btn tp-ghost tp-sm" data-act="tripInfo" data-id="' + g.id + '" data-a="' + where + '">' + (has ? 'Trip plan and fares' : 'Plan this trip') + '</button>'; }
+function tripLine(g) { var t = g.trip; if (!t || !t.to) return ''; var log = t.log || [], last = log.length ? log[log.length - 1] : null; return '<p class="small muted mb0" style="margin-top:6px">' + esc((t.from || '?') + ' → ' + t.to) + (t.depart ? ' · ' + shortDate(t.depart) + (t.ret ? '–' + shortDate(t.ret) : '') : '') + (last ? ' · fare ' + money(last.p) + ' on ' + shortDate(last.d) : '') + '</p>'; }
+ACT.tripInfo = function (d) {
+  var g = tripGoal(d.id, d.a); if (!g) return; var t = g.trip || {}, p = t.plan, log = t.log || [], last = log.length ? log[log.length - 1] : null, low = log.length ? Math.min.apply(null, log.map(function (x) { return x.p; })) : null, key = 'fare' + g.id;
+  if (!p && !t.to) { sheet(sxHead(g.name) + '<p class="muted">There’s no saved estimate on this goal. Run one and Tally keeps the flight, lodging and daily costs here, with fare checks.</p><div class="acts"><button class="tp-btn" data-act="tripPlanFor" data-id="' + g.id + '" data-a="' + d.a + '">Plan this trip</button></div>'); return; }
+  var q = 'Flights from ' + (t.from || '') + ' to ' + (t.to || '') + (t.depart ? ' on ' + t.depart : '') + (t.ret ? ' through ' + t.ret : '');
+  sheet(sxHead(g.name) + '<p class="small muted" style="margin-top:0">' + esc((t.from || '?') + ' → ' + (t.to || '?')) + (t.depart ? ' · ' + shortDate(t.depart) + (t.ret ? ' to ' + shortDate(t.ret) : '') : '') + (p ? ' · estimated ' + shortDate(p.at) : '') + '</p>' +
+    (p ? tripBody(p) : '<p class="small muted">No cost estimate saved yet.</p>') +
+    '<label class="tp-label">Flights</label><div class="kv"><span>' + (last ? 'Fare per person · checked ' + shortDate(last.d) : 'No fare checked yet') + (low != null && last && low < last.p ? '<br><span class="small muted">Lowest seen ' + money(low) + '</span>' : '') + '</span><b>' + (last ? money(last.p) : '—') + '</b></div>' + (t.note ? '<p class="small muted">Checked ' + shortDate(t.note.d) + ': ' + esc(t.note.t) + '</p>' : '') +
+    '<div class="flex mt">' + aiBusyBtn(key, 'Check the fare now', 'tripFare', { id: g.id }).replace('data-act="tripFare"', 'data-act="tripFare" data-a="' + d.a + '"') + '<a class="tp-btn tp-ghost tp-sm" target="_blank" rel="noopener" href="https://www.google.com/travel/flights?q=' + encodeURIComponent(q) + '">Google Flights</a></div>' +
+    '<p class="small muted">An estimate from prices found online. Check the real price before you book.</p><div class="acts"><button class="tp-btn tp-ghost" data-act="tripPlanFor" data-id="' + g.id + '" data-a="' + d.a + '">Update the estimate</button></div>');
+};
+ACT.tripFare = function (d) { aiGate(function () {
+  var g = tripGoal(d.id, d.a), t = g && g.trip, key = 'fare' + d.id; if (!t || !t.from || !t.to || !t.depart || AIB[key]) return;
+  AIB[key] = true; ACT.tripInfo(d);
+  aiTask('fare', { from: t.from, to: t.to, depart: t.depart, returnDate: t.ret || '' }).then(function (j) {
+    AIB[key] = false; var g2 = tripGoal(d.id, d.a); if (!g2) return; var t2 = g2.trip = g2.trip || t, pr = r2(num(j.data && j.data.price));
+    if (pr > 0) { delete t2.note; t2.log = (t2.log || []).concat([{ d: today(), p: pr, auto: 1 }]); } else t2.note = { d: today(), t: String((j.data && j.data.note) || 'Couldn’t find a current fare for that route.').slice(0, 300) };
+    tripKeep(g2, d.a); rerender(); if (document.getElementById('sheet')) ACT.tripInfo(d);
+    toast(pr > 0 ? 'Lowest fare found: ' + money(pr) + (j.data.airline ? ' on ' + j.data.airline : '') + '.' : 'No fare found for those dates. Details are in the trip plan.');
+  }).catch(function (e) { AIB[key] = false; if (document.getElementById('sheet')) ACT.tripInfo(d); toast(e.message); });
+}); };
+ACT.tripPlanFor = function (d) {
+  var g = tripGoal(d.id, d.a); if (!g) return; var t = g.trip || {}, p = t.plan || {}, last = S.goals.filter(function (x) { return x.kind === 'trip' && x.trip && x.trip.from; }).pop();
+  TRIPP = { to: t.to || String(g.name || '').replace(/^\s*(trip|vacation|flight|getaway)\s+(to|in)\s+/i, '').trim(), from: t.from || (last ? last.trip.from : ''), depart: t.depart || (g.due && g.due > today() ? g.due : ''), ret: t.ret || '', n: p.n || (d.a === 'tog' ? 2 : 1), style: p.style || 'mid', attach: { id: g.id, where: d.a } };
+  ACT.tripPlan({ keep: 1 });
+};
+var _tripPlan17 = ACT.tripPlan;
+ACT.tripPlan = function (d) { if (!(d && d.keep) && TRIPP) delete TRIPP.attach; return _tripPlan17.apply(this, arguments); };
+var _tripPlanGo17 = ACT.tripPlanGo;
+ACT.tripPlanGo = function () { var at = TRIPP && TRIPP.attach, r = _tripPlanGo17.apply(this, arguments); if (at && TRIPP) TRIPP.attach = at; return r; };
+var _tripPlanShow17 = tripPlanShow;
+tripPlanShow = function () { _tripPlanShow17.apply(this, arguments); var at = TRIPP && TRIPP.attach, box = document.querySelector('#sheet .acts'); if (at && box) box.innerHTML = '<button class="tp-btn" data-act="tripSave" data-a="attach">Save to this goal</button>'; };
+ACT.tripSave = function (d) {
+  var t = TRIPP; if (!t || !t.total) return; var name = 'Trip to ' + t.to, where = d.a, g = null;
+  var trip = { from: t.from, to: t.to, depart: t.depart, ret: t.ret, fare: t.fare || '', log: t.fare ? [{ d: today(), p: t.fare }] : [], plan: tripPack(t) };
+  if (where === 'attach' && t.attach) { where = t.attach.where; g = tripGoal(t.attach.id, where); if (!g) return; var old = g.trip || {}; trip.log = (old.log || []).concat(trip.log); if (old.points) trip.points = old.points; if (old.fare) trip.fare = old.fare; g.trip = trip; g.target = t.total; if (!g.due || where !== 'tog') g.due = t.depart; tripKeep(g, where); toast('Saved to ' + g.name + '. The target is now ' + money(t.total) + '.'); }
+  else if (where === 'tog') { shTouch('goals', { id: 'g' + uid(), name: name, target: t.total, due: t.depart, trip: trip }); toast('Saved to Together with the full plan. Open it from Shared goals.'); }
+  else { S.goals.push({ id: 'g' + uid(), name: name, kind: 'trip', target: t.total, acct: '', manual: 0, due: t.depart, note: '', trip: trip }); save(true); toast('Saved. It’s under Trips, and Tally will watch the fare.'); }
+  TRIPP = null; closeSheet(); rerender();
+};
+/* editing a shared goal keeps its trip plan */
+ACT.shGoalSave = function (d) { var n = val('sg_name').trim(); if (!n) return; var old = d.id ? shLive('goals').filter(function (x) { return x.id === d.id; })[0] : null, g = old ? JSON.parse(JSON.stringify(old)) : { id: 'g' + uid() }; g.name = n; g.target = r2(num(val('sg_t'))); g.due = val('sg_due'); shTouch('goals', g); closeSheet(); rerender(); };
+
+/* ---------- Explore gets a named row on Home, like Together ---------- */
+function exploreRow() { var nt = S.goals.filter(function (g) { return g.kind === 'trip'; }).length; return '<button class="glass tp-row cta exprow" data-act="go" data-a="explore"><span class="tp-tile">' + TP.svg('compass') + '</span><span class="tp-t"><b>Explore</b><span>Plan a trip and watch fares' + (nt ? ' (' + nt + ' saved)' : '') + ', follow markets, try a what-if</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
