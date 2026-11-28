@@ -26,7 +26,10 @@ async function mortgage() {
   const rows = txt.trim().split("\n").map((l) => l.trim()).filter((l) => /^\d{4}-\d{2}-\d{2},[\d.]+$/.test(l));
   if (rows.length < 2) throw new Error("no data");
   const a = rows[rows.length - 1].split(","), b = rows[rows.length - 2].split(",");
-  return { rate: parseFloat(a[1]), date: a[0], prev: parseFloat(b[1]) };
+  // weekly for the last year, every 4th week before that, back five years
+  const all = rows.slice(-262).map((l) => { const p = l.split(","); return [p[0], parseFloat(p[1])] as [string, number]; });
+  const hist = all.filter((_, i) => i >= all.length - 54 || (all.length - 1 - i) % 4 === 0);
+  return { rate: parseFloat(a[1]), date: a[0], prev: parseFloat(b[1]), hist };
 }
 const ent = (s: string) => s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").trim();
 async function news(topic: string, n: number, tz: string) {

@@ -52,6 +52,8 @@ async function pull(uid: string, force: boolean): Promise<any> {
       id: a.id, name: a.name, conn: conns[a.conn_id] || (a.org && a.org.name) || "",
       bal: +a.balance, avail: a["available-balance"] != null ? +a["available-balance"] : null, date: day(a["balance-date"]),
       // deno-lint-ignore no-explicit-any
+      hold: (a.holdings || []).filter((h: any) => h && h.symbol).slice(0, 60).map((h: any) => ({ sym: String(h.symbol).slice(0, 12), name: String(h.description || "").slice(0, 40) })),
+      // deno-lint-ignore no-explicit-any
       txns: (a.transactions || []).filter((t: any) => !t.pending).slice(-120).map((t: any) => ({
         id: t.id, date: day(t.transacted_at || t.posted), amt: +t.amount, desc: String(t.description || "").slice(0, 70),
       })),

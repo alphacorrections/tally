@@ -905,7 +905,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.27.5';
+var APP_VERSION = '2026.11.27.6';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -1323,7 +1323,7 @@ function lineChart(id, series, opts) {
   var g = '';
   for (var v = lo; v <= hi + step / 2; v += step) g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/>';
   var yl = '';
-  for (v = lo; v <= hi + step / 2; v += step) yl += '<text x="' + (L - 7) + '" y="' + (Y(v) + 3.5).toFixed(1) + '" text-anchor="end">' + (opts.num ? String(Math.round(v)) : moneyK(v)) + '</text>';
+  for (v = lo; v <= hi + step / 2; v += step) yl += '<text x="' + (L - 7) + '" y="' + (Y(v) + 3.5).toFixed(1) + '" text-anchor="end">' + (opts.pct ? (+v.toFixed(2)) + '%' : opts.num ? String(Math.round(v)) : moneyK(v)) + '</text>';
   /* x ticks: years if span > 18 months, else months */
   var xl = '', d0 = new Date(x0), d1 = new Date(x1), spanM = (d1.getFullYear() - d0.getFullYear()) * 12 + d1.getMonth() - d0.getMonth();
   var every = spanM > 30 ? 12 : spanM > 14 ? 6 : spanM > 7 ? 2 : 1;
@@ -1367,7 +1367,7 @@ function bindCharts(root) {
       c.series.forEach(function (s) {
         var near = null; s.pts.forEach(function (p) { if (!near || Math.abs(p.t - best.t) < Math.abs(near.t - best.t)) near = p; });
         if (!near || Math.abs(near.t - best.t) > 20 * 86400000) return;
-        rows += '<div><i style="background:' + s.color + '"></i>' + esc(s.name) + ': <b>' + (c.num ? Math.round(near.y) : money(near.y)) + '</b></div>';
+        rows += '<div><i style="background:' + s.color + '"></i>' + esc(s.name) + ': <b>' + (typeof c.fmt === 'function' ? c.fmt(near.y) : c.num ? Math.round(near.y) : money(near.y)) + '</b></div>';
         dots += '<circle class="dot" r="5" cx="' + c.X(near.t).toFixed(1) + '" cy="' + c.Y(near.y).toFixed(1) + '" style="fill:' + s.color + '"/>';
       });
       var cx = c.X(best.t); cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.classList.add('on'); hov.innerHTML = dots;
@@ -2330,7 +2330,7 @@ function loadMarkets(force) {
     var h = '';
     if (d.mortgage && d.mortgage.rate != null) {
       var amt = 400000, pay = function (r) { var i = r / 100 / 12; return amt * i / (1 - Math.pow(1 + i, -360)); }, step = pay(d.mortgage.rate + .25) - pay(d.mortgage.rate);
-      h += '<div class="deep"><div class="small muted">30-year mortgage rate · U.S. average · week of ' + esc(d.mortgage.date) + '</div><div class="flex" style="align-items:baseline"><b class="disp" style="font-size:34px">' + d.mortgage.rate.toFixed(2) + '%</b>' + (d.mortgage.prev != null ? '<span class="small" style="font-weight:700">' + (d.mortgage.rate <= d.mortgage.prev ? '▼ ' : '▲ ') + Math.abs(d.mortgage.rate - d.mortgage.prev).toFixed(2) + ' vs last week</span>' : '') + '</div><div class="small" style="margin-top:4px">What it means for you: on a $400K loan, each 0.25% is about ' + money(step) + ' a month in principal and interest.</div></div>';
+      h += '<div class="deep"><div class="small muted">30-year mortgage rate · U.S. average · week of ' + esc(d.mortgage.date) + '</div><div class="flex" style="align-items:baseline"><b class="disp" style="font-size:34px">' + d.mortgage.rate.toFixed(2) + '%</b>' + (d.mortgage.prev != null ? '<span class="small" style="font-weight:700">' + (d.mortgage.rate <= d.mortgage.prev ? '▼ ' : '▲ ') + Math.abs(d.mortgage.rate - d.mortgage.prev).toFixed(2) + ' vs last week</span>' : '') + '</div><div class="small" style="margin-top:4px">What it means for you: on a $400K loan, each 0.25% is about ' + money(step) + ' a month in principal and interest.</div>' + mortChart(d.mortgage) + '</div>';
     }
     if (d.quotes && d.quotes.length) h += '<div class="glass">' + d.quotes.map(function (q) { var w = S.watch.filter(function (x) { return x.sym === q.sym; })[0] || {}; return '<div class="tp-row static"><span class="tp-t"><b>' + esc(q.sym) + '</b><span>' + esc(w.label || '') + (q.date ? ' · ' + esc(q.date) : '') + '</span></span><span class="amt">' + (q.price != null ? money(q.price, 1) : '—') + '</span>' + (q.pct != null ? '<span class="tp-pill ' + (q.pct >= 0 ? 'tp-ok' : 'tp-bad') + '">' + (q.pct >= 0 ? '▲ +' : '▼ ') + q.pct.toFixed(2) + '%</span>' : '') + '</div>'; }).join('') + '</div>';
     if (d.news && d.news.length) h += '<div class="tp-sect"><span>Headlines</span><span class="sp"></span><button data-act="mktRefresh">Refresh</button></div><div class="glass news">' + d.news.map(function (n) { return '<a target="_blank" rel="noopener" href="' + esc(n.link) + '">' + esc(n.title) + '<span>' + esc([n.source, n.topic, n.date].filter(Boolean).join(' · ')) + '</span></a>'; }).join('') + '</div>';
@@ -5171,6 +5171,50 @@ ACT.shGoalSave = function (d) { var n = val('sg_name').trim(); if (!n) return; v
 
 /* ---------- Explore gets a named row on Home, like Together ---------- */
 function exploreRow() { var nt = S.goals.filter(function (g) { return g.kind === 'trip'; }).length; return '<button class="glass tp-row cta exprow" data-act="go" data-a="explore"><span class="tp-tile">' + TP.svg('compass') + '</span><span class="tp-t"><b>Explore</b><span>Plan a trip and watch fares' + (nt ? ' (' + nt + ' saved)' : '') + ', follow markets, try a what-if</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }
+
+/* ---------- tickers: follow what you own, and let Ask Tally set the list ---------- */
+function symClean(s) { s = String(s || '').trim().toUpperCase().replace(/^\$/, ''); return /^[A-Z][A-Z0-9.\-]{0,9}$/.test(s) ? s : ''; }
+function ownedSyms() {
+  var out = [], seen = {}; try { ((BANK.data || {}).accounts || []).forEach(function (a) { (a.hold || []).forEach(function (h) { var s = symClean(h.sym); if (s && !seen[s]) { seen[s] = 1; out.push({ sym: s, label: String(h.name || '').slice(0, 40), from: a.conn || a.name || '' }); } }); }); } catch (e) {}
+  return out;
+}
+function watchAddMany(list, replace) {
+  var have = {}, n = 0; if (replace) S.watch = []; S.watch.forEach(function (w) { have[w.sym] = 1; });
+  (list || []).slice(0, 40).forEach(function (x) { var s = symClean(x && x.sym != null ? x.sym : x); if (!s || have[s]) return; have[s] = 1; S.watch.push({ sym: s, label: String((x && x.label) || '').slice(0, 40) }); n++; });
+  return n;
+}
+ACT.watchOwned = function () { var n = watchAddMany(ownedSyms()); render._keep = true; save(); toast(n ? 'Added ' + n + ' you own.' : 'You already follow everything you own.'); };
+var _explore18 = PAGES.explore;
+PAGES.explore = function () {
+  var h = _explore18.apply(this, arguments), own = ownedSyms(), miss = own.filter(function (o) { return !S.watch.some(function (w) { return w.sym === o.sym; }); });
+  if (!miss.length) return h;
+  var card = '<div class="glass tp-row static ownrow"><span class="tp-t"><b>You own ' + miss.length + ' you don’t follow yet</b><span>' + esc(miss.slice(0, 8).map(function (o) { return o.sym; }).join(', ') + (miss.length > 8 ? '…' : '')) + ' · from your linked investing accounts</span></span><button class="tp-btn tp-sm" data-act="watchOwned">Add them</button></div>';
+  var at = h.indexOf('<div class="tp-sect"><span>Markets you follow</span>'); if (at < 0) return h; var end = h.indexOf('</div>', at) + 6; return h.slice(0, end) + card + h.slice(end);
+};
+var _askLabel18 = askActLabel;
+askActLabel = function (a) {
+  if (a.type === 'add_tickers' || a.type === 'set_tickers') { var l = (a.symbols || []).map(symClean).filter(Boolean); return l.length ? (a.type === 'set_tickers' ? 'Add: replace your tickers with ' : 'Add tickers: ') + l.slice(0, 10).join(', ') + (l.length > 10 ? '… (' + l.length + ')' : '') : ''; }
+  return _askLabel18(a);
+};
+var _askDo18 = ACT.askDo;
+ACT.askDo = function (d) {
+  var m = CHAT.msgs[+d.i], a = m && m.actions && m.actions[+d.k]; if (!a || a.done || (a.type !== 'add_tickers' && a.type !== 'set_tickers')) return _askDo18.apply(this, arguments);
+  var list = (a.symbols || []).map(symClean).filter(Boolean); if (!list.length) return;
+  var n = watchAddMany(list, a.type === 'set_tickers'); a.done = true; chatKeep(); save(true); askPaint(); toast(n ? n + ' ticker' + (n > 1 ? 's' : '') + ' now in Explore.' : 'You already follow those.');
+};
+var _ctx18 = aiContext;
+aiContext = function () { var c = _ctx18(); try { c.tickersFollowed = S.watch.map(function (w) { return w.sym; }); var o = ownedSyms(); if (o.length) c.tickersOwnedInLinkedAccounts = o.map(function (x) { return x.sym; }); } catch (e) {} return c; };
+
+/* mortgage rate over time: the weekly U.S. average, one or five years */
+var MORTV = { span: 'y1' };
+function mortChart(m) {
+  var hist = (m && m.hist) || []; if (hist.length < 8) return '';
+  var from = addDays(today(), MORTV.span === 'y5' ? -1830 : -372), pts = hist.filter(function (x) { return x[0] >= from; }); if (pts.length < 4) pts = hist;
+  var ys = pts.map(function (x) { return x[1]; }), hi = Math.max.apply(null, ys), lo = Math.min.apply(null, ys), first = pts[0][1], now = pts[pts.length - 1][1];
+  return '<div class="flex" style="justify-content:space-between;align-items:center;margin-top:12px;flex-wrap:nowrap;gap:8px"><span class="small muted">' + (now === first ? 'Same as ' : (now < first ? 'Down ' : 'Up ') + Math.abs(now - first).toFixed(2) + ' from ') + (MORTV.span === 'y5' ? 'five years' : 'a year') + ' ago · range ' + lo.toFixed(2) + '–' + hi.toFixed(2) + '%</span><span class="seg" style="flex:none;white-space:nowrap"><button type="button" data-act="mortSpan" data-a="y1" class="' + (MORTV.span === 'y1' ? 'on' : '') + '">1 yr</button><button type="button" data-act="mortSpan" data-a="y5" class="' + (MORTV.span === 'y5' ? 'on' : '') + '">5 yr</button></span></div>' +
+    lineChart('mort', [{ name: '30-year rate', color: 'var(--c1)', pts: pts.map(function (x) { return { t: +parseD(x[0]), y: x[1] }; }) }], { h: 160, pct: true, num: true, fmt: function (v) { return (+v).toFixed(2) + '%'; }, label: '30-year mortgage rate over time' });
+}
+ACT.mortSpan = function (d) { MORTV.span = d.a === 'y5' ? 'y5' : 'y1'; loadMarkets(false); };
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
