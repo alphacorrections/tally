@@ -889,6 +889,13 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 .bellfoot{margin:6px 16px 4px;font-size:12.5px;color:var(--tp-ink2);line-height:1.45}
 .bellset{display:block;margin:0 16px 6px;color:var(--tp-ink2)}
 
+/* star cards (Ask Tally, Tally noticed, weekly insights): a gold accent in every palette */
+:root{--gold:#F3D77A;--gold2:#DDB245;--gold-ink:#3A2A00}
+:root[data-theme="light"]{--gold:#C99A1E;--gold2:#B28312}
+.glass.cta.star{border-color:color-mix(in srgb,var(--gold) 60%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gold) 16%,transparent),0 6px 22px color-mix(in srgb,var(--gold) 10%,transparent)}
+:root .glass.cta.star .tp-tile,:root .glass .tp-tile.gold,:root .tp-tile.gold{background:linear-gradient(140deg,#FBE9A6,#DDB245);color:var(--gold-ink);border:0}
+.glass.cta.star .tp-chev{color:var(--gold)}
+
 </style>
 </head>
 <body class="tp-page">
@@ -898,7 +905,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.27.3';
+var APP_VERSION = '2026.11.27.4';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -3843,7 +3850,7 @@ var _bills4 = PAGES.bills;
 PAGES.bills = function () {
   var h = _bills4(), recs = recurring(), miss = recs.filter(function (r) { return !r.bill && !(S.profile.cancelled || {})[r.key] && !smartOff('rec:' + r.key); });
   if (!recs.length) return h;
-  var row = '<button class="glass tp-row cta" data-act="goSmart"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>' + (miss.length ? miss.length + ' repeating charge' + (miss.length > 1 ? 's' : '') + ' not in Bills yet' : recs.length + ' recurring charges tracked') + '</b><span>' + esc(miss.length ? miss.slice(0, 3).map(function (r) { return r.name + ' ' + money(r.amt, 1); }).join(' · ') : 'Price changes and missed charges get flagged') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+  var row = '<button class="glass tp-row cta star" data-act="goSmart"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>' + (miss.length ? miss.length + ' repeating charge' + (miss.length > 1 ? 's' : '') + ' not in Bills yet' : recs.length + ' recurring charges tracked') + '</b><span>' + esc(miss.length ? miss.slice(0, 3).map(function (r) { return r.name + ' ' + money(r.amt, 1); }).join(' · ') : 'Price changes and missed charges get flagged') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
   var at = h.indexOf('<div class="tp-sect">'); return at >= 0 ? h.slice(0, at) + row + h.slice(at) : h + row;
 };
 
@@ -3935,7 +3942,7 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.t
 var _home5 = PAGES.home;
 PAGES.home = function () {
   var h = _home5(); if (!CLOUD.on()) return h;
-  var row = '<button class="glass tp-row cta askrow" data-act="goAsk"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>Ask Tally</b><span>“Can I afford it?” “Where can I cut back?”</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
+  var row = '<button class="glass tp-row cta star askrow" data-act="goAsk"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>Ask Tally</b><span>“Can I afford it?” “Where can I cut back?”</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>';
   var at = h.indexOf('<details class="glass cashchk'); if (at < 0) at = h.indexOf('<div class="tp-sect"><span>Tally noticed'); if (at < 0) at = h.indexOf('<div class="tp-sect"><span>Next 2 weeks</span>');
   return at >= 0 ? h.slice(0, at) + row + h.slice(at) : h + row;
 };
@@ -4440,7 +4447,7 @@ PAGES.explore = function () {
   var h = _explore9(), td = today(), ins = AIC.insights, br = AIC.brief, of = AIC.offers, put = function (anchor, add) { var at = h.indexOf(anchor); h = at >= 0 ? h.slice(0, at) + add + h.slice(at) : h + add; };
   if (!CLOUD.on()) return h;
   var c1 = '<div class="tp-sect"><span>This week, from your numbers</span><span class="sp"></span>' + (ins ? '<button data-act="insightsGo">' + (AIB.ins ? 'Working…' : 'Refresh') + '</button>' : '') + '</div>' +
-    (ins && ins.items.length ? '<div class="glass">' + ins.items.map(function (x) { return '<div class="tp-row static"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>' + esc(x.title) + '</b><span>' + esc(x.text) + '</span></span></div>'; }).join('') + '</div><p class="small muted" style="margin:-4px 2px 12px">Written ' + shortDate(ins.at) + ' from your own numbers.</p>'
+    (ins && ins.items.length ? '<div class="glass">' + ins.items.map(function (x) { return '<div class="tp-row static"><span class="tp-tile gold">' + TP.svg('spark') + '</span><span class="tp-t"><b>' + esc(x.title) + '</b><span>' + esc(x.text) + '</span></span></div>'; }).join('') + '</div><p class="small muted" style="margin:-4px 2px 12px">Written ' + shortDate(ins.at) + ' from your own numbers.</p>'
       : '<div class="glass pad"><p class="small" style="margin-top:0">Three things worth knowing from your spending, bills and goals this week.</p>' + aiBusyBtn('ins', 'Show me', 'insightsGo') + '</div>');
   put('<div class="tp-sect"><span>Trips', c1);
   put('<div class="tp-sect"><span>Markets you follow', '<button class="glass tp-row cta" data-act="tripPlan"><span class="tp-tile">' + TP.svg('plane') + '</span><span class="tp-t"><b>Plan a trip</b><span>Get a cost estimate from today’s prices and save it as a goal</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>');
@@ -4711,7 +4718,7 @@ PAGES.home = function () {
   [].slice.call(tb.querySelectorAll('.top .ibtn[data-a="together"]')).forEach(function (e) { e.remove(); });
   if (simple) [].slice.call(tb.querySelectorAll('.dotsrow')).forEach(function (e) { e.remove(); });
   /* "Tally noticed" becomes one line; a mostly-done setup list folds away */
-  var notH = ''; if (noticed.length) { var m = /·\s*(\d+)/.exec(noticed[0].title), n = m ? +m[1] : 1, first = noticed[0].els[1] && noticed[0].els[1].querySelector('.tp-t b'); notH = '<button class="glass tp-row cta" data-act="goSmart"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>Tally noticed ' + n + (n === 1 ? ' thing' : ' things') + '</b><span>' + esc(first ? first.textContent : 'Price changes, repeat charges, fees') + (n > 1 ? ' and ' + (n - 1) + ' more' : '') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }
+  var notH = ''; if (noticed.length) { var m = /·\s*(\d+)/.exec(noticed[0].title), n = m ? +m[1] : 1, first = noticed[0].els[1] && noticed[0].els[1].querySelector('.tp-t b'); notH = '<button class="glass tp-row cta star" data-act="goSmart"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>Tally noticed ' + n + (n === 1 ? ' thing' : ' things') + '</b><span>' + esc(first ? first.textContent : 'Price changes, repeat charges, fees') + (n > 1 ? ' and ' + (n - 1) + ' more' : '') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }
   var setH = ''; if (setup.length) { var sm = /(\d+) of (\d+)/.exec(setup[0].title); setH = sm && +sm[1] >= 4 ? '<details class="morebox"><summary><span>Finish setting up · ' + sm[1] + ' of ' + sm[2] + '</span>' + TP.svg('chev') + '</summary><div class="morein">' + setup[0].els.slice(1).map(function (e) { return e.outerHTML; }).join('') + '</div></details>' : blocksHtml(setup); }
   var heroH = blocksHtml(hero); if (simple) heroH = heroH.replace(/<details class="hwhy" open(="")?>/, '<details class="hwhy">');
   var h = tb.innerHTML + togRow(nextUp) + searchRow() + heroH; /* "Needs you" now lives behind the bell in the top bar */
