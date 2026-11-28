@@ -896,6 +896,21 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 :root .glass.cta.star .tp-tile,:root .glass .tp-tile.gold,:root .tp-tile.gold{background:linear-gradient(140deg,#FBE9A6,#DDB245);color:var(--gold-ink);border:0}
 .glass.cta.star .tp-chev{color:var(--gold)}
 
+/* Explore home: a grid of topics */
+.exgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.extile{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;font:inherit;color:var(--tp-ink);border-radius:20px;padding:14px;min-height:124px;background:var(--tp-card);border:1px solid var(--tp-line);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);cursor:pointer}
+.extile .tp-tile{margin-bottom:8px}
+.extile b{font-size:16px}
+.extile>span:last-child{font-size:12.5px;line-height:1.35;color:var(--tp-ink2)}
+.extile:active{transform:scale(.98)}
+
+/* Home's top bar holds five buttons: tighter, and the greeting stays on one line */
+.top.top5{gap:6px}
+.top5 .ibtn{width:38px;height:38px;border-radius:12px;flex:none}
+.top5 .ibtn svg{width:19px;height:19px}
+.top5 .who span,.top5 .who b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top5 .who b{font-size:23px}
+
 </style>
 </head>
 <body class="tp-page">
@@ -905,7 +920,7 @@ details.cashchk .tp-t span{font-size:13px;color:var(--tp-ink2);line-height:1.4}
 <script>
 /* Tally — core: helpers, state, sync, charts. No numbers live in this file; data stays in the browser (and your own Google Sheet if you connect one). */
 'use strict';
-var APP_VERSION = '2026.11.27.6';
+var APP_VERSION = '2026.11.27.7';
 var LS_STATE = 'tally.state.v1', LS_UI = 'tally.ui', LS_SYNC = 'tally.sync', LS_META = 'tally.meta', LS_MKT = 'tally.market';
 
 /* ---------- storage (safe) ---------- */
@@ -2028,7 +2043,7 @@ function topBar(title, sub, back) {
   var h = '<div class="top">' + (back ? '<button class="ibtn" data-act="go" data-a="' + back + '" aria-label="Back">' + TP.svg('back') + '</button>' : '') +
     '<div class="who"><span>' + esc(sub) + '</span><b>' + esc(title) + '</b></div>';
   if (!back && VIEW === 'home') h += '<button class="ibtn" data-act="go" data-a="together" aria-label="Together: shared with your partner">' + TP.svg('people') + (typeof SH !== 'undefined' && SH.on() && SH.doc && Math.abs(shNet()) >= 0.5 ? '<span class="syncdot ok"></span>' : '') + '</button>';
-  if (!back) h += '<button class="ibtn" data-act="go" data-a="calendar" aria-label="Calendar">' + TP.svg('calendar') + '</button><button class="ibtn" data-act="go" data-a="explore" aria-label="Explore: tips, trips, markets">' + TP.svg('compass') + '</button><button class="ibtn" id="syncBtn" data-act="go" data-a="settings" aria-label="Settings">' + TP.svg('gear') + '<span class="syncdot"></span></button>';
+  if (!back) h += '<button class="ibtn" data-act="go" data-a="calendar" aria-label="Calendar">' + TP.svg('calendar') + '</button><button class="ibtn" data-act="go" data-a="explore" aria-label="Explore: trips, markets, tools">' + TP.svg('grid') + '</button><button class="ibtn" id="syncBtn" data-act="go" data-a="settings" aria-label="Settings">' + TP.svg('gear') + '<span class="syncdot"></span></button>';
   h += '</div>';
   if (VIEW === 'home') h += '<div class="dotsrow"><span class="small">' + esc(syncLine()) + '</span><div class="dots" role="group" aria-label="Theme color">' + PALS.map(function (p) { return '<button data-act="pal" data-a="' + p.id + '" class="' + (UI.pal === p.id ? 'on' : '') + '" style="background:' + p.sw + '" aria-label="' + esc(p.name) + '" aria-pressed="' + (UI.pal === p.id) + '"></button>'; }).join('') + '</div></div>';
   return h;
@@ -2302,7 +2317,7 @@ PAGES.explore = function () {
   h += '<div class="tp-sect"><span>Tools</span></div><div class="glass">' +
     [['together', 'people', 'Together', 'Shared bills, paybacks, and goals with your partner'], ['credit', 'trend', 'Credit score', 'Your scores and card use vs. limits'], ['spending', 'chart', 'Spending', 'Everything you logged, by category and card'], ['checkin', 'pencil', 'Weekly check-in', 'Balances, last week, next week'], ['play', 'sliders', 'What if', 'Timelines, borrow vs. savings, card interest'], ['goals', 'target', 'All goals', 'Savings, payoffs, trips'], ['history', 'calendar', 'Past check-ins', 'Every week you logged'], ['settings', 'gear', 'Settings', 'Payday, reminders, sync, look, backup']].map(function (x) { return '<button class="tp-row" data-act="go" data-a="' + x[0] + '"><span class="tp-tile">' + TP.svg(x[1]) + '</span><span class="tp-t"><b>' + x[2] + '</b><span>' + x[3] + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }).join('') + '</div>';
   h += '<div class="tp-sect"><span>Ideas to try</span><span class="sp"></span><button data-act="ideaAdd">+ Add</button></div><div class="glass">' +
-    (S.ideas.length ? S.ideas.map(function (i) { return '<div class="tp-row static"><input type="checkbox" id="idea_' + i.id + '" data-act="ideaToggle" data-id="' + i.id + '" ' + (i.done ? 'checked' : '') + ' class="tick"><label class="tp-t" for="idea_' + i.id + '"><b style="' + (i.done ? 'text-decoration:line-through;opacity:.6' : '') + '">' + esc(i.text) + '</b>' + (i.diff ? '<span>Worth about ' + esc(i.diff) + '</span>' : '') + '</label><button class="chip" data-act="ideaDel" data-id="' + i.id + '" aria-label="Remove idea">×</button></div>'; }).join('') : '<div class="empty">Small moves you want to test.</div>') + '</div>';
+    (S.ideas.length ? S.ideas.map(function (i) { return '<div class="tp-row static"><input type="checkbox" id="idea_' + i.id + '" data-act="ideaToggle" data-id="' + i.id + '" ' + (i.done ? 'checked' : '') + ' class="tick"><label class="tp-t" for="idea_' + i.id + '"><b style="' + (i.done ? 'text-decoration:line-through;opacity:.6' : '') + '">' + esc(i.text) + '</b>' + (i.diff ? '<span>Worth about ' + esc(i.diff) + '</span>' : '') + '</label>' + myNoteBtn('idea', i.id, i.text) + '<button class="chip" data-act="ideaDel" data-id="' + i.id + '" aria-label="Remove idea" style="margin-left:8px">×</button></div>'; }).join('') : '<div class="empty">Small moves you want to test.</div>') + '</div>';
   return h;
 };
 function tripCard(g) {
@@ -2351,7 +2366,7 @@ PAGES.goals = function () {
     if (pace != null && pct < 100) lines += '<div class="kv"><span>Pace needed</span><b>' + money(pace) + ' a month</b></div>';
     if (rp != null && g.kind === 'save') lines += '<div class="kv"><span>Your pace, last 6 months</span><b>' + signed(rp) + ' a month</b></div>';
     return '<div class="glass pad tp-rise" style="--i:' + i + '"><div class="flex" style="flex-wrap:nowrap"><span class="grow"><b style="font-size:16px">' + esc(g.name) + '</b><span class="bigsum" style="display:block">' + (g.kind === 'payoff' ? money(+g.manual || 0) + ' <span class="small muted">left of ' + money(+g.target) + '</span>' : money(goalNow(g)) + ' <span class="small muted">of ' + money(+g.target) + '</span>') + '</span></span>' + ring(pct) + '</div>' + lines + (g.note ? '<p class="small muted mb0">' + esc(g.note) + '</p>' : '') +
-      '<div class="flex mt"><button class="tp-btn tp-ghost tp-sm" data-act="goalEdit" data-id="' + g.id + '">Edit</button>' + (g.kind === 'save' ? '<button class="tp-btn tp-ghost tp-sm" data-act="playGoal" data-id="' + g.id + '">Play with the timeline</button>' : '') + '</div></div>';
+      '<div class="flex mt"><button class="tp-btn tp-ghost tp-sm" data-act="goalEdit" data-id="' + g.id + '">Edit</button>' + (g.kind === 'save' ? '<button class="tp-btn tp-ghost tp-sm" data-act="playGoal" data-id="' + g.id + '">Play with the timeline</button>' : '') + myNoteBtn('goal', g.id, g.name, 1) + '</div></div>';
   }).join('') : '<div class="glass"><div class="empty">A goal turns a balance into a reason.<br><button class="tp-btn tp-sm" data-act="goalEdit">Add a goal</button></div></div>';
   var trips = S.goals.filter(function (g) { return g.kind === 'trip'; });
   if (trips.length) h += '<div class="tp-sect"><span>Trips</span></div>' + trips.map(tripCard).join('');
@@ -4715,13 +4730,13 @@ PAGES.home = function () {
   var top = get(K('top')), needs = get(T(/^Needs you/)), hero = get(K('hero')), cash = get(K('cash')), ask = get(K('ask')), ck = get(K('ckcta')), next2 = get(T(/^Next 2 weeks/)), runway = get(T(/^Next 30 days/)), noticed = get(T(/^Tally noticed/)), worth = get(T(/^Worth a look/)), setup = get(T(/^Get set up/)), goals = get(T(/^Goals/)), rest = bl;
   /* top bar: Together moves to its own labeled row; simple view keeps only Settings and the guide */
   var topH = blocksHtml(top), tb = document.createElement('div'); tb.innerHTML = topH;
-  [].slice.call(tb.querySelectorAll('.top .ibtn[data-a="together"]')).forEach(function (e) { e.remove(); });
+  if (simple) [].slice.call(tb.querySelectorAll('.top .ibtn[data-a="together"]')).forEach(function (e) { e.remove(); }); else { var tp5 = tb.querySelector('.top'); if (tp5) tp5.classList.add('top5'); }
   if (simple) [].slice.call(tb.querySelectorAll('.dotsrow')).forEach(function (e) { e.remove(); });
   /* "Tally noticed" becomes one line; a mostly-done setup list folds away */
   var notH = ''; if (noticed.length) { var m = /·\s*(\d+)/.exec(noticed[0].title), n = m ? +m[1] : 1, first = noticed[0].els[1] && noticed[0].els[1].querySelector('.tp-t b'); notH = '<button class="glass tp-row cta star" data-act="goSmart"><span class="tp-tile">' + TP.svg('spark') + '</span><span class="tp-t"><b>Tally noticed ' + n + (n === 1 ? ' thing' : ' things') + '</b><span>' + esc(first ? first.textContent : 'Price changes, repeat charges, fees') + (n > 1 ? ' and ' + (n - 1) + ' more' : '') + '</span></span><span class="tp-chev">' + TP.svg('chev') + '</span></button>'; }
   var setH = ''; if (setup.length) { var sm = /(\d+) of (\d+)/.exec(setup[0].title); setH = sm && +sm[1] >= 4 ? '<details class="morebox"><summary><span>Finish setting up · ' + sm[1] + ' of ' + sm[2] + '</span>' + TP.svg('chev') + '</summary><div class="morein">' + setup[0].els.slice(1).map(function (e) { return e.outerHTML; }).join('') + '</div></details>' : blocksHtml(setup); }
   var heroH = blocksHtml(hero); if (simple) heroH = heroH.replace(/<details class="hwhy" open(="")?>/, '<details class="hwhy">');
-  var h = tb.innerHTML + togRow(nextUp) + (simpleOn() ? '' : exploreRow()) + searchRow() + heroH; /* "Needs you" now lives behind the bell in the top bar */
+  var h = tb.innerHTML + (simple ? togRow(nextUp) : '') + searchRow() + heroH; /* "Needs you" now lives behind the bell in the top bar */
   if (simple) return h + blocksHtml(ask) + blocksHtml(next2) + moreBox(blocksHtml(cash) + blocksHtml(ck) + blocksHtml(runway) + notH + blocksHtml(worth) + setH + blocksHtml(goals) + blocksHtml(rest), 'More on Home') + homeFoot();
   return h + blocksHtml(cash) + blocksHtml(ask) + blocksHtml(ck) + blocksHtml(next2) + blocksHtml(runway) + notH + blocksHtml(worth) + setH + blocksHtml(goals) + blocksHtml(rest) + homeFoot();
 };
@@ -5215,6 +5230,60 @@ function mortChart(m) {
     lineChart('mort', [{ name: '30-year rate', color: 'var(--c1)', pts: pts.map(function (x) { return { t: +parseD(x[0]), y: x[1] }; }) }], { h: 160, pct: true, num: true, fmt: function (v) { return (+v).toFixed(2) + '%'; }, label: '30-year mortgage rate over time' });
 }
 ACT.mortSpan = function (d) { MORTV.span = d.a === 'y5' ? 'y5' : 'y1'; loadMarkets(false); };
+
+/* ---------- your own notes on goals and ideas (the Together notes, but private) ---------- */
+var MYNK = '';
+function myNotesOn(key) { return (S.notes || []).filter(function (n) { return n.on === key; }).sort(function (a, b) { return (a.at || '') < (b.at || '') ? -1 : 1; }); }
+function myNoteBtn(list, id, title, wide) {
+  var n = myNotesOn(list + ':' + id).length;
+  return wide ? '<button class="tp-btn tp-ghost tp-sm" data-act="myNotes" data-a="' + list + ':' + esc(id) + '">' + TP.svg('note') + ' Notes' + (n ? ' · ' + n : '') + '</button>'
+    : '<button class="notebtn' + (n ? ' has' : '') + '" data-act="myNotes" data-a="' + list + ':' + esc(id) + '" aria-label="Notes on ' + esc(title) + (n ? ', ' + n : '') + '">' + TP.svg('note') + (n ? '<em>' + n + '</em>' : '') + '</button>';
+}
+function myNoteTitle(key) { var i = key.indexOf(':'), list = key.slice(0, i), id = key.slice(i + 1), x = (list === 'goal' ? S.goals : S.ideas).filter(function (y) { return String(y.id) === id; })[0]; return x ? (x.name || x.text || 'Item') : 'Item'; }
+function myNotesSheet(key) {
+  MYNK = key; var list = myNotesOn(key);
+  sheet(sxHead(myNoteTitle(key)) + '<p class="small muted" style="margin:-4px 0 10px">' + (key.indexOf('goal:') === 0 ? 'Goal' : 'Idea to try') + ' · your notes</p>' +
+    (list.length ? '<div class="notes">' + list.map(function (n) { return '<div class="nt me"><div class="nth"><b>' + esc(shortDate(ymd(new Date(n.at)))) + '</b><span>' + esc(agoTxt(n.at)) + '</span><button data-act="myNoteDel" data-id="' + n.id + '" aria-label="Delete this note">' + TP.svg('close', 2.2) + '</button></div><div class="ntt">' + esc(n.text) + '</div></div>'; }).join('') + '</div>' : '<div class="empty" style="padding:10px 0 14px">No notes yet. A link, a number to beat, what you tried, what to do next.</div>') +
+    '<textarea class="tp-input" id="mn_text" rows="3" placeholder="Write a note" aria-label="Write a note"></textarea><div class="acts"><button class="tp-btn" data-act="myNoteAdd">Add note</button></div>');
+  var box = document.querySelector('#sheet .notes'); if (box) box.scrollTop = box.scrollHeight;
+}
+ACT.myNotes = function (d) { myNotesSheet(d.a); };
+ACT.myNoteAdd = function () { var t = val('mn_text').trim(); if (!t || !MYNK) return; S.notes = S.notes || []; S.notes.push({ id: 'n' + uid(), on: MYNK, at: new Date().toISOString(), text: t.slice(0, 1000) }); render._keep = true; save(); myNotesSheet(MYNK); };
+ACT.myNoteDel = function (d, el) { armDelete(el, function () { S.notes = (S.notes || []).filter(function (n) { return n.id !== d.id; }); render._keep = true; save(); myNotesSheet(MYNK); }); };
+/* notes go when the goal or idea goes */
+var _save19 = save;
+save = function () { try { if (S.notes && S.notes.length) { var ok = {}; S.goals.forEach(function (g) { ok['goal:' + g.id] = 1; }); S.ideas.forEach(function (i) { ok['idea:' + i.id] = 1; }); S.notes = S.notes.filter(function (n) { return ok[n.on]; }); } } catch (e) {} return _save19.apply(this, arguments); };
+
+/* ---------- Explore opens as a grid of topics; each tile opens just that topic ---------- */
+TP.icons.grid = '<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>';
+var EXV = '';
+var EXT = [
+  { k: 'trips', icon: 'plane', name: 'Trips', re: /^Trips/, sub: function () { var t = S.goals.filter(function (g) { return g.kind === 'trip'; }); return t.length ? t.length + ' saved · fares and plans' : 'Plan one, watch the fare'; } },
+  { k: 'markets', icon: 'trend', name: 'Markets', re: /^Markets you follow|^This week in what you follow/, sub: function () { return (S.watch.length ? S.watch.length + ' ticker' + (S.watch.length > 1 ? 's' : '') : 'Tickers') + ', news, mortgage rate'; } },
+  { k: 'insights', icon: 'spark', name: 'Insights', re: /^This week, from your numbers/, sub: function () { return 'This week from your numbers, plus a tip'; } },
+  { k: 'offers', icon: 'card', name: 'Card offers', re: /^Card offers/, sub: function () { return 'Bonuses and 0% deals that fit you'; } },
+  { k: 'tools', icon: 'sliders', name: 'Tools', re: /^Tools/, sub: function () { return 'What-if, credit, past check-ins'; } },
+  { k: 'ideas', icon: 'bulb', name: 'Ideas to try', re: /^Ideas to try/, sub: function () { var n = S.ideas.filter(function (i) { return !i.done; }).length; return n ? n + ' to try' : 'Small moves to test'; } }
+];
+ACT.exGo = function (d) { EXV = d.a || ''; render(); window.scrollTo(0, 0); };
+var _go19 = ACT.go;
+ACT.go = function (d) { if (d && d.a === 'explore') EXV = ''; return _go19.apply(this, arguments); };
+var _explore19 = PAGES.explore;
+PAGES.explore = function () {
+  var h = _explore19.apply(this, arguments), bl;
+  try { bl = pageBlocks(h); } catch (e) { return h; }
+  var topB = bl.filter(function (b) { return b.key === 'top'; }), hero = bl.filter(function (b) { return b.key === 'hero'; }), misc = bl.filter(function (b) { return b.key === 'misc'; });
+  var sects = bl.filter(function (b) { return b.key === 'sect'; }), of = function (t) { return sects.filter(function (b) { return t.re.test(b.title); }); }, known = function (b) { return EXT.some(function (t) { return t.re.test(b.title); }); }, other = sects.filter(function (b) { return !known(b); });
+  var t = EXT.filter(function (x) { return x.k === EXV; })[0];
+  if (t) {
+    var body = blocksHtml(of(t)); if (t.k === 'insights') body = blocksHtml(misc) + body;
+    return topBar(t.name, 'Explore', 'explore') + (body || '<div class="glass"><div class="empty">Nothing here yet.</div></div>');
+  }
+  var grid = '<div class="exgrid">' + EXT.filter(function (x) { return of(x).length; }).map(function (x) { return '<button class="extile" data-act="exGo" data-a="' + x.k + '"><span class="tp-tile">' + TP.svg(x.icon) + '</span><b>' + esc(x.name) + '</b><span>' + esc(x.sub()) + '</span></button>'; }).join('') + '</div>';
+  return blocksHtml(topB) + blocksHtml(hero) + grid + blocksHtml(other);
+};
+var _render19 = render;
+render = function () { if (VIEW !== 'explore') EXV = ''; return _render19.apply(this, arguments); };
 
 /* ---------- update check: version.json next to the page says what's live ---------- */
 var UPD = { last: 0, shown: '' };
